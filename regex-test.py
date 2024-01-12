@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 #  ===========================================================================
 #  File    :    regex-test.py
-#  Function:    Remove log files of a certain age
+#  Function:    Regular expression test
 #  Who     :    David Means <w1t3h4t@gmail.com>
 #  ===========================================================================
 #  MIT License
@@ -28,37 +28,19 @@
 #  ===========================================================================
 
 """
-This script identifies suspect patterns within a list of strings using regular expressions.
+This script identifies false-positive patterns within a list of strings using regular expressions.
 
-The script defines a set of suspect patterns and iterates over a list of strings to find matches.
-Each string is checked against all the suspect patterns, and for each match found, a message is printed.
+The script defines a set of suspect patterns and iterates over a list of 
+strings to find matches. Each string is checked against all the suspect patterns, and for
+each match found, a message is printed.
 """
 import re
 
 def match_suspect_pattern(test_str, pattern):
-    """
-    Searches for a suspect pattern within a given string.
-    
-    Args:
-        test_str (str): The string to search within.
-        pattern (str): The regular expression pattern to search for.
-        
-    Returns:
-        str or None: The first match found or None if no match is found.
-    """
     matches = re.search(pattern, str(test_str))
     return matches[0] if matches else None
 
 def matched(rc):
-    """
-    Determines the match status based on the input.
-
-    Args:
-        rc (str or None): The result from match_suspect_pattern.
-        
-    Returns:
-        str: 'Matched' if rc is not None, 'No match' otherwise.
-    """
     return 'Matched' if rc else 'No match'
 
 # Patterns
