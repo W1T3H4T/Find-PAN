@@ -1,1 +1,1 @@
-# Find-PAN-Python
+# Find-PAN
