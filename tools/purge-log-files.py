@@ -4,10 +4,6 @@
 #   Function:   Remove log files of a certain age
 #   Who     :   David Means <w1t3h4t@gmail.com>
 #   ===========================================================================
-#   Notes - 
-#       Refactor this application and remove --age and --path command line
-#       switches to avoid deleting unintended content.
-#   ===========================================================================
 #   MIT License
 #   
 #   Copyright (c) 2023 David Means
@@ -39,7 +35,6 @@ from shutil import which
 from datetime import datetime
 from subprocess import call, CalledProcessError
 
-_FILE_PREFIX_PATTERN = "file-"  # Replace with your specific prefix
 _REPORTED = None
 
 #   ===========================================================================
@@ -55,8 +50,6 @@ def init_logger():
     file_handler.setFormatter(logging.Formatter(log_format))
     logger.addHandler(file_handler)
     return logger
-
-logger = init_logger()
 
 #   ===========================================================================
 #   Delete old files
@@ -95,11 +88,10 @@ def delete_file(file_path):
 #   ===========================================================================
 #   Main
 #   ===========================================================================
-def main(path, age):
-
+def main(path, age, prefix):
 
     for file_name in os.listdir(path):
-        if file_name.startswith(_FILE_PREFIX_PATTERN):
+        if file_name.startswith(prefix):
             full_path = os.path.join(path, file_name)
             file_stat = os.stat(full_path)
             file_age = (time.time() - file_stat.st_mtime) // (24 * 3600)
@@ -109,11 +101,14 @@ def main(path, age):
             else:
                 logger.info(f"Retained {full_path}")
 
+logger = init_logger()
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="File deletion based on age and prefix.")
-    parser.add_argument("--path", required=True, help="Directory path to observe.")
-    parser.add_argument("--age", type=int, required=True, help="Age in days for file deletion.")
+    parser.add_argument("--path", type=str, required=True, help="Log file directory to process.")
+    parser.add_argument("--age", type=int, required=True, help="Age in days for file retention.")
+    parser.add_argument("--prefix", type=str, required=True, default='file-', help="The required log file prefix pattern.")
     args = parser.parse_args()
 
-    main(args.path, args.age)
+    main(args.path, args.age, args.prefix)
 
