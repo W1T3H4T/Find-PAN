@@ -16,7 +16,7 @@ This script is released under the MIT License. See the [LICENSE](LICENSE) file f
 ## Usage
 
 ```bash
-python find-pan.py [--path PATH] [--tar TAR] [--temp TEMP] [--log-dir LOG_DIR] [--skip-binary]  [--verbose] [[--debug]
+python find-pan.py [--path PATH] [--tar TAR] [--temp TEMP] [--log-dir LOG_DIR] [--skip-binary]  [--verbose] [--debug]
 ```
 
 ### Command-line Arguments:
