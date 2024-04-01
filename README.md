@@ -2,7 +2,11 @@
 
 ## Description
 
-**find-pan.py** is a Python script designed to search for Primary Account Numbers (PANs) and TRACK data in a file system or a tar file. The script uses regular expressions to identify patterns associated with credit card numbers and track data, helping to locate potential instances of sensitive information.
+**find-pan.py** is a Python script designed to search for Primary Account Numbers (PANs) and TRACK data in a file system or a tar file.
+
+The script was originally designed to find PAN within Payments Information System projects.<br>
+ 
+The script leverages regular expressions to identify patterns associated with credit card numbers and track data.
 
 ## Author
 

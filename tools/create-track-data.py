@@ -32,25 +32,29 @@ import re
 import argparse
 
 def generate_track_1_data():
-    while True:
+    stop = False
+    while not stop:
         card_number = random.randint(10**12, 10**19)
         name = ''.join(random.choice('ABCDEFGHIJKLMNOPQRSTUVWXYZ ') for _ in range(random.randint(1, 26)))
         discretionary_data = random.randint(10**1, 10**19)
         track_1_data = f'%B{card_number}^{name}^{discretionary_data}?'
         if re.match(r'%B\d{13,19}\^\w{1,26}\^\d{1,19}|\d{1,19}\?', track_1_data):
-            return track_1_data
+            stop = True
+    return track_1_data
 
 def generate_track_2_data():
-    while True:
+    stop = False
+    while not stop:
         card_number = random.randint(10**12, 10**19)
         discretionary_data = random.randint(10**1, 10**19)
         track_2_data = f';{card_number}={discretionary_data}?'
         if re.match(r';\d{13,19}=\d{1,19}|\d{1,19}\?', track_2_data):
-            return track_2_data
+            stop = True
+    return track_2_data
 
 def main():
     parser = argparse.ArgumentParser(description="Generate random track data based on provided patterns.")
-    parser.add_argument("--count", type=int, default=10, help="Number of patterns to create for each track type")
+    parser.add_argument("--count", type=int, default=100, help="Number of patterns to create for each track type")
     args = parser.parse_args()
 
     # Specify the track patterns
@@ -62,7 +66,7 @@ def main():
     # Generate and print N track data for each track pattern
     track_generators = [generate_track_1_data, generate_track_2_data]
     for generator in track_generators:
-        print(f"## Generated data for {generator.__name__}:")
+        print(f"##\n## Generated data for {generator.__name__}\n##")
         for _ in range(args.count):
             track_data = generator()
             print(track_data)

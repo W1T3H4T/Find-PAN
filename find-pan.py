@@ -30,7 +30,7 @@
 import os
 import re
 import sys
-import magic
+import json
 import logging
 import tarfile
 import argparse
@@ -41,28 +41,28 @@ from datetime import datetime
 ##  ===========================================================================
 ##  Global variables
 ##  ===========================================================================
-_DEBUG      = False
+global _DEBUG
+global _TraceLog
+global _PanLog
+global total_matches
+global TRACK_Match_count
+global PAN_Match_count
+global FILE_count
+global compiled_patterns
+
+_DEBUG      = True
 _TraceLog   = None
 _PanLog     = None
 total_matches = 0
-TRACK_match_count = 0 
-PAN_match_count = 0
+TRACK_Match_count = 0 
+PAN_Match_count = 0
 FILE_count = 0
+compiled_patterns = {}
 
 ##  ===========================================================================
 ##  Set the logfile basename 
 ##  ===========================================================================
 def generate_logfile_name(basename):
-    """
-    Generate a formatted logfile name based on the given basename and the current date.
-
-    Args:
-        basename (str): The base name of the logfile.
-
-    Returns:
-        str: The formatted logfile name.
-
-    """
     date_str = datetime.now().strftime("%d%b%Y")
     formatted_basename = f"{basename}-{date_str}.log"
     return formatted_basename
@@ -72,16 +72,6 @@ def generate_logfile_name(basename):
 ##  Create our log file names
 ##  ===========================================================================
 def set_log_directory_and_filenames(args):
-    """
-    Set the log directory and filenames based on the given command line arguments.
-
-    Args:
-        args (argparse.Namespace): The command line arguments.
-
-    Returns:
-        tuple: A tuple containing the PAN logfile name and the trace logfile name.
-
-    """
     log_dir = args.log_dir if args.log_dir else os.getcwd()
 
     pan_logfile = os.path.join(log_dir, generate_logfile_name("Find-PAN"))
@@ -93,16 +83,6 @@ def set_log_directory_and_filenames(args):
 ##  Create our logging objects
 ## ===========================================================================
 def setup_custom_loggers(args):
-    """
-    Set up custom loggers based on the given command line arguments.
-
-    Args:
-        args (argparse.Namespace): The command line arguments.
-
-    Returns:
-        dict: A dictionary containing the trace logger and the log logger.
-
-    """
     pan_logfile, trace_logfile = set_log_directory_and_filenames(args)
 
     # Trace Logger
@@ -150,17 +130,6 @@ def setup_custom_loggers(args):
 ##  Check if file is binary
 ##  ===========================================================================
 def is_executable(file_path):
-    """
-    Check if a file is an executable.
-
-    Args:
-        file_path (str): The path to the file to be checked.
-
-    Returns:
-        bool: True if the file is an executable, False otherwise.
-        None: If an error occurs during file processing.
-
-    """
     try:
         if os.path.isfile(file_path):
             mime = magic.Magic()
@@ -190,17 +159,6 @@ def is_executable(file_path):
 ##  Check if file is binary
 ##  ===========================================================================
 def is_binary(file_path):
-    """
-    Check if a file is binary by analyzing its contents.
-
-    Args:
-        file_path (str): The path to the file to be checked.
-
-    Returns:
-        bool: True if the file is binary, False otherwise.
-        None: If an error occurs during file processing.
-
-    """
     binary_offsets = []
 
     if (args.skip_binary == False):
@@ -234,15 +192,6 @@ def is_binary(file_path):
 ##  Luhn algorithm check
 ##  ===========================================================================
 def luhn_check(num):
-    """
-    Performs the Luhn algorithm to check the validity of a given number.
-
-    Args:
-        num (int): The number to be checked.
-
-    Returns:
-        bool: True if the number passes the Luhn algorithm, False otherwise.
-    """
     rev_digits = [int(x) for x in str(num)][::-1]
     checksum = 0  
     for i, d in enumerate(rev_digits):
@@ -254,48 +203,23 @@ def luhn_check(num):
 ##  ===========================================================================
 ##  Scan a directory for files
 ##  ===========================================================================
-import os
-
-def scan_directory(dir_name, compiled_patterns, suspect_patterns):
-    """
-    Recursively scans a directory and its subdirectories for files and processes each file.
-
-    Args:
-        dir_name (str): The directory to scan.
-        compiled_patterns (list): A list of compiled regular expression patterns.
-        suspect_patterns (list): A list of suspect patterns to match against the file contents.
-
-    Returns:
-        None
-    """
+def scan_directory(dir_name, compiled_patterns, json_data ):
     for root, dirs, files in os.walk(dir_name):
         for file in files:
             file_path = os.path.join(root, file)
             if not os.path.isfile(file_path):
                 continue
-            process_file(file_path, compiled_patterns, suspect_patterns)
+            process_file(file_path, compiled_patterns, json_data )
 
 
 ##  ===========================================================================
 ##  Process a file for credit card patterns 
 ##  ===========================================================================
-def process_file(file_path, compiled_patterns, suspect_patterns):
-    """
-    Process a file and scan its contents for patterns.
-
-    Args:
-        file_path (str): The path to the file to be processed.
-        compiled_patterns (list): A list of compiled regular expression patterns.
-        suspect_patterns (list): A list of regular expression patterns to be checked against each line.
-
-    Returns:
-        None
-
-    Raises:
-        None
-    """
+def process_file(file_path, search_patterns, json_data ):
     global total_matches
     global FILE_count
+    global PAN_Match_count
+    global TRACK_Match_count
     line_count = 0
 
     if not os.path.isfile(file_path):
@@ -311,35 +235,101 @@ def process_file(file_path, compiled_patterns, suspect_patterns):
                 return
 
         with open(file_path, "r", encoding="utf-8", errors="replace") as f:
-            for line_number, line in enumerate(f, 1):
+
+            for line_number, text_line in enumerate(f, 1):
                 line_count += 1
                 if args.line_limit > 0 and line_count >= args.line_limit:
                     _TraceLog.info(f"-> Line Limit reached: stopped after {line_count} lines.")
                     break
                 
-                if not any(pattern.match(line) for pattern in suspect_patterns):
-                    scan_line(line, line_number, file_path, compiled_patterns)
+                # match_data = scan_text_line(text_line, search_patterns)
+                matched_info, match_data = match_regex(text_line, line_number, json_data)
+                if match_data is None:
+                    continue
+
+                total_matches += 1
+
+                if matched_info.lower().startswith('track'):
+                    pan = extract_pan_from_match(match_data)                    
+                    if luhn_check(pan):
+                        # _PanLog.info(f"-> PAN: {pan} (Luhn Check: Passed)")
+                        _PanLog.info(f"-> {pan}: {matched_info}")
+                        TRACK_Match_count += 1
+                    else:
+                        _PanLog.warn(f"-> PAN: {pan} (Luhn Check: Failed)")
+                
+                elif matched_info.lower().startswith('pan'):
+                    pan = extract_pan_from_match(match_data)
+                    if luhn_check(pan):
+                        # _PanLog.info(f"-> PAN: {pan} (Luhn Check: Passed)")
+                        _PanLog.info(f"-> {pan}: {matched_info}")
+                        PAN_Match_count += 1
+                    else:
+                        _PanLog.warn(f"-> PAN: {pan} (Luhn Check: Failed)")
 
                 if line_number % 100 == 0:
-                    _PanLog.info(f"Scanned {FILE_count} files; matched {PAN_match_count} PANs, {TRACK_match_count} TRACKs")
+                    _PanLog.info(f"Scanned {FILE_count} files; matched {PAN_Match_count} PANs, {TRACK_Match_count} TRACKs")
 
     except PermissionError:
         _TraceLog.warn(f"Skipping file due to PermissionError: {file_path}")
+
+
+##  ===========================================================================
+##  Match REGEX patterns from the JSON data
+##  ===========================================================================
+def match_regex(text_line, line_number, json_data):
+    for section_name, section_data in json_data.items():
+        # print(f"Checking section: {section_name}")
+        for pattern_name, pattern_info in section_data.items():
+            regex_pattern = pattern_info['regex']
+            match = re.search(regex_pattern, text_line)
+            if match:
+                regex_info = f"{section_name} '{pattern_name}': {regex_pattern}"
+                # print(f"{regex_info} in line: {line_number}")
+                return regex_info,match.group(0)
+
+    print(f"No match found for {text_line}")
+    return None , None
+
+##  ===========================================================================
+##  Scan a line for credit card patterns
+##  ===========================================================================
+def scan_text_line(text_line, patterns_data):
+
+    anti_pan_patterns = compiled_patterns.get('Anti-PAN Patterns', {})
+    track_data = {key: value['pattern'] for key, value in compiled_patterns.items() if key.lower().startswith('track')}
+    pan_patterns = {key: value['pattern'] for key, value in compiled_patterns.items() if key.lower().startswith('pan')}
+    
+    # Check for anti-PAN patterns
+    for pattern_name, pattern_info in anti_pan_patterns.items():
+        if re.search(pattern_info['pattern'], text_line):
+            print(f"Anti-PAN pattern '{pattern_name}' detected. Dismissing line.")
+            return None
+    
+    # Check for track data
+    for track_name, track_pattern in track_data.items():
+        match = re.search(track_pattern, text_line)
+        if match:
+            print(f"Track data '{track_name}' detected.")
+            return match.group()
+    
+    # Check for PAN data
+    for pan_name, pan_pattern in pan_patterns.items():
+        match = re.search(pan_pattern, text_line)
+        if match:
+            print(f"PAN data '{pan_name}' detected.")
+            return match.group()
+    
+    # No match found
+    print("No track or PAN data detected.")
+    return None
+
+
 
 ##  ===========================================================================
 ##  Extract PAN from track data
 ##  ===========================================================================
 def extract_pan_from_match(match_data):
-    """
-    Extracts the PAN (Primary Account Number) from the given match_data.
-
-    Parameters:
-    match_data (str): The data to extract the PAN from.
-
-    Returns:
-    str: The extracted PAN.
-
-    """
     # Assuming Track 1 & 2 Data
     if match_data.startswith('%B'):
         return re.sub(r'\D', '', match_data[2:].split('^')[0])
@@ -351,117 +341,61 @@ def extract_pan_from_match(match_data):
     # other than a regex match.  Return the digits
     return re.sub(r'\D', '', match_data)
 
-##  ===========================================================================
-##  Scan a line for credit card patterns
-##  ===========================================================================
-def scan_line(line, line_number, file_path, patterns):
-    """
-    Scans a line of text for patterns and extracts PAN (Primary Account Number) matches.
-
-    Args:
-        line (str): The line of text to scan.
-        line_number (int): The line number in the file.
-        file_path (str): The path of the file being scanned.
-        patterns (dict): A dictionary of patterns to match against.
-
-    Returns:
-        None
-
-    Raises:
-        None
-    """
-    global TRACK_match_count
-    global PAN_match_count
-
-    for label, compiled_patterns in patterns.items():
-        for pattern in compiled_patterns:
-            for match in pattern.findall(line):
-                if label == 'TRACK' or label == 'PAN':
-                    match_info = f"Type: {label}, File: {file_path}, Line: {line_number}, Pattern: {pattern.pattern}, Match: {match}"
-                    match = extract_pan_from_match(match)
-                    if match is None:
-                        continue
-
-                    if luhn_check(match):
-                        if label == 'TRACK':
-                            TRACK_match_count += 1
-                            _TraceLog.info(f"{match_info}")
-                            return  # We found a match, so we're done with this line
-                        elif label == 'PAN':
-                            PAN_match_count += 1
-                            _TraceLog.info(f"{match_info}")
-                            return   # We found a match, so we're done with this line
-
-
-##  ===========================================================================
-##  Compile PAN regex patterns
-##  ===========================================================================
-def compile_pan_patterns():
-    """
-    Compile PAN and Track patterns into regular expressions.
-
-    Returns:
-        dict: A dictionary containing compiled regular expressions for PAN and Track patterns.
-            The 'PAN' key maps to a list of compiled PAN patterns.
-            The 'TRACK' key maps to a list of compiled Track patterns.
-    """
-    # PAN patterns
-    pan_patterns = [
-        r'3[47][0-9]{13}',                              # American Express
-        r'5[1-5][0-9]{14}|2[2-7][0-9]{14}',             # Mastercard
-        r'4[0-9]{12}(?:[0-9]{3})?',                     # Visa
-        r'6011[0-9]{12}|65[0-9]{14}|64[4-9][0-9]{13}',  # Discover
-        r'3(?:0[0-5]|[68][0-9])[0-9]{11}',              # Diners Club International
-        r'(?:2131|1800[0-9]{11}|35[0-9]{14})'           # JCB
-    ]
-    
-    # Track patterns
-    track_patterns = [
-        r'%B\d{13,19}\^\w{1,26}\^\d{1,19}|\d{1,19}\?',  # Track 1 Data
-        r';\d{13,19}=\d{1,19}|\d{1,19}\?'               # Track 2 Data
-    ]
-
-    ## The order here is important.  We want to detect 'TRACK' patterns first, then 'PAN' patterns
-    return {'TRACK': [re.compile(t) for t in track_patterns], 'PAN': [re.compile(p) for p in pan_patterns] }
-
-##  ===========================================================================
-##  Compile NOT PAN (suspect) patterns
-##  ===========================================================================
-def compile_suspect_patterns():
-    """
-    Compiles a list of regular expression patterns that match suspect PAN (Primary Account Number) patterns.
-
-    Returns:
-        list: A list of compiled regular expression patterns.
-    """
-    anti_pan_patterns = [
-        r'^(123456|654321)\d*|\d*(123456|654321)$',     #   Sequential numbers
-        r'([3456]\d{3,5})\1+',                          #   Repeated numbers
-        r'^(?=.{12,19}$)6?5?4321[0]+',                  #   654321 with trailing zeros
-        r'[34356](\d)\1{2}(([0-9](\d)\1{2}){2})',       #   Repeated numbers
-        r'^(123456|654321)\d*|\d*(123456|654321)$'      #   Sequential numbers
-    ]
-    return [re.compile(p) for p in anti_pan_patterns]
 
 ##  ===========================================================================
 ##  Securely delete a file
 ##  ===========================================================================
 def secure_delete(file_path):
-    """
-    Securely deletes a file by overwriting its contents.
-
-    Args:
-        file_path (str): The path to the file to be securely deleted.
-
-    Returns:
-        None
-    """
     if os.name == 'posix': # Linux, using shred, which is part of GNU coreutils
         subprocess.run(['shred', '-u', file_path])
         return
     
     if os.name == 'nt': # Windows, using SysInternals sdelete; download from https://docs.microsoft.com/en-us/sysinternals/downloads/sdelete
-        subprocess.run(['sdelete', file_path])
+        subprocess.run(['sdelete64.exe', file_path])
+
+
+##  ===========================================================================
+##  Compile JSON prefix patterns
+##  ===========================================================================
+def load_json_data(filename):
+    try:
+        with open(filename, 'r') as file:
+            data = json.load(file)
+            return data
+    except FileNotFoundError:
+        print(f"Error: File '{filename}' not found.")
+        return None
+
+##  ===========================================================================
+##  Compile Patterns
+##  ===========================================================================
+def compile_pan_patterns(data):
+    global compiled_data
+    compiled_data = {}
+    anti_pan_data = {}
+    track_data = {}
+    pan_data = {}
+
+    for category, patterns in data.items():
+        if category.lower().startswith('anti-pan'):
+            for pattern_name, info in patterns.items():
+                pattern = re.compile(info['regex'])
+                anti_pan_data[pattern_name] = {'pattern': pattern, 'length': info['length']}
+        
+        if category.lower().startswith('track'):
+            for pattern_name, info in patterns.items():
+                pattern = re.compile(info['regex'])
+                track_data[pattern_name] = {'pattern': pattern, 'length': info['length']}
+        
+        if category.lower().startswith('pan'):
+            for pattern_name, info in patterns.items():
+                pattern = re.compile(info['regex'])
+                pan_data[pattern_name] = {'pattern': pattern, 'length': info['length']}
+    
+    # Merge track data, anti-PAN data, and PAN data at the beginning of the dictionary
+    compiled_data = {**anti_pan_data, **track_data, **pan_data}
+    return compiled_data
+
 
 ##  ===========================================================================
 ##  Enumerate command line arguments
@@ -473,17 +407,39 @@ def enumerate_command_line_arguments(args):
         argument_list.append(f'--{arg}={value}\n')
     return '\nParameters and Defaults\n' + ' '.join(argument_list)
 
+
+def load_json_data(filename):
+    try:
+        with open(filename, 'r') as file:
+            data = json.load(file)
+            return data
+    
+    except FileNotFoundError:
+        print(f"Error: File '{filename}' not found.")
+        return None
+
+
 ##  ===========================================================================
 ##  Main
 ##  ===========================================================================
 def main(args):
 
-    compiled_patterns = compile_pan_patterns()
-    suspect_patterns = compile_suspect_patterns()
+    # Load JSON data and compile prefix patterns
+    json_filename = os.path.join(os.getcwd(), 'patterns/find-pan-patterns.json')
+    json_data = load_json_data(json_filename)
+    if json_data:
+        # pan_patterns = compile_pan_patterns(json_data)
+        pan_patterns = {}
+        if _DEBUG:
+            formatted_pan_patterns = json.dumps(json_data, indent=4)
+            print(formatted_pan_patterns)
+    else:
+        print("Error: No JSON data found.")
+        return
 
     if args.path:
         _TraceLog.info(f"Scanning {args.path} ...")
-        scan_directory(args.path, compiled_patterns, suspect_patterns)
+        scan_directory(args.path, pan_patterns, json_data )
         return
     
     if args.tar and args.temp:
@@ -493,7 +449,7 @@ def main(args):
                 if tarinfo.isreg():
                     temp_path = os.path.join(args.temp, tarinfo.name)
                     tar.extract(tarinfo, path=args.temp)
-                    process_file(temp_path, compiled_patterns, suspect_patterns)
+                    process_file(temp_path, compiled_patterns )
                     secure_delete(temp_path)
         return
     
@@ -521,7 +477,8 @@ if not _DEBUG:
     args = parser.parse_args()
 else:
     ##  If we're debugging, we'll use the following test data
-    args = parser.parse_args(['--path', './test-data/', '--verbose'] )
+    test_data_path = os.path.join(os.getcwd(), 'test-data')
+    args = parser.parse_args(['--path', test_data_path, '--verbose'] )
 
 ##  Validate command line arguments
 if ( not args.path and not args.tar ) or ( args.path and args.tar ):

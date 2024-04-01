@@ -1,0 +1,83 @@
+{
+  "Anti-PAN Patterns": {
+    "Sequential Numbers": {
+      "regex": "^(123456|654321)\\d*|\\d*(123456|654321)$",
+      "length": 20
+    },
+    "Repeated Numbers": {
+      "regex": "([3456]\\d{3,5})\\1+",
+      "length": 19
+    },
+    "654321 with Trailing Zeros": {
+      "regex": "^(?=.{12,19}$)6?5?4321[0]+",
+      "length": 19
+    },
+    "Repeated Numbers Extended": {
+      "regex": "[34356](\\d)\\1{2}(([0-9](\\d)\\1{2}){2})",
+      "length": 19
+    }
+  },
+
+  "TRACK Data Patterns": {
+    "Track 1 Data": {
+      "regex": "^(%B\\d{13,19}\\^\\w{1,26}\\^\\d{1,19}|\\d{1,19}\\?)$",
+      "length": "12-24"
+    },
+    "Track 2 Data": {
+      "regex": "^(;\\d{13,19}=\\d{1,19}|\\d{1,19}\\?)$",
+      "length": "12-24"
+    }
+  },
+
+  "PAN Patterns": {
+    "American Express": {
+      "regex": "^(34|37)\\d{13}$",
+      "length": 15
+    },
+    "Diners Club Carte Blanche": {
+      "regex": "^(300[0-5]|301|302|303|304|305)\\d{11}$",
+      "length": 14
+    },
+    "Diners Club International": {
+      "regex": "^(36)\\d{12}$",
+      "length": 14
+    },
+    "Diners Club US and Canada": {
+      "regex": "^(54|55)\\d{14}$",
+      "length": 16
+    },
+    "Discover Card": {
+      "regex": "^(6011|62212[6-9]|6221[3-9]|622[2-8]|6229[0-2]|62292[3-5]|64[4-9]|65)\\d{14}$",
+      "length": 16
+    },
+    "InstaPayment": {
+      "regex": "^(637|638|639)\\d{13}$",
+      "length": 16
+    },
+    "JCB": {
+      "regex": "^(3528|3529|353|354|355|356|357|358|359)\\d{12}$",
+      "length": 16
+    },
+    "Laser": {
+      "regex": "^(6304|670[69]|6771|6709)\\d{10,13}$",
+      "length": "16-19"
+    },
+    "Maestro": {
+      "regex": "^(5018|5020|5038|6304|6759|6761|6762|6763)\\d{10,13}$",
+      "length": "12-19"
+    },
+    "Mastercard": {
+      "regex": "^(51|52|53|54|55)\\d{14}$",
+      "length": 16
+    },
+    "VISA": {
+      "regex": "^(4)\\d{12,15}$",
+      "length": "13-16"
+    },
+    "VISA Electron": {
+      "regex": "^(4026|417500|4508|4844|4913|4917)\\d{12}$",
+      "length": 16
+    }
+  }
+}
+
