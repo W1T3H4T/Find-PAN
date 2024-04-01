@@ -50,7 +50,7 @@ global PAN_Match_count
 global FILE_count
 global compiled_patterns
 
-_DEBUG      = True
+_DEBUG      = False
 _TraceLog   = None
 _PanLog     = None
 total_matches = 0
