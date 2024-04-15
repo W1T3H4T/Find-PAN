@@ -47,9 +47,11 @@ global _PanLog
 global total_matches
 global TRACK_Match_count
 global PAN_Match_count
+global Match_Count
 global FILE_count
 global compiled_patterns
 
+Match_Count = { "PAN" : 0, "TRACK" : 0 }
 _DEBUG      = False
 _TraceLog   = None
 _PanLog     = None
@@ -220,6 +222,7 @@ def process_file(file_path, search_patterns, json_data ):
     global FILE_count
     global PAN_Match_count
     global TRACK_Match_count
+    global Match_Count
     line_count = 0
 
     if not os.path.isfile(file_path):
@@ -250,22 +253,19 @@ def process_file(file_path, search_patterns, json_data ):
                 total_matches += 1
 
                 if matched_info.lower().startswith('track'):
-                    pan = extract_pan_from_match(match_data)                    
-                    if luhn_check(pan):
-                        # _PanLog.info(f"-> PAN: {pan} (Luhn Check: Passed)")
-                        _PanLog.info(f"-> {pan}: {matched_info}")
-                        TRACK_Match_count += 1
-                    else:
-                        _PanLog.warn(f"-> PAN: {pan} (Luhn Check: Failed)")
-                
-                elif matched_info.lower().startswith('pan'):
-                    pan = extract_pan_from_match(match_data)
-                    if luhn_check(pan):
-                        # _PanLog.info(f"-> PAN: {pan} (Luhn Check: Passed)")
-                        _PanLog.info(f"-> {pan}: {matched_info}")
-                        PAN_Match_count += 1
-                    else:
-                        _PanLog.warn(f"-> PAN: {pan} (Luhn Check: Failed)")
+                    type='TRACK'
+                    TRACK_Match_count += 1
+                else:
+                    type='PAN'
+                    PAN_Match_count += 1
+
+                pan = extract_pan_from_match(match_data)                    
+                if luhn_check(pan):
+                    Match_Count[type] += 1
+                    _TraceLog.info(f"-> {type}: {pan} (Luhn Check: Passed)")
+                    _PanLog.info(f"-> {type}: {pan}: {matched_info}")
+                else:
+                    _TraceLog.info(f"-> TRACK: {pan} (Luhn Check: Failed)")
 
                 if line_number % 100 == 0:
                     _PanLog.info(f"Scanned {FILE_count} files; matched {PAN_Match_count} PANs, {TRACK_Match_count} TRACKs")
@@ -288,7 +288,7 @@ def match_regex(text_line, line_number, json_data):
                 # print(f"{regex_info} in line: {line_number}")
                 return regex_info,match.group(0)
 
-    print(f"No match found for {text_line}")
+    ## print(f"No match found for {text_line}")
     return None , None
 
 ##  ===========================================================================
