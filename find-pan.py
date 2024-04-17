@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/local/bin/python3
 #  ===========================================================================
 #  Name    :    find-pan.py
 #  Function:    Find PAN in a file system or tar file
@@ -34,9 +34,10 @@ import json
 import logging
 import tarfile
 import argparse
-import mimetypes
 import subprocess
 from datetime import datetime
+import os
+import magic
 
 ##  ===========================================================================
 ##  Global variables
@@ -131,22 +132,23 @@ def setup_custom_loggers(args):
 ##  ===========================================================================
 ##  Check if file is binary
 ##  ===========================================================================
-def is_executable(file_path):
+def is_executable(file_path) -> bool | None:
     try:
-        if os.path.isfile(file_path):
-            mime = magic.Magic()
-            file_type = mime.from_file(file_path)
+        def is_executable(file_path) -> bool | None:
+            if os.path.isfile(file_path):
+                mime = magic.Magic()
+                file_type = mime.from_file(file_path)
 
-            # Define magic numbers for executable file types
-            executable_magic_numbers = [
-                'application/x-executable',
-                'application/x-sharedlib',  # Linux shared library
-                'application/x-dosexec',    # Windows executable (PE format)
-            ]
+                # Define magic numbers for executable file types
+                executable_magic_numbers = [
+                    'application/x-executable',
+                    'application/x-shared-library',  # Linux shared library
+                    'application/x-dosexec',    # Windows executable (PE format)
+                ]
 
-            return any(magic_number in file_type for magic_number in executable_magic_numbers)
-        else:
-            return None
+                return any(magic_number in file_type for magic_number in executable_magic_numbers)
+            else:
+                return None
     
     except PermissionError:
         _TraceLog.warn(f"Skipping file due to PermissionError: {file_path}")
@@ -476,9 +478,12 @@ parser.add_argument('--debug', default=False, action='store_true', help='Debug o
 if not _DEBUG:
     args = parser.parse_args()
 else:
-    ##  If we're debugging, we'll use the following test data
+    ##  =========================================================================== 
+    ##  Debugging configuration here
+    ##  ===========================================================================
+    # args = parser.parse_args(['--path', test_data_path, '--verbose'] )
     test_data_path = os.path.join(os.getcwd(), 'test-data')
-    args = parser.parse_args(['--path', test_data_path, '--verbose'] )
+    args = parser.parse_args(['--path', test_data_path] )
 
 ##  Validate command line arguments
 if ( not args.path and not args.tar ) or ( args.path and args.tar ):
