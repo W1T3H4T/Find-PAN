@@ -71,13 +71,13 @@ def print_exception_info(e):
 
     # Traverse the traceback to find the first call outside the current module
     for frame in reversed(tb_stack):
-        if f"{script_name}" in frame.filename:  # Replace with the name of your script
+        if f"{script_name}" in frame.filename:
             file_name = frame.filename
             line_number = frame.lineno
             func_name = frame.name
             break
     else:
-        # Fallback to the last frame if our script isn't found in the traceback (shouldn't happen)
+        # Fallback to the last frame (this shouldn't happen)
         frame = tb_stack[-1]
         file_name = frame.filename
         line_number = frame.lineno
@@ -89,8 +89,6 @@ def print_exception_info(e):
     print(f"Exception type: {exc_type.__name__}, Message: {exception_message}")
     if not e is None:
         print(f"Exception Info: {e}")
-
-
     sys.exit(1)
 
 ##  ===========================================================================
@@ -133,8 +131,14 @@ def setup_custom_loggers(args):
     # Console Handler (for stdout) - Added check for --verbose
     trace_console_handler = logging.StreamHandler(sys.stdout) if args.verbose else None
 
-    trace_file_handler = logging.FileHandler(trace_logfile)
-    trace_file_handler.setLevel(trace_level)
+    try:
+        trace_file_handler = logging.FileHandler(trace_logfile)
+        trace_file_handler.setLevel(trace_level)
+    except FileNotFoundError:
+        print_exception_info(None)
+    except Exception as e:
+        print_exception_info(e)
+
 
     trace_formatter = logging.Formatter('%(asctime)s [%(levelname)s]: %(message)s')
 
@@ -298,7 +302,7 @@ def process_file(file_path, search_patterns, json_data ):
                     type='PAN'
                     PAN_Match_count += 1
 
-                if type is "PAN":
+                if type == "PAN":
                     pan = extract_pan_from_match(match_data)                    
                     if luhn_check(pan):
                         Match_Count[type] += 1
@@ -422,7 +426,7 @@ def load_json_data(filename):
             return data
 
     except FileNotFoundError:
-        print(f"Error: File '{filename}' not found.")
+        print_exception(f"Error: File '{filename}' not found.")
              
     except Exception as e:
         print_exception_info(e)
@@ -495,6 +499,7 @@ def setupArgParse():
     parser.add_argument('--skip-binary', default=False, action='store_true', help='Skip binary files (optional).')
     parser.add_argument('--tar', help='Tar file path.')
     parser.add_argument('--temp', help='Temporary directory for tar file extraction.')
+    parser.add_argument('--patterns',default='patterns/find-pan-patterns.json', help='JSON file containing pattern regular expressions (optional).')
     parser.add_argument('--log-dir', help='Directory for log files (optional).')
     parser.add_argument('--line-limit', type=int, default=-1, help='Line limit per file (optional).')
     parser.add_argument('--verbose', default=False, action='store_true', help='Verbose output (optional).')
@@ -527,7 +532,7 @@ def setupArgParse():
 def main(args):
 
     # Load JSON data and compile prefix patterns
-    json_filename = os.path.join(os.getcwd(), 'patterns/find-pan-patterns.json')
+    json_filename = args.patterns
     json_data = load_json_data(json_filename)
     if json_data:
         pan_patterns = {}
@@ -550,7 +555,7 @@ def main(args):
                 if tarinfo.isreg():
                     temp_path = os.path.join(args.temp, tarinfo.name)
                     tar.extract(tarinfo, path=args.temp)
-                    process_file(temp_path, compiled_patterns )
+                    process_file(temp_path, compiled_patterns, json_data )
                     secure_delete(temp_path)
         return
     
@@ -569,4 +574,5 @@ if __name__ == '__main__':
     PanLog = loggers['Log']
     TraceLog = loggers['Trace']
     main(args)
+
 
