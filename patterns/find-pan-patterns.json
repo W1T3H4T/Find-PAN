@@ -8,12 +8,12 @@
       "regex": "([3456]\\d{3,5})\\1+",
       "length": 19
     },
-    "654321 with Trailing Zeros": {
-      "regex": "^(?=.{12,19}$)6?5?4321[0]+",
-      "length": 19
-    },
     "Repeated Numbers Extended": {
       "regex": "[34356](\\d)\\1{2}(([0-9](\\d)\\1{2}){2})",
+      "length": 19
+    },
+    "654321 with Trailing Zeros": {
+      "regex": "^(?=.{12,19}$)6?5?4321[0]+",
       "length": 19
     }
   },
