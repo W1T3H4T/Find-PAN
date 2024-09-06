@@ -4,7 +4,7 @@
 
 **find-pan.py** is a Python script designed to search for Primary Account Numbers (PANs) and TRACK data in a file system or a tar file.
 
-The script was originally designed to find PAN within Payments Information System projects.<br>
+The script was originally designed for Payments Information System projects.<br>
  
 The script leverages regular expressions to identify patterns associated with credit card numbers and track data.
 
@@ -19,9 +19,9 @@ This script is released under the MIT License. See the [LICENSE](LICENSE) file f
 
 ## Usage
 
-```bash
+<pre>
 python find-pan.py [--path PATH] [--tar TAR] [--temp TEMP] [--log-dir LOG_DIR] [--skip-binary]  [--verbose] [--debug]
-```
+</pre>
 
 ### Command-line Arguments:
 
@@ -32,7 +32,7 @@ python find-pan.py [--path PATH] [--tar TAR] [--temp TEMP] [--log-dir LOG_DIR] [
 - **--log-dir** Specify the directory for log files (optional).
 - **--line-limit** Specify the number of lines to scan per file.  Default is all data/lines (optional). 
 - **--verbose** Display 'trace' logfile information to stdout (optional).
-- **--debug** Sends 'debug' messages 'trace' log file (optiona). 
+- **--debug** Sends 'debug' messages 'trace' log file (optional). 
 
 ## Features
 
@@ -57,7 +57,7 @@ Log files are generated in the specified log directory or the current working di
 The script uses predefined regular expressions to identify PANs. Supported PAN types include:
 
 - American Express
-- Mastercard
+- MasterCard
 - Visa
 - Discover
 - Diners Club International
@@ -79,25 +79,26 @@ For files processed during scanning, the script securely deletes them using plat
 
 Scan a directory:
 
-```bash
+<pre>
 python find-pan.py --path /path/to/directory
-```
+</pre>
 
 Scan a tar archive:
 
-```bash
+<pre>
 python find-pan.py --tar /path/to/archive.tar --temp /path/to/temporary/directory
-```
+</pre>
 
 Specify a log directory:
 
-```bash
+<pre>
 python find-pan.py --path /path/to/directory --log-dir /path/to/logs
-```
+</pre>
 
 ## Notes
 
-- The script supports both file system paths and tar file scanning but requires a temporary directory for extracting files from the tar archive.
+- The script supports scanning of filesystems and tarfiles.  Tarfile scanning requires a temporary directory for extracting files from the tar archive.
 - Ensure the necessary platform-specific tools (shred, sdelete) are available for secure file deletion.
+- Use `$ pip install -r requirements.txt` to install required modules.
 
 Feel free to reach out to the author at `w1t3h4t@gmail.com` for any inquiries or issues related to the script.
