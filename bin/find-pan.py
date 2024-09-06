@@ -277,15 +277,16 @@ def process_file(file_path, search_patterns, json_data ):
 
         with open(file_path, 'r') as f:
             if is_binary(file_path) is not None:
-                TraceLog.info(f"-> Binary file skipped: {file_path}")
+                TraceLog.info(f"Binary file skipped: {file_path}")
                 return
 
         with open(file_path, "r", encoding="utf-8", errors="replace") as f:
+            line_count = 0
 
             for line_number, text_line in enumerate(f, 1):
                 line_count += 1
                 if args.line_limit > 0 and line_count >= args.line_limit:
-                    TraceLog.info(f"-> Line Limit reached: stopped after {line_count} lines.")
+                    TraceLog.warning(f"Line Limit reached: stopped after {line_count} lines.")
                     break
                 
                 # match_data = scan_text_line(text_line, search_patterns)
@@ -306,19 +307,16 @@ def process_file(file_path, search_patterns, json_data ):
                     pan = extract_pan_from_match(match_data)                    
                     if luhn_check(pan):
                         Match_Count[type] += 1
-                        TraceLog.info(f"{pan} (Luhn Check: Passed)")
-                        PanLog.info(f"{pan}: {matched_info}")
+                        PanLog.info(f"{line_count} : {pan}: {matched_info}")
                     else:
-                        TraceLog.info(f"{pan} (Luhn Check: Failed)")
+                        PanLog.info(f"{line_count} : {pan} (Luhn Check: Failed)")
                 else:
                     pan = extract_pan_from_match(match_data)                    
                     if luhn_check(pan):
                         Match_Count[type] += 1
-                        TraceLog.info(f"{match_data} (Luhn Check: Passed)")
-                        PanLog.info(f"{match_data}: {matched_info}")
+                        PanLog.info(f"{line_count} : {match_data}: {matched_info}")
                     else:
-                        TraceLog.info(f"{match_data} (Luhn Check: Failed)")
-                        PanLog.info(f"{match_data}: {matched_info}")
+                        PanLog.info(f"{line_count} : {match_data}: {matched_info} (Luhn Check: Failed)")
 
                 if line_number % 100 == 0:
                     PanLog.info(f"Scanned {FILE_count} files; matched {PAN_Match_count} PANs, {TRACK_Match_count} TRACKs")
@@ -522,7 +520,6 @@ def setupArgParse():
     if ( not args.temp and args.tar ):
         parser.error('Please provide a temporary directory for tar file extraction.')
 
-    print(f"{enumerate_command_line_arguments(args)}")
     return args
 
 
@@ -573,6 +570,8 @@ if __name__ == '__main__':
     loggers = setup_custom_loggers(args)
     PanLog = loggers['Log']
     TraceLog = loggers['Trace']
+    usage_info = enumerate_command_line_arguments(args)
+    TraceLog.info(f"{usage_info}")
     main(args)
 
 
