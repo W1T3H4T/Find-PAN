@@ -27,17 +27,17 @@
 #  SOFTWARE.
 #  ===========================================================================
 
+import argparse
+from datetime import datetime
+import json
+import logging
+import magic
 import os
 import re
 import sys
-import json
-import logging
 import tarfile
-import argparse
 import subprocess
-from datetime import datetime
-import os
-import magic
+import traceback
 
 ##  ===========================================================================
 ##  Global variables
@@ -61,6 +61,37 @@ TRACK_Match_count = 0
 PAN_Match_count = 0
 FILE_count = 0
 compiled_patterns = {}
+
+##  ===========================================================================
+##  Print consolidated exception info
+##  ===========================================================================
+def print_exception_info(e):
+    exc_type, exc_value, exc_traceback = sys.exc_info()
+    tb_stack = traceback.extract_tb(exc_traceback)
+
+    # Traverse the traceback to find the first call outside the current module
+    for frame in reversed(tb_stack):
+        if f"{script_name}" in frame.filename:  # Replace with the name of your script
+            file_name = frame.filename
+            line_number = frame.lineno
+            func_name = frame.name
+            break
+    else:
+        # Fallback to the last frame if our script isn't found in the traceback (shouldn't happen)
+        frame = tb_stack[-1]
+        file_name = frame.filename
+        line_number = frame.lineno
+        func_name = frame.name
+
+    exception_message = str(exc_value)
+
+    print(f"Exception occurred in function: '{func_name}', at line: {line_number}, in file: '{file_name}'")
+    print(f"Exception type: {exc_type.__name__}, Message: {exception_message}")
+    if not e is None:
+        print(f"Exception Info: {e}")
+
+
+    sys.exit(1)
 
 ##  ===========================================================================
 ##  Set the logfile basename 
@@ -261,13 +292,23 @@ def process_file(file_path, search_patterns, json_data ):
                     type='PAN'
                     PAN_Match_count += 1
 
-                pan = extract_pan_from_match(match_data)                    
-                if luhn_check(pan):
-                    Match_Count[type] += 1
-                    TraceLog.info(f"-> {type}: {pan} (Luhn Check: Passed)")
-                    PanLog.info(f"-> {type}: {pan}: {matched_info}")
+                if type is "PAN":
+                    pan = extract_pan_from_match(match_data)                    
+                    if luhn_check(pan):
+                        Match_Count[type] += 1
+                        TraceLog.info(f"{pan} (Luhn Check: Passed)")
+                        PanLog.info(f"{pan}: {matched_info}")
+                    else:
+                        TraceLog.info(f"{pan} (Luhn Check: Failed)")
                 else:
-                    TraceLog.info(f"-> TRACK: {pan} (Luhn Check: Failed)")
+                    pan = extract_pan_from_match(match_data)                    
+                    if luhn_check(pan):
+                        Match_Count[type] += 1
+                        TraceLog.info(f"{match_data} (Luhn Check: Passed)")
+                        PanLog.info(f"{match_data}: {matched_info}")
+                    else:
+                        TraceLog.info(f"{match_data} (Luhn Check: Failed)")
+                        PanLog.info(f"{match_data}: {matched_info}")
 
                 if line_number % 100 == 0:
                     PanLog.info(f"Scanned {FILE_count} files; matched {PAN_Match_count} PANs, {TRACK_Match_count} TRACKs")
@@ -280,18 +321,27 @@ def process_file(file_path, search_patterns, json_data ):
 ##  Match REGEX patterns from the JSON data
 ##  ===========================================================================
 def match_regex(text_line, line_number, json_data):
-    for section_name, section_data in json_data.items():
-        # print(f"Checking section: {section_name}")
-        for pattern_name, pattern_info in section_data.items():
-            regex_pattern = pattern_info['regex']
-            match = re.search(regex_pattern, text_line)
-            if match:
-                regex_info = f"{section_name} '{pattern_name}': {regex_pattern}"
-                # print(f"{regex_info} in line: {line_number}")
-                return regex_info,match.group(0)
 
-    ## print(f"No match found for {text_line}")
+    try:
+        for section_name, section_data in json_data.items():
+            if _DEBUG:
+                TraceLog.debug(f"Checking section: {section_name}")
+
+            for pattern_name, pattern_info in section_data.items():
+                regex_pattern = pattern_info['regex']
+                match = re.search(regex_pattern, text_line)
+                if match:
+                    regex_info = f"{section_name} '{pattern_name}': {regex_pattern}"
+                    if _DEBUG:
+                        TraceLog.debug(f"{regex_info} in line: {line_number}")
+                    return regex_info,match.group(0)
+    except Exception as e:
+        print_exception_info(e)
+
+    if _DEBUG:
+        TraceLog.debug(f"No match found for {text_line}")
     return None , None
+
 
 ##  ===========================================================================
 ##  Scan a line for credit card patterns
@@ -327,7 +377,6 @@ def scan_text_line(text_line, patterns_data):
     return None
 
 
-
 ##  ===========================================================================
 ##  Extract PAN from track data
 ##  ===========================================================================
@@ -352,7 +401,8 @@ def secure_delete(file_path):
         subprocess.run(['shred', '-u', file_path])
         return
     
-    if os.name == 'nt': # Windows, using SysInternals sdelete; download from https://docs.microsoft.com/en-us/sysinternals/downloads/sdelete
+    # Windows, using SysInternals sdelete; download from https://docs.microsoft.com/en-us/sysinternals/downloads/sdelete
+    if os.name == 'nt': 
         subprocess.run(['sdelete64.exe', file_path])
 
 
@@ -364,9 +414,14 @@ def load_json_data(filename):
         with open(filename, 'r') as file:
             data = json.load(file)
             return data
+
     except FileNotFoundError:
         print(f"Error: File '{filename}' not found.")
-        return None
+             
+    except Exception as e:
+        print_exception_info(e)
+
+    return None
 
 ##  ===========================================================================
 ##  Compile Patterns
@@ -403,13 +458,15 @@ def compile_pan_patterns(data):
 ##  Enumerate command line arguments
 ##  ===========================================================================
 def enumerate_command_line_arguments(args):
-    # command_line = ' '.join(sys.argv)
     argument_list = ['']
     for arg, value in vars(args).items():
         argument_list.append(f'--{arg}={value}\n')
     return '\nParameters and Defaults\n' + ' '.join(argument_list)
 
 
+##  ===========================================================================
+##  Load REGEX from JSON file
+##  ===========================================================================
 def load_json_data(filename):
     try:
         with open(filename, 'r') as file:
@@ -419,6 +476,9 @@ def load_json_data(filename):
     except FileNotFoundError:
         print(f"Error: File '{filename}' not found.")
         return None
+
+    except Exception as e:
+        print_exception_info(None)
 
 ##  ===========================================================================
 ##  Configure our command line options
@@ -438,7 +498,7 @@ def setupArgParse():
     if not _DEBUG:
         args = parser.parse_args()
     else:
-        #  Debugging configuration here
+        # Debugging configuration here
         # args = parser.parse_args(['--path', test_data_path, '--verbose'] )
         test_data_path = os.path.join(os.getcwd(), 'test-data')
         args = parser.parse_args(['--path', test_data_path] )
@@ -460,18 +520,16 @@ def setupArgParse():
 ##  ===========================================================================
 def main(args):
 
-
     # Load JSON data and compile prefix patterns
     json_filename = os.path.join(os.getcwd(), 'patterns/find-pan-patterns.json')
     json_data = load_json_data(json_filename)
     if json_data:
-        # pan_patterns = compile_pan_patterns(json_data)
         pan_patterns = {}
         if _DEBUG:
             formatted_pan_patterns = json.dumps(json_data, indent=4)
             print(formatted_pan_patterns)
     else:
-        print("Error: No JSON data found.")
+        TraceLog.error("No JSON data file found.")
         return
 
     if args.path:
@@ -498,11 +556,11 @@ def main(args):
 ##  MAIN Entry Point
 ##  ===========================================================================
 if __name__ == '__main__':
-    # CWD = os.getcwd()
+    global script_name
+    script_name = os.path.basename(sys.argv[0])
     args = setupArgParse()
     loggers = setup_custom_loggers(args)
     PanLog = loggers['Log']
     TraceLog = loggers['Trace']
     main(args)
-
 
