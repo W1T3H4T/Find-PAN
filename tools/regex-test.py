@@ -72,6 +72,6 @@ test_patterns = [
 for p in test_patterns:
     for pattern_key, pattern_val in false_positive_patterns.items():
         rc = match_suspect_pattern(p, pattern_val)
-        print(f"str: Suspect Pattern {rc} ({matched(rc)}): {pattern_key} ({p} {pattern_val})")
+        print(f"Suspect Pattern {rc} ({matched(rc)}): {pattern_key} ({p} {pattern_val})")
     print("")
 
