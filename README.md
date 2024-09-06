@@ -4,9 +4,7 @@
 
 **find-pan.py** is a Python script designed to search for Primary Account Numbers (PANs) and TRACK data in a file system or a tar file.
 
-The script was originally designed for Payments Information System projects.<br>
- 
-The script leverages regular expressions to identify patterns associated with credit card numbers and track data.
+The script was originally designed for Payments Information System projects.  It leverages regular expressions to identify patterns associated with credit card numbers and track data.
 
 ## Author
 
@@ -25,9 +23,10 @@ python find-pan.py [--path PATH] [--tar TAR] [--temp TEMP] [--log-dir LOG_DIR] [
 
 ### Command-line Arguments:
 
-- **--path** Specify the file system path to scan for PANs.
-- **--tar** Specify the tar file path to scan for PANs.
-- **--temp** Specify the temporary directory for extracting files from the tar archive.
+- **--path** Specify the file system path to scan for PANs (required when no --tar).
+- **--tar** Specify the tar file path to scan for PANs (required when no --path).
+- **--temp** Specify the temporary directory for extracting files from the tar archive (required w/ --tar).
+- **--patterns** Regular expression JSON file.  Default is 'patterns/find-pan-patterns.json'.
 - **--skip-binary** Avoid scanning binary files (optional).
 - **--log-dir** Specify the directory for log files (optional).
 - **--line-limit** Specify the number of lines to scan per file.  Default is all data/lines (optional). 
@@ -100,5 +99,5 @@ python find-pan.py --path /path/to/directory --log-dir /path/to/logs
 - The script supports scanning of filesystems and tarfiles.  Tarfile scanning requires a temporary directory for extracting files from the tar archive.
 - Ensure the necessary platform-specific tools (shred, sdelete) are available for secure file deletion.
 - Use `$ pip install -r requirements.txt` to install required modules.
+- Ensure 'libmagic' is installed for your platform, e.g., `brew install libmagic`.
 
-Feel free to reach out to the author at `w1t3h4t@gmail.com` for any inquiries or issues related to the script.
