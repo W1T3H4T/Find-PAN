@@ -119,6 +119,12 @@ def set_log_directory_and_filenames(args):
 def setup_custom_loggers(args):
     pan_logfile, trace_logfile = set_log_directory_and_filenames(args)
 
+    #   Remove pre-existing log files
+    if os.path.exists(pan_logfile):
+        os.remove(pan_logfile)
+    if os.path.exists(trace_logfile):
+        os.remove(trace_logfile)
+
     # Trace Logger
     trace_logger = logging.getLogger("TraceLogger")
     trace_level = logging.DEBUG if args.debug else logging.INFO
