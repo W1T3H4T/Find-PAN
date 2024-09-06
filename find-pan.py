@@ -1,4 +1,4 @@
-#!/usr/local/bin/python3
+#!/usr/bin/env python3
 #  ===========================================================================
 #  Name    :    find-pan.py
 #  Function:    Find PAN in a file system or tar file
@@ -43,8 +43,8 @@ import magic
 ##  Global variables
 ##  ===========================================================================
 global _DEBUG
-global _TraceLog
-global _PanLog
+global TraceLog
+global PanLog
 global total_matches
 global TRACK_Match_count
 global PAN_Match_count
@@ -54,8 +54,8 @@ global compiled_patterns
 
 Match_Count = { "PAN" : 0, "TRACK" : 0 }
 _DEBUG      = False
-_TraceLog   = None
-_PanLog     = None
+TraceLog   = None
+PanLog     = None
 total_matches = 0
 TRACK_Match_count = 0 
 PAN_Match_count = 0
@@ -151,11 +151,11 @@ def is_executable(file_path) -> bool | None:
                 return None
     
     except PermissionError:
-        _TraceLog.warn(f"Skipping file due to PermissionError: {file_path}")
+        TraceLog.warn(f"Skipping file due to PermissionError: {file_path}")
         return None
     
     except Exception as e:
-        _TraceLog.error(f"Skipping file due to error: {file_path}: {e}")
+        TraceLog.error(f"Skipping file due to error: {file_path}: {e}")
         return None
     
 
@@ -183,11 +183,11 @@ def is_binary(file_path):
             return True
 
     except PermissionError:
-        _PanLog.warn(f"Skipping file due to PermissionError: {file_path}")
+        PanLog.warn(f"Skipping file due to PermissionError: {file_path}")
         return None
     
     except Exception as e:
-        _PanLog.error(f"Skipping file due to error: {file_path}: {e}")
+        PanLog.error(f"Skipping file due to error: {file_path}: {e}")
     
     return None
 
@@ -232,11 +232,11 @@ def process_file(file_path, search_patterns, json_data ):
 
     try:
         FILE_count += 1
-        _TraceLog.info(f"Scanning {os.path.basename(file_path)}")
+        TraceLog.info(f"Scanning {os.path.basename(file_path)}")
 
         with open(file_path, 'r') as f:
             if is_binary(file_path) is not None:
-                _TraceLog.info(f"-> Binary file skipped: {file_path}")
+                TraceLog.info(f"-> Binary file skipped: {file_path}")
                 return
 
         with open(file_path, "r", encoding="utf-8", errors="replace") as f:
@@ -244,7 +244,7 @@ def process_file(file_path, search_patterns, json_data ):
             for line_number, text_line in enumerate(f, 1):
                 line_count += 1
                 if args.line_limit > 0 and line_count >= args.line_limit:
-                    _TraceLog.info(f"-> Line Limit reached: stopped after {line_count} lines.")
+                    TraceLog.info(f"-> Line Limit reached: stopped after {line_count} lines.")
                     break
                 
                 # match_data = scan_text_line(text_line, search_patterns)
@@ -264,16 +264,16 @@ def process_file(file_path, search_patterns, json_data ):
                 pan = extract_pan_from_match(match_data)                    
                 if luhn_check(pan):
                     Match_Count[type] += 1
-                    _TraceLog.info(f"-> {type}: {pan} (Luhn Check: Passed)")
-                    _PanLog.info(f"-> {type}: {pan}: {matched_info}")
+                    TraceLog.info(f"-> {type}: {pan} (Luhn Check: Passed)")
+                    PanLog.info(f"-> {type}: {pan}: {matched_info}")
                 else:
-                    _TraceLog.info(f"-> TRACK: {pan} (Luhn Check: Failed)")
+                    TraceLog.info(f"-> TRACK: {pan} (Luhn Check: Failed)")
 
                 if line_number % 100 == 0:
-                    _PanLog.info(f"Scanned {FILE_count} files; matched {PAN_Match_count} PANs, {TRACK_Match_count} TRACKs")
+                    PanLog.info(f"Scanned {FILE_count} files; matched {PAN_Match_count} PANs, {TRACK_Match_count} TRACKs")
 
     except PermissionError:
-        _TraceLog.warn(f"Skipping file due to PermissionError: {file_path}")
+        TraceLog.warn(f"Skipping file due to PermissionError: {file_path}")
 
 
 ##  ===========================================================================
@@ -420,11 +420,46 @@ def load_json_data(filename):
         print(f"Error: File '{filename}' not found.")
         return None
 
+##  ===========================================================================
+##  Configure our command line options
+##  ===========================================================================
+def setupArgParse():
+    parser = argparse.ArgumentParser(description='Scan for credit card patterns.')
+    parser.add_argument('--path', help='File system path.')
+    parser.add_argument('--skip-binary', default=False, action='store_true', help='Skip binary files (optional).')
+    parser.add_argument('--tar', help='Tar file path.')
+    parser.add_argument('--temp', help='Temporary directory for tar file extraction.')
+    parser.add_argument('--log-dir', help='Directory for log files (optional).')
+    parser.add_argument('--line-limit', type=int, default=-1, help='Line limit per file (optional).')
+    parser.add_argument('--verbose', default=False, action='store_true', help='Verbose output (optional).')
+    parser.add_argument('--debug', default=False, action='store_true', help='Debug output (optional).')
+
+    #  Parse command line arguments
+    if not _DEBUG:
+        args = parser.parse_args()
+    else:
+        #  Debugging configuration here
+        # args = parser.parse_args(['--path', test_data_path, '--verbose'] )
+        test_data_path = os.path.join(os.getcwd(), 'test-data')
+        args = parser.parse_args(['--path', test_data_path] )
+
+    ##  Validate command line arguments
+    if ( not args.path and not args.tar ) or ( args.path and args.tar ):
+        print(f"[ --path {args.path} ] [ --tar {args.tar} --temp {args.temp} ]")
+        parser.error('Please provide a valid path or tar file.')
+
+    if ( not args.temp and args.tar ):
+        parser.error('Please provide a temporary directory for tar file extraction.')
+
+    print(f"{enumerate_command_line_arguments(args)}")
+    return args
+
 
 ##  ===========================================================================
-##  Main
+##  MAIN is here
 ##  ===========================================================================
 def main(args):
+
 
     # Load JSON data and compile prefix patterns
     json_filename = os.path.join(os.getcwd(), 'patterns/find-pan-patterns.json')
@@ -440,12 +475,12 @@ def main(args):
         return
 
     if args.path:
-        _TraceLog.info(f"Scanning {args.path} ...")
+        TraceLog.info(f"Scanning {args.path} ...")
         scan_directory(args.path, pan_patterns, json_data )
         return
     
     if args.tar and args.temp:
-        _TraceLog.info(f"Scanning {args.tar} ...")
+        TraceLog.info(f"Scanning {args.tar} ...")
         with tarfile.open(args.tar, 'r:*') as tar:
             for tarinfo in tar:
                 if tarinfo.isreg():
@@ -455,53 +490,19 @@ def main(args):
                     secure_delete(temp_path)
         return
     
-    _PanLog.error('Please provide a valid path or tar file and temporary directory.')
+    PanLog.error('Please provide a valid path or tar file and temporary directory.')
     sys.exit(1)
 
-##  ====================================
-##  Entry point
-##  ====================================
-CWD = os.getcwd()
-parser = argparse.ArgumentParser(description='Scan for credit card patterns.')
-parser.add_argument('--path', help='File system path.')
-parser.add_argument('--skip-binary', default=False, action='store_true', help='Skip binary files (optional).')
-parser.add_argument('--tar', help='Tar file path.')
-parser.add_argument('--temp', help='Temporary directory for tar file extraction.')
-parser.add_argument('--log-dir', help='Directory for log files (optional).')
-parser.add_argument('--line-limit', type=int, default=-1, help='Line limit per file (optional).')
-parser.add_argument('--verbose', default=False, action='store_true', help='Verbose output (optional).')
-parser.add_argument('--debug', default=False, action='store_true', help='Debug output (optional).')
 
 ##  ===========================================================================
-##  Parse command line arguments
+##  MAIN Entry Point
 ##  ===========================================================================
-if not _DEBUG:
-    args = parser.parse_args()
-else:
-    ##  =========================================================================== 
-    ##  Debugging configuration here
-    ##  ===========================================================================
-    # args = parser.parse_args(['--path', test_data_path, '--verbose'] )
-    test_data_path = os.path.join(os.getcwd(), 'test-data')
-    args = parser.parse_args(['--path', test_data_path] )
-
-##  Validate command line arguments
-if ( not args.path and not args.tar ) or ( args.path and args.tar ):
-    print(f"[ --path {args.path} ] [ --tar {args.tar} --temp {args.temp} ]")
-    parser.error('Please provide a valid path or tar file.')
-
-if ( not args.temp and args.tar ):
-    parser.error('Please provide a temporary directory for tar file extraction.')
-
-##  Initialize loggers
-loggers = setup_custom_loggers(args)
-_PanLog = loggers['Log']
-_TraceLog = loggers['Trace']
-
-## Show our command line arguments
-print(f"{enumerate_command_line_arguments(args)}")
-
 if __name__ == '__main__':
+    # CWD = os.getcwd()
+    args = setupArgParse()
+    loggers = setup_custom_loggers(args)
+    PanLog = loggers['Log']
+    TraceLog = loggers['Trace']
     main(args)
 
 
