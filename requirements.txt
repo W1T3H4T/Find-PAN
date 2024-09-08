@@ -1,2 +1,4 @@
-pathlib>=1.0.0
-python-magic>=0.4.0
+names>=0.3.0
+pathlib>=1.0.1
+python-magic>=0.4.27
+random-address>=1.1.1
