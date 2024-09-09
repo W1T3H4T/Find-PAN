@@ -274,6 +274,7 @@ def process_file(file_path, search_patterns, json_data ):
     try:
         FILE_count += 1
         TraceLog.info(f"Scanning {os.path.basename(file_path)}")
+        PanLog.info(f"Scanning {os.path.basename(file_path)}")
 
         with open(file_path, 'r') as f:
             if is_binary(file_path) is not None:
