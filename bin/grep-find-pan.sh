@@ -7,7 +7,7 @@
 #   Notes   :   Hits reported by this tool do not necessarily indicate the 
 #           :   presence of actual PAN data used in a financial 
 #           :   transaction.  Luhn checking is NOT performed, and test
-#           :   PAN data is detected.
+#           :   PAN data is detected as valid findings.
 #   ==========================================================================
 #
 #   MIT License

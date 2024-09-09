@@ -7,8 +7,9 @@
 #   Notes   :   Hits reported by this tool do not necessarily indicate the 
 #           :   presence of actual TRACK data used in a financial 
 #           :   transaction.  Luhn checking is NOT performed, and test
-#           :   TRACK data is detected.
+#           :   TRACK data is detected as valid findings.
 #   ==========================================================================
+#
 #   MIT License
 #
 #   Copyright (c) 2023, 2024 David Means
