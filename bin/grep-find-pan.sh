@@ -119,28 +119,28 @@ function findFiles()
         log_debug "Testing: $ftype: $FILE"
         case "${ftype}" in
             "application/x-mach-binary")
-                log_info("Skipping binary file: ${FILE}"
+                log_info "Skipping binary file: ${FILE}"
                 continue;;
             "application/octet-stream")
-                log_info("Skipping binary file: ${FILE}"
+                log_info "Skipping binary file: ${FILE}"
                 continue;;
             "application/x-git")
-                log_info("Skipping binary file: ${FILE}"
+                log_info "Skipping binary file: ${FILE}"
                 continue;;
             "application/zip")
-                log_info("Skipping binary file: ${FILE}"
+                log_info "Skipping binary file: ${FILE}"
                 continue;;
             "application/x-bzip2")
-                log_info("Skipping binary file: ${FILE}"
+                log_info "Skipping binary file: ${FILE}"
                 continue;;
             "application/gzip")
-                log_info("Skipping binary file: ${FILE}"
+                log_info "Skipping binary file: ${FILE}"
                 continue;;
             "image/jpeg")
-                log_info("Skipping Image file: ${FILE}"
+                log_info "Skipping Image file: ${FILE}"
                 continue;;
             "image/png")
-                log_info("Skipping Image file: ${FILE}"
+                log_info "Skipping Image file: ${FILE}"
                 continue;;
             *) 
                 log_debug "Testing: $ftype: $FILE"
