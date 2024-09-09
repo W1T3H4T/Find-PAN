@@ -18,7 +18,8 @@ This script is released under the MIT License. See the [LICENSE](LICENSE) file f
 ## Usage
 
 <pre>
-python find-pan.py [--path PATH] [--tar TAR] [--temp TEMP] [--log-dir LOG_DIR] [--skip-binary]  [--verbose] [--debug]
+python find-pan.py [--path PATH] [--tar TAR] [--temp TEMP] [--log-dir LOG_DIR]
+                   [--skip-binary]  [--verbose] [--debug]
 </pre>
 
 ### Command-line Arguments:
@@ -46,14 +47,14 @@ python find-pan.py [--path PATH] [--tar TAR] [--temp TEMP] [--log-dir LOG_DIR] [
 
 The script generates two log files:
 
-1. **Find-PAN.log:** Logs limited details of the runtime execution.
-2. **Find-PAN-trace.log:** Logs detailed information of identified PANs.
+1. **Find-PAN-trace.log:** Logs limited details of the runtime execution.
+2. **Find-PAN.log:** Logs detailed information of identified PANs.
 
 Log files are generated in the specified log directory or the current working directory if no log directory is provided.
 
-## PAN Patterns
+## PAN and TRACK Patterns
 
-The script uses predefined regular expressions to identify PANs. Supported PAN types include:
+The script uses predefined regular expressions to identify PAN and TRACK 1 & 2 data. Supported PAN types include:
 
 - American Express
 - MasterCard
@@ -61,6 +62,7 @@ The script uses predefined regular expressions to identify PANs. Supported PAN t
 - Discover
 - Diners Club International
 - JCB
+
 
 ## Anti-PAN (Suspect) Patterns
 
