@@ -47,14 +47,17 @@ rm -f ${_LOG_FILE}
 ##  --------------------------------------------
 ##  Load our logging functions
 ##  --------------------------------------------
-if [[ -f $(pwd)/logger.sh ]]; then
-    source $(pwd)/logger.sh
-elif [[ -f $HOME/bin/logger.sh ]] ; then
+loggersh=$(which logger.sh)
+if [[ -f $HOME/bin/logger.sh ]] ; then
     source $HOME/bin/logger.sh 
+elif [[ -f /usr/local/bin/logger.sh ]]; then
+    source $HOME/bin/logger.sh 
+elif [[ -f "${loggersh}" ]]; then
+    source ${loggersh}
 else 
     echo "Error: 'logger.sh' not found in"
     echo "-> $HOME/bin"
-    echo "-> $(pwd)"
+    echo "-> /usr/local/bin"
     exit 1 
 fi
 
@@ -83,8 +86,8 @@ function help()
     echo "Usage: $(basename $0) --dir DIRECTORY"
     echo 
     echo "--path DIRECTORY  The filesystem to search."
-    echo "--help|-help|-h   This information."
     echo "--rgx-prefix      Require the REGEX prefix of '$REGEX_PREFIX'"
+    echo "--help|-help|-h   This information."
     echo
 }
 
@@ -178,6 +181,8 @@ done
 
 if [[ ! -z "$directory" ]] ; then
     findFiles "${directory}"
+else
+    help
 fi
 
 
