@@ -7,7 +7,6 @@
 The script was originally designed for Payments Information System projects.  It leverages regular expressions to identify patterns associated with credit card numbers and track data.
 
 ## Author
-
 - **Author:** David Means
 - **Contact:** w1t3h4t@gmail.com
 
@@ -15,24 +14,52 @@ The script was originally designed for Payments Information System projects.  It
 
 This script is released under the MIT License. See the [LICENSE](LICENSE) file for details.
 
-## Usage
+## Installation
+Python works best when using virtual environments.  Doing so allows the system administrator and other users to maintain 
+their environemnts necessary for unencumbered operation.
 
+For complete instructions, see here: [Python Virtual Environment](https://docs.python.org/3/library/venv.html)
+
+Briefly:
 <pre>
-python find-pan.py [--path PATH] [--tar TAR] [--temp TEMP] [--log-dir LOG_DIR]
-                   [--skip-binary]  [--verbose] [--debug]
+$ python -m venv /path/to/new/virtual/environment
+</pre>
+
+Next, activate the environment.  I use the following in my bash profile script: 
+<pre>
+### Configure python environment
+export VIRTUAL_ENV_DISABLE_PROMPT=True
+source $HOME/.pyenv/bin/activate
+</pre>
+
+### Install Required Packages
+Install the required packages for the tools.
+<pre>
+$ sudo apt install libmagic
+$ sudo apt install pip
+$ pip install -r requirements.txt
+</pre>
+
+## Usage
+<pre>
+find-pan.py [--path PATH] [--tar TAR] [--temp TEMP] [--log-dir LOG_DIR]
+            [--skip-binary]  [--verbose] [--debug]
 </pre>
 
 ### Command-line Arguments:
 
-- **--path** Specify the file system path to scan for PANs (required when no --tar).
-- **--tar** Specify the tar file path to scan for PANs (required when no --path).
-- **--temp** Specify the temporary directory for extracting files from the tar archive (required w/ --tar).
-- **--patterns** Regular expression JSON file.  Default is 'patterns/find-pan-patterns.json'.
-- **--skip-binary** Avoid scanning binary files (optional).
-- **--log-dir** Specify the directory for log files (optional).
-- **--line-limit** Specify the number of lines to scan per file.  Default is all data/lines (optional). 
-- **--verbose** Display 'trace' logfile information to stdout (optional).
-- **--debug** Sends 'debug' messages 'trace' log file (optional). 
+|Switch|Description|
+|-------------------|:-------------------------------------------------------|
+|**--path**         |Specify the file system path to scan for PANs (required when no --tar). |
+|**--tar**          |Specify the tar file path to scan for PANs (required when no --path).|
+|**--temp**         |Specify the temporary directory for extracting files from the tar archive (required w/ --tar).|
+|**--patterns**     |Regular expression JSON file.  Default is 'patterns/find-pan-patterns.json'.|
+|**--skip-binary**  |Avoid scanning binary files (optional). |
+|**--log-dir**      |Specify the directory for log files (optional).|
+|**--line-limit**   |Specify the number of lines to scan per file.  Default is all data/lines (optional). |
+|**--verbose**      |Display 'trace' logfile information to stdout (optional).|
+|**--debug**        |Sends 'debug' messages 'trace' log file (optional). |
+
 
 ## Features
 
@@ -81,19 +108,19 @@ For files processed during scanning, the script securely deletes them using plat
 Scan a directory:
 
 <pre>
-python find-pan.py --path /path/to/directory
+find-pan.py --path /path/to/directory
 </pre>
 
 Scan a tar archive:
 
 <pre>
-python find-pan.py --tar /path/to/archive.tar --temp /path/to/temporary/directory
+find-pan.py --tar /path/to/archive.tar --temp /path/to/temporary/directory
 </pre>
 
 Specify a log directory:
 
 <pre>
-python find-pan.py --path /path/to/directory --log-dir /path/to/logs
+find-pan.py --path /path/to/directory --log-dir /path/to/logs
 </pre>
 
 ## Notes
