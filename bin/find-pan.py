@@ -6,19 +6,19 @@
 #  ===========================================================================
 #
 #  MIT License
-#  
+#
 #  Copyright (c) 2023 David Means  <w1t3h4t@gmail.com>
-#   
+#
 #  Permission is hereby granted, free of charge, to any person obtaining a copy
 #  of this software and associated documentation files (the "Software"), to deal
 #  in the Software without restriction, including without limitation the rights
 #  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 #  copies of the Software, and to permit persons to whom the Software is
 #  furnished to do so, subject to the following conditions:
-#   
+#
 #  The above copyright notice and this permission notice shall be included in all
 #  copies or substantial portions of the Software.
-#   
+#
 #  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 #  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 #  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -34,6 +34,7 @@ import json
 import logging
 import magic
 import os
+import platform
 import re
 import sys
 import tarfile
@@ -43,24 +44,24 @@ import traceback
 ##  ===========================================================================
 ##  Global variables
 ##  ===========================================================================
-global _DEBUG
-global TraceLog
-global PanLog
-global total_matches
-global TRACK_Match_count
-global PAN_Match_count
-global Match_Count
-global FILE_count
-global compiled_patterns
+global _VSDEBUG, _DEBUG, _VERBOSE
+global TraceLog, PanLog
+global total_matches, TRACK_Match_count, PAN_Match_count, Match_Count, FILE_Count
+global compiled_patterns, reportDelta, _DEBUG, ProgramName
+global major, minor, patch, rgx_prefix 
+
+# - Version information
+major, minor, patch = map(int, '1 4 0'.split()) 
 
 Match_Count = { "PAN" : 0, "TRACK" : 0 }
-_DEBUG      = False
-TraceLog   = None
-PanLog     = None
-total_matches = 0
+
+_VSDEBUG = False
+TraceLog = None
+PanLog   = None
+total_matches     = 0
 TRACK_Match_count = 0 
-PAN_Match_count = 0
-FILE_count = 0
+PAN_Match_count   = 0
+FILE_Count        = 0
 compiled_patterns = {}
 
 ##  ===========================================================================
@@ -72,7 +73,7 @@ def print_exception_info(e):
 
     # Traverse the traceback to find the first call outside the current module
     for frame in reversed(tb_stack):
-        if f"{script_name}" in frame.filename:
+        if f"{ProgramName}" in frame.filename:
             file_name = frame.filename
             line_number = frame.lineno
             func_name = frame.name
@@ -93,7 +94,7 @@ def print_exception_info(e):
     sys.exit(1)
 
 ##  ===========================================================================
-##  Set the logfile basename 
+##  Set the logfile basename
 ##  ===========================================================================
 def generate_logfile_name(basename):
     date_str = datetime.now().strftime("%d%b%Y")
@@ -105,10 +106,18 @@ def generate_logfile_name(basename):
 ##  Create our log file names
 ##  ===========================================================================
 def set_log_directory_and_filenames(args):
-    log_dir = args.log_dir if args.log_dir else os.getcwd()
+    try:
+        if not os.path.exists(args.log_dir):
+            os.makedirs(args.log_dir)
 
-    pan_logfile = os.path.join(log_dir, generate_logfile_name("Find-PAN"))
-    trace_logfile = os.path.join(log_dir, generate_logfile_name("Find-PAN-trace"))
+        if not os.path.exists(args.tar_tmp):
+            os.makedirs(args.tar_tmp)
+
+        pan_logfile = os.path.join(args.log_dir, generate_logfile_name("Find-PAN"))
+        trace_logfile = os.path.join(args.log_dir, generate_logfile_name("Find-PAN-trace"))
+
+    except Exception as e:
+        print_exception_info(e)
 
     return pan_logfile, trace_logfile
 
@@ -193,13 +202,13 @@ def is_executable(file_path) -> bool | None:
                 return None
     
     except PermissionError:
-        TraceLog.warn(f"Skipping file due to PermissionError: {file_path}")
+        TraceLog.warning(f"Skipping file due to PermissionError: {file_path}")
         return None
     
     except Exception as e:
         TraceLog.error(f"Skipping file due to error: {file_path}: {e}")
         return None
-    
+
 
 ##  ===========================================================================
 ##  Check if file is binary
@@ -225,7 +234,7 @@ def is_binary(file_path):
             return True
 
     except PermissionError:
-        PanLog.warn(f"Skipping file due to PermissionError: {file_path}")
+        PanLog.warning(f"Skipping file due to PermissionError: {file_path}")
         return None
     
     except Exception as e:
@@ -259,21 +268,18 @@ def scan_directory(dir_name, compiled_patterns, json_data ):
 
 
 ##  ===========================================================================
-##  Process a file for credit card patterns 
+##  Process a file for credit card patterns
 ##  ===========================================================================
 def process_file(file_path, search_patterns, json_data ):
-    global total_matches
-    global FILE_count
-    global PAN_Match_count
-    global TRACK_Match_count
-    global Match_Count
+    global FILE_Count, PAN_Match_count, TRACK_Match_count
+    global total_matches, Match_Count
     line_count = 0
 
     if not os.path.isfile(file_path):
         return
 
     try:
-        FILE_count += 1
+        FILE_Count += 1
         TraceLog.info(f"Scanning {os.path.basename(file_path)}")
         PanLog.info(f"Scanning {os.path.basename(file_path)}")
 
@@ -309,22 +315,26 @@ def process_file(file_path, search_patterns, json_data ):
                     pan = extract_pan_from_match(match_data)                    
                     if luhn_check(pan):
                         Match_Count[type] += 1
-                        PanLog.info(f"{line_count} : {pan}: {matched_info}")
+                        if _VERBOSE: 
+                            PanLog.info(f"{file_path}:{line_count}->{pan}: {matched_info}")
                     else:
-                        PanLog.info(f"{line_count} : {pan} (Luhn Check: Failed)")
+                        if _VERBOSE: 
+                            PanLog.info(f"{file_path}:{line_count}->{pan} (Luhn Check: Failed)")
                 else:
                     pan = extract_pan_from_match(match_data)                    
                     if luhn_check(pan):
                         Match_Count[type] += 1
-                        PanLog.info(f"{line_count} : {match_data}: {matched_info}")
+                        if _VERBOSE: 
+                            PanLog.info(f"{file_path}:{line_count}->{match_data}: {matched_info}")
                     else:
-                        PanLog.info(f"{line_count} : {match_data}: {matched_info} (Luhn Check: Failed)")
+                        if _VERBOSE: 
+                            PanLog.info(f"{file_path}:{line_count}->{match_data}: {matched_info} (Luhn Check: Failed)")
 
-                if line_number % 100 == 0:
-                    PanLog.info(f"Scanned {FILE_count} files; matched {PAN_Match_count} PANs, {TRACK_Match_count} TRACKs")
+                if FILE_Count % reportDelta == 0:
+                    PanLog.info(f"Scanned {FILE_Count} files; matched {PAN_Match_count} PANs, {TRACK_Match_count} TRACKs")
 
     except PermissionError:
-        TraceLog.warn(f"Skipping file due to PermissionError: {file_path}")
+        TraceLog.warning(f"Skipping file due to PermissionError: {file_path}")
 
 
 ##  ===========================================================================
@@ -338,13 +348,22 @@ def match_regex(text_line, line_number, json_data):
                 TraceLog.debug(f"Checking section: {section_name}")
 
             for pattern_name, pattern_info in section_data.items():
-                regex_pattern = pattern_info['regex']
+                if rgx_prefix is not None:
+                    #  If we have a prefix, add it to the regex pattern
+                    regex_pattern = rgx_prefix + pattern_info['regex']
+                else:
+                    #  Otherwise, just use the regex pattern
+                    regex_pattern = pattern_info['regex']
+
+                #  Perform the match
                 match = re.search(regex_pattern, text_line)
+
                 if match:
                     regex_info = f"{section_name} '{pattern_name}': {regex_pattern}"
                     if _DEBUG:
                         TraceLog.debug(f"{regex_info} in line: {line_number}")
                     return regex_info,match.group(0)
+
     except Exception as e:
         print_exception_info(e)
 
@@ -417,7 +436,7 @@ def secure_delete(file_path):
 
 
 ##  ===========================================================================
-##  Compile JSON prefix patterns
+##  Load JSON REGEX patterns
 ##  ===========================================================================
 def load_json_data(filename):
     try:
@@ -426,42 +445,11 @@ def load_json_data(filename):
             return data
 
     except FileNotFoundError:
-        print_exception(f"Error: File '{filename}' not found.")
-             
+        print_exception_info(f"Error: File '{filename}' not found.")
     except Exception as e:
         print_exception_info(e)
 
     return None
-
-##  ===========================================================================
-##  Compile Patterns
-##  ===========================================================================
-def compile_pan_patterns(data):
-    global compiled_data
-    compiled_data = {}
-    anti_pan_data = {}
-    track_data = {}
-    pan_data = {}
-
-    for category, patterns in data.items():
-        if category.lower().startswith('anti-pan'):
-            for pattern_name, info in patterns.items():
-                pattern = re.compile(info['regex'])
-                anti_pan_data[pattern_name] = {'pattern': pattern, 'length': info['length']}
-        
-        if category.lower().startswith('track'):
-            for pattern_name, info in patterns.items():
-                pattern = re.compile(info['regex'])
-                track_data[pattern_name] = {'pattern': pattern, 'length': info['length']}
-        
-        if category.lower().startswith('pan'):
-            for pattern_name, info in patterns.items():
-                pattern = re.compile(info['regex'])
-                pan_data[pattern_name] = {'pattern': pattern, 'length': info['length']}
-    
-    # Merge track data, anti-PAN data, and PAN data at the beginning of the dictionary
-    compiled_data = {**anti_pan_data, **track_data, **pan_data}
-    return compiled_data
 
 
 ##  ===========================================================================
@@ -490,45 +478,75 @@ def load_json_data(filename):
     except Exception as e:
         print_exception_info(None)
 
+
+##  ===========================================================================
+##  Version Information
+##  ===========================================================================
+def printVersionInfo(argParse):
+    platform_name = platform.system()
+    python_version = f"Python {sys.version}"
+    print(f"{argParse.prog} v{major}.{minor}.{patch}\n{python_version}")
+
+##  ===========================================================================
+##  Print scan results
+##  ===========================================================================
+def print_scan_results():
+    global total_matches, Match_Count, FILE_Count
+    PanLog.info(f"Scanned {FILE_Count} files.")
+    PanLog.info(f"Matched {Match_Count['PAN']} PANs.")
+    PanLog.info(f"Matched {Match_Count['TRACK']} TRACKs.")
+    PanLog.info(f"Total matches: {total_matches}")
+    
+    
 ##  ===========================================================================
 ##  Configure our command line options
 ##  ===========================================================================
 def setupArgParse():
-    parser = argparse.ArgumentParser(description='Scan for credit card patterns.')
-    parser.add_argument('--path', help='File system path.')
-    parser.add_argument('--skip-binary', default=False, action='store_true', help='Skip binary files (optional).')
-    parser.add_argument('--tar', help='Tar file path.')
-    parser.add_argument('--temp', help='Temporary directory for tar file extraction.')
-    parser.add_argument('--patterns',default='patterns/find-pan-patterns.json', help='JSON file containing pattern regular expressions (optional).')
-    parser.add_argument('--log-dir', help='Directory for log files (optional).')
-    parser.add_argument('--line-limit', type=int, default=-1, help='Line limit per file (optional).')
-    parser.add_argument('--verbose', default=False, action='store_true', help='Verbose output (optional).')
-    parser.add_argument('--debug', default=False, action='store_true', help='Debug output (optional).')
+    log_dir=os.path.join(os.path.expanduser("~"),"Find-PAN-Logs")
+    tar_dir=os.path.join(log_dir, "tar-temp")
+    parser = argparse.ArgumentParser(
+            description='Scan for PCI PAN and TRACK data patterns.',
+            formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+
+    ##
+    ##  Processing Switches
+    ##
+    parser.add_argument('--path',       help='Filesystem pathname to scan.', type=str, default=None)
+    parser.add_argument('--tar',        help='TAR file path.', type=str, default=None)
+    parser.add_argument('--tar-tmp',    help='Temporary directory for tar file extraction.', default=tar_dir)
+    parser.add_argument('--log-dir',    help='Directory for log files.', default=log_dir)
+    parser.add_argument('--skip-binary',help='Skip binary files.', action='store_true', default=False )
+    parser.add_argument('--patterns',   help='JSON file containing pattern regular expressions.', type=str, default='patterns/find-pan-patterns.json')
+    parser.add_argument('--line-limit', help='Line scan limit per file.', type=int, default=0)
+    parser.add_argument('--rgx-prefix', help='Prefix for regular expressions.', default=False, action='store_true') 
+    ##
+    ##  Non-functional arguments
+    ##
+    parser.add_argument('--report-delta', type=int, default=100, help='Files to process before reporting progress.')
+    parser.add_argument('--verbose', default=False, action='store_true', help='Verbose output.')
+    parser.add_argument('--debug',   default=False, action='store_true', help='Enable debug logging.')
+    parser.add_argument('--version', default=False, action='store_true', help='Print version information.')
 
     #  Parse command line arguments
-    if not _DEBUG:
+    if not _VSDEBUG:
         args = parser.parse_args()
     else:
-        # Debugging configuration here
+        # debuging configuration here
+        test_data_path = os.path.join(os.getcwd(),'test')
         # args = parser.parse_args(['--path', test_data_path, '--verbose'] )
-        test_data_path = os.path.join(os.getcwd(), 'test-data')
         args = parser.parse_args(['--path', test_data_path] )
 
-    ##  Validate command line arguments
-    if ( not args.path and not args.tar ) or ( args.path and args.tar ):
-        print(f"[ --path {args.path} ] [ --tar {args.tar} --temp {args.temp} ]")
-        parser.error('Please provide a valid path or tar file.')
+    if args.version:
+        printVersionInfo(parser)
+        parser.exit()
 
-    if ( not args.temp and args.tar ):
-        parser.error('Please provide a temporary directory for tar file extraction.')
-
-    return args
+    return parser, args
 
 
 ##  ===========================================================================
 ##  MAIN is here
 ##  ===========================================================================
-def main(args):
+def main(argsParse, args):
 
     # Load JSON data and compile prefix patterns
     json_filename = args.patterns
@@ -558,22 +576,41 @@ def main(args):
                     secure_delete(temp_path)
         return
     
-    PanLog.error('Please provide a valid path or tar file and temporary directory.')
-    sys.exit(1)
+    PanLog.error("Required arguments not found.")
+    print("\n\n")
+    argsParse.print_help()
+    argsParse.exit(1)
 
 
 ##  ===========================================================================
 ##  MAIN Entry Point
 ##  ===========================================================================
 if __name__ == '__main__':
-    global script_name
-    script_name = os.path.basename(sys.argv[0])
-    args = setupArgParse()
+    global ProgramName, reportDelta, _DEBUG, rgx_prefix, _VERBOSE
+
+    # -- Process command line arguments
+    argsParse, args = setupArgParse()
+
+    # -- set default values
+    ProgramName  = argsParse.prog
+    reportDelta  = args.report_delta
+    _DEBUG       = args.debug
+    _VERBOSE     = args.verbose
+
+    if args.rgx_prefix:
+        rgx_prefix = r"[ '\"{]"
+    else:
+        rgx_prefix = None
+
+    # -- set loggers
     loggers = setup_custom_loggers(args)
     PanLog = loggers['Log']
     TraceLog = loggers['Trace']
+
+    # -- Enumerate parameters
     usage_info = enumerate_command_line_arguments(args)
     TraceLog.info(f"{usage_info}")
-    main(args)
 
-
+    # -- Run the finders
+    main(argsParse, args)
+    print_scan_results()

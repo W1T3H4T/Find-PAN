@@ -1,4 +1,4 @@
-##  =================================================================
+##  ===========================================================================
 ##  File    :   logger.sh
 ##  Who     :   David Means <w1t3h4t@gmail.com>
 ##  What    :   Functions to log messages with date/time stamp
@@ -7,7 +7,7 @@
 ##      Set these variables in your script to enable (1) or 
 ##      disable (0) the associated logging functions, then 'source'
 ##      this file in your script: 'source $HOME/bin/logger.sh'
-##  =================================================================
+##  ===========================================================================
 ##  _LOG_INFO=1
 ##  _LOG_DEBUG=1
 ##  _LOG_WARN=1

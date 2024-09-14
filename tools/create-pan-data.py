@@ -27,10 +27,13 @@
 #  SOFTWARE.
 #  ===========================================================================
 
+import argparse
 import random
 import re
 import json
 import os
+import sys
+
 global MAX_COUNT
 MAX_COUNT = 200
 
@@ -65,7 +68,7 @@ def process_pattern_data(pattern_data, card_type):
 ##  Pattern generation functions
 ##  ===========================================================================
 def get_card_prefix_digits(json_data, card_type):
-    card_regex = json_data['PAN Patterns'][card_type]['regex']
+    card_regex = json_data['PAN Pattern'][card_type]['regex']
     
     # Regular expression to match a string surrounded by parentheses
     regex_pattern = r'\((.*?)\)'
@@ -95,10 +98,9 @@ def generate_numbers(pattern):
 ##  ===========================================================================
 ##  PAN generation functions
 ##  ===========================================================================
-
 def generate_pan_numbers(json_data, card_type):
-    card_pattern = json_data['PAN Patterns'][card_type]['regex']
-    card_len_pattern = json_data['PAN Patterns'][card_type]['length']
+    card_pattern = json_data['PAN Pattern'][card_type]['regex']
+    card_len_pattern = json_data['PAN Pattern'][card_type]['length']
     numbers = generate_numbers(card_len_pattern)
     prefix_string = get_card_prefix_digits(json_data, card_type)
     prefixes = process_pattern_data( prefix_string, card_type)
@@ -141,6 +143,9 @@ def generate_pan_numbers(json_data, card_type):
     return pan_array
 
 
+##  ===========================================================================
+##  Verify the luhn check digit
+##  ===========================================================================
 def luhn_check(num):
     rev_digits = [int(x) for x in str(num)][::-1]
     checksum = 0  
@@ -149,6 +154,10 @@ def luhn_check(num):
         checksum += n if n < 10 else n - 9
     return checksum % 10 == 0
 
+
+##  ===========================================================================
+##  Calculate the luhn check digit
+##  ===========================================================================
 def calculate_luhn_digit(pan):
     ## print(f"Calculating Luhn digit for {pan}")
     digits = list(map(int, pan))
@@ -164,32 +173,57 @@ def load_json_data(file_path):
         return json.load(json_file)
 
 def get_pan_pattern_sections(json_data):
-        if 'PAN Patterns' in json_data:
-            pan_patterns = json_data['PAN Patterns']
+        if 'PAN Pattern' in json_data:
+            pan_patterns = json_data['PAN Pattern']
             return list(pan_patterns.keys())
         else:
             return []
 
-##  ===========================================================================
+##  ==========================================================================
+##  Select a REGEX prefix character
+##  ==========================================================================
+def format_pan(args, pan):
+
+    if args.delimited:
+        rgx_prefix = r"[ '\"{]"
+        rgx_rejected = r"[]\\"
+        char = random.choice([ c for c in rgx_prefix if c not in rgx_rejected ])
+        pattern = f"{char}{pan}"
+    else:
+        pattern = f"{pan}"
+    return pattern
+
+##  ==========================================================================
 ##  Main
 ##  ===========================================================================
-
-# Load JSON data from file
-json_file_path = os.path.join(os.getcwd(), 'patterns/find-pan-patterns.json')
-json_data = load_json_data(json_file_path)
-
-# Print the generated VISA PAN numbers
-for card_name in get_pan_pattern_sections(json_data):
-    integer_pattern = get_card_prefix_digits(json_data, card_name)
-    card_prefixes = process_pattern_data(integer_pattern, card_name)
-
-    print( "##  ====================================================================")
-    print(f"##  {card_name} - {integer_pattern} - {card_prefixes}")
-    print( "##  ====================================================================")
-    count = 0
-    while count < MAX_COUNT:
-        pan_data = generate_pan_numbers(json_data, card_name)
-        for pan in pan_data:
-            print(pan)
-        count += 1
+try:
+    parser = argparse.ArgumentParser(
+                description='Create test PAN data',
+                formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument("--delimited", action="store_true", default=False)
+    parser.print_usage()
+    args = parser.parse_args()
     
+    # Load JSON data from file
+    json_file_path = os.path.join(os.getcwd(), 'patterns/find-pan-patterns.json')
+    json_data = load_json_data(json_file_path)
+
+    # Print the generated VISA PAN numbers
+    for card_name in get_pan_pattern_sections(json_data):
+        integer_pattern = get_card_prefix_digits(json_data, card_name)
+        card_prefixes = process_pattern_data(integer_pattern, card_name)
+    
+        print( "##  ====================================================================")
+        print(f"##  {card_name} - {integer_pattern} - {card_prefixes}")
+        print( "##  ====================================================================")
+        count = 0
+        while count < MAX_COUNT:
+            pan_data = generate_pan_numbers(json_data, card_name)
+            for pan in pan_data:
+                print( format_pan(args,pan) )
+            count += 1
+
+except Exception  as e:
+    print(f"Exception: {e}")
+
+
