@@ -48,14 +48,15 @@ rm -f ${_LOG_FILE}
 ##  Load our logging functions
 ##  --------------------------------------------
 loggersh=$(which logger.sh)
-if [[ -f $HOME/bin/logger.sh ]] ; then
+if [[ -f "${loggersh}" ]]; then
+    source ${loggersh}
+elif [[ -f $HOME/bin/logger.sh ]] ; then
     source $HOME/bin/logger.sh 
 elif [[ -f /usr/local/bin/logger.sh ]]; then
-    source $HOME/bin/logger.sh 
-elif [[ -f "${loggersh}" ]]; then
-    source ${loggersh}
+    source /usr/local/bin/logger.sh 
 else 
     echo "Error: 'logger.sh' not found in"
+    echo "-> \\$PATH"
     echo "-> $HOME/bin"
     echo "-> /usr/local/bin"
     exit 1 
