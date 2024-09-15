@@ -32,7 +32,6 @@ import argparse
 from datetime import datetime
 import json
 import logging
-import magic
 import os
 import platform
 import re
@@ -44,25 +43,25 @@ import traceback
 ##  ===========================================================================
 ##  Global variables
 ##  ===========================================================================
-global _VSDEBUG, _DEBUG, _VERBOSE
+global _VS_DEBUG, _DEBUG, _VERBOSE
 global TraceLog, PanLog
 global total_matches, TRACK_Match_count, PAN_Match_count, Match_Count, FILE_Count
-global compiled_patterns, reportDelta, _DEBUG, ProgramName
+global compiled_patterns, reportDelta, ProgramName
 global major, minor, patch, rgx_prefix 
 
 # - Version information
 major, minor, patch = map(int, '1 4 0'.split()) 
-
 Match_Count = { "PAN" : 0, "TRACK" : 0 }
+compiled_patterns = {}
 
-_VSDEBUG = False
+_DEBUG = False
+_VS_DEBUG = False
 TraceLog = None
 PanLog   = None
-total_matches     = 0
+total_matches= 0
 TRACK_Match_count = 0 
 PAN_Match_count   = 0
 FILE_Count        = 0
-compiled_patterns = {}
 
 ##  ===========================================================================
 ##  Print consolidated exception info
@@ -254,6 +253,39 @@ def luhn_check(num):
         checksum += n if n < 10 else n - 9
     return checksum % 10 == 0
 
+
+##  ===========================================================================
+##  Compile Patterns
+##  ===========================================================================
+def compile_pan_patterns(data):
+    global compiled_data
+    compiled_data = {}
+    anti_pan_data = {}
+    track_data = {}
+    pan_data = {}
+
+    for category, patterns in data.items():
+        if category.lower().startswith('anti-pan'):
+            ##  Compile Anti-PAN patterns
+            for pattern_name, info in patterns.items():
+                pattern = re.compile(info['regex'])
+                anti_pan_data[pattern_name] = {'pattern': pattern, 'length': info['length']}
+
+        ##  Compile Track data patterns
+        if category.lower().startswith('track'):
+            for pattern_name, info in patterns.items():
+                pattern = re.compile(rgx_prefix + info['regex']) if rgx_prefix is not None else re.compile(info['regex'])
+                track_data[pattern_name] = {'pattern': pattern, 'length': info['length']}
+
+        ##  Compile PAN data patterns
+        if category.lower().startswith('pan'):
+            for pattern_name, info in patterns.items():
+                pattern = re.compile(rgx_prefix + info['regex']) if rgx_prefix is not None else re.compile(info['regex'])
+                pan_data[pattern_name] = {'pattern': pattern, 'length': info['length']}
+
+    # Merge track data, anti-PAN data, and PAN data at the beginning of the dictionary
+    compiled_data = {**anti_pan_data, **track_data, **pan_data}
+    return compiled_data
 
 ##  ===========================================================================
 ##  Scan a directory for files
@@ -528,10 +560,10 @@ def setupArgParse():
     parser.add_argument('--version', default=False, action='store_true', help='Print version information.')
 
     #  Parse command line arguments
-    if not _VSDEBUG:
+    if not _VS_DEBUG:
         args = parser.parse_args()
     else:
-        # debuging configuration here
+        # debugging configuration here
         test_data_path = os.path.join(os.getcwd(),'test')
         # args = parser.parse_args(['--path', test_data_path, '--verbose'] )
         args = parser.parse_args(['--path', test_data_path] )
@@ -586,7 +618,11 @@ def main(argsParse, args):
 ##  MAIN Entry Point
 ##  ===========================================================================
 if __name__ == '__main__':
-    global ProgramName, reportDelta, _DEBUG, rgx_prefix, _VERBOSE
+    ProgramName = None
+    reportDelta = None
+    _DEBUG = None
+    _VERBOSE = None
+    rgx_prefix = None
 
     # -- Process command line arguments
     argsParse, args = setupArgParse()
