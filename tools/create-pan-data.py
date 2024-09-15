@@ -34,10 +34,6 @@ import json
 import os
 import sys
 
-global MAX_COUNT
-MAX_COUNT = 200
-
-
 ##  ===========================================================================
 ##  Pattern generation functions
 ##  ===========================================================================
@@ -201,6 +197,7 @@ try:
                 description='Create test PAN data',
                 formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("--delimited", action="store_true", default=False)
+    parser.add_argument("--count", type=int, default=100, help="Number of patterns to create for each PAN type.")
     parser.print_usage()
     args = parser.parse_args()
     
@@ -217,7 +214,7 @@ try:
         print(f"##  {card_name} - {integer_pattern} - {card_prefixes}")
         print( "##  ====================================================================")
         count = 0
-        while count < MAX_COUNT:
+        while count < args.count:
             pan_data = generate_pan_numbers(json_data, card_name)
             for pan in pan_data:
                 print( format_pan(args,pan) )
