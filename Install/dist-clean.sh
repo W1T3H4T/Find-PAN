@@ -1,5 +1,5 @@
 #!/bin/bash
-make clean 2>&1 > /dev/null
+make clean > /dev/null 2>&1
 rm -rf ./autom4te.cache
 rm -f ./aclocal.m4 \
     ./configure \
@@ -7,6 +7,7 @@ rm -f ./aclocal.m4 \
     ./configure~ \
     ./config.log \
     ./install-sh \
+    ./Makefile \
     ./missing \
     ./config.status 
 
