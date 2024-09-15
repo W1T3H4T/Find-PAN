@@ -33,7 +33,6 @@ from datetime import datetime
 import json
 import logging
 import os
-import platform
 import re
 import sys
 import tarfile
@@ -50,9 +49,8 @@ global reportDelta, ProgramName, Match_Count
 global major, minor, patch, rgx_prefix 
 
 # - Version information
-major, minor, patch = map(int, '1 4 0'.split()) 
+major, minor, patch = map(int, '1 5 0'.split()) 
 Match_Count = { "PAN" : 0, "TRACK" : 0 }
-compiled_patterns = {}
 
 _DEBUG = False
 _VS_DEBUG = False
@@ -445,7 +443,6 @@ def load_json_data(filename):
 ##  ===========================================================================
 def printVersionInfo(argParse):
     args = argParse.parse_args()
-    platform_name = platform.system()
     python_version = f"Python {sys.version}"
     print(f"{argParse.prog} v{major}.{minor}.{patch}\n{python_version}")
     if not args.version:
@@ -498,7 +495,6 @@ def setupArgParse():
     else:
         # debugging configuration here
         test_data_path = os.path.join(os.getcwd(),'test')
-        # args = parser.parse_args(['--path', test_data_path, '--verbose'] )
         args = parser.parse_args(['--path', test_data_path] )
 
     if args.version:
