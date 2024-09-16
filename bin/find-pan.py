@@ -28,8 +28,8 @@
 #  SOFTWARE.
 #  ===========================================================================
 
-import argparse
 from datetime import datetime
+import argparse
 import json
 import logging
 import os
@@ -38,6 +38,8 @@ import sys
 import tarfile
 import subprocess
 import traceback
+import signal
+
 
 ##  ===========================================================================
 ##  Global variables
@@ -53,7 +55,7 @@ major, minor, patch = map(int, '1 5 0'.split())
 Match_Count = { "PAN" : 0, "TRACK" : 0 }
 
 _DEBUG = False
-_VS_DEBUG = False
+_VS_DEBUG = True
 TraceLog = None
 PanLog   = None
 TOTAL_Match_Count= 0
@@ -89,6 +91,14 @@ def print_exception_info(e):
     if not e is None:
         print(f"Exception Info: {e}")
     sys.exit(1)
+
+##  ===========================================================================
+##  Handle keyboard interrupt
+##  ===========================================================================
+def handle_interrupt(signal, frame):
+    print("\nKeyboardInterrupt caught. Exiting gracefully...")
+    sys.exit(0)
+
 
 ##  ===========================================================================
 ##  Set the logfile basename
@@ -459,7 +469,12 @@ def print_scan_results():
     TraceLog.info(f"Matched {Match_Count['TRACK']} TRACKs.")
     TraceLog.info(f"Total matches: {TOTAL_Match_Count}")
 
-    
+##  ===========================================================================
+##  Get the number of arguments passed
+##  ===========================================================================
+def get_num_args():
+    return len(sys.argv) - 1
+
 ##  ===========================================================================
 ##  Configure our command line options
 ##  ===========================================================================
@@ -490,12 +505,18 @@ def setupArgParse():
     parser.add_argument('--version', default=False, action='store_true', help='Print version information.')
 
     #  Parse command line arguments
-    if not _VS_DEBUG:
+    if _VS_DEBUG:
+        # debugging configuration here
+        # test_data_path = os.path.join(os.getcwd(),'test')
+        # args = parser.parse_args(['--path', test_data_path] )
+        # args = parser.parse_args(['--version'] )
         args = parser.parse_args()
     else:
-        # debugging configuration here
-        test_data_path = os.path.join(os.getcwd(),'test')
-        args = parser.parse_args(['--path', test_data_path] )
+        args = parser.parse_args()
+
+    if get_num_args() == 0:
+        parser.print_help()
+        parser.exit()
 
     if args.version:
         printVersionInfo(parser)
@@ -578,6 +599,10 @@ if __name__ == '__main__':
     usage_info = enumerate_command_line_arguments(argParse)
     TraceLog.info(f"{usage_info}")
 
-    # -- Run the finders
-    main(argParse)
-    print_scan_results()
+    try:
+        # -- Run the finders
+        main(argParse)
+        print_scan_results()
+    except KeyboardInterrupt:
+        # Handle the KeyboardInterrupt exception here
+        TraceLog.error("KeyboardInterrupt caught in main function. Exiting.")
