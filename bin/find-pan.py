@@ -52,7 +52,7 @@ global major, minor, patch, rgx_prefix
 global pattern_prefix_path
 
 # - Version information
-major, minor, patch = map(int, '1 5 0'.split()) 
+major, minor, patch = map(int, '2 1 0'.split()) 
 Match_Count = { "FILES": 0, "PAN" : 0, "TRACK" : 0 , "ANTI-PAN" : 0, "SKIPPED": 0 }
 pattern_prefix_path="/usr/local/Find-PAN/patterns" 
 
@@ -542,27 +542,28 @@ def custom_tar_filter(tarinfo, path):
 ##  Scan a TAR file for PAN and TRACK data
 ##  ===========================================================================
 def process_tar_file(args, json_data):
-    if args.tar and args.tar_tmp:
-        TraceLog.info(f"Scanning {args.tar} ...")
-        with tarfile.open(args.tar, 'r:*') as tar:
-            for tarinfo in tar:
-                if tarinfo.isreg():
-                    # Define the temp path where the file will be extracted
-                    temp_path = os.path.join(args.tar_tmp, tarinfo.name)
-                    
-                    tar.extract(tarinfo, path=args.tar_tmp, filter=custom_tar_filter)
+    TraceLog.info("TAR File Scan")
+    TraceLog.info(f"Scanning {args.tar} using {args.tar_tmp} ...")
+    with tarfile.open(args.tar, 'r:*') as tar:
+        for tarinfo in tar:
+            if tarinfo.isreg():
+                # Define the temp path where the file will be extracted
+                temp_path = os.path.join(args.tar_tmp, tarinfo.name)
 
-                    # Process the extracted file
-                    process_file(temp_path, json_data)
+                tar.extract(tarinfo, path=args.tar_tmp, filter=custom_tar_filter)
 
-                    # Securely delete the file after processing
-                    secure_delete(temp_path)
+                # Process the extracted file
+                process_file(temp_path, json_data)
+
+                # Securely delete the file after processing
+                secure_delete(temp_path)
 
 
 ##  ===========================================================================
 ##  Scan a filesystem / pathname for PAN data
 ##  ===========================================================================
 def process_filesystem(args, json_data):
+    TraceLog.info(f"Filesystem Scan")
     TraceLog.info(f"Scanning {args.path} ...")
     scan_directory(args.path, json_data)
         

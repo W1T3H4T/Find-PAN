@@ -1,4 +1,4 @@
-AC_INIT([Find-PAN], [1.5.0], [W1T3H4Tl@gmail.com])
+AC_INIT([Find-PAN], [2.1.0], [W1T3H4Tl@GMAIL.COM])
 AM_INIT_AUTOMAKE([-Wall -Werror foreign])
 
 # Set default install prefix

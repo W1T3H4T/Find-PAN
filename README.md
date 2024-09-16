@@ -1,12 +1,35 @@
 # find-pan.py
+- [find-pan.py](#find-panpy)
+  - [Description](#description)
+  - [Features](#features)
+  - [License](#license)
+- [Installation](#installation)
+  - [Virtual Python Environment](#virtual-python-environment)
+  - [Configure python environment](#configure-python-environment)
+  - [Install the Required Packages](#install-the-required-packages)
+    - ["Just the Facts, Ma'am"](#just-the-facts-maam)
+    - [Update, Upgrade, and Install Python](#update-upgrade-and-install-python)
+- [Usage](#usage)
+  - [Command-line Arguments:](#command-line-arguments)
+  - [Log Files](#log-files)
+  - [PAN and TRACK Patterns](#pan-and-track-patterns)
+  - [Anti-PAN (Suspect) Patterns](#anti-pan-suspect-patterns)
+  - [Binary File Handling](#binary-file-handling)
+  - [Secure Deletion](#secure-deletion)
+  - [Examples](#examples)
+- [Example Usage for a File System Scan](#example-usage-for-a-file-system-scan)
+- [Example Usage for a TAR File Scan](#example-usage-for-a-tar-file-scan)
+- [Notes](#notes)
+- [Potential Future Enhancements](#potential-future-enhancements)
+  - [Regular Expression Support](#regular-expression-support)
+  - [Processing Metrics](#processing-metrics)
+  - [Logging](#logging)
+- [Author](#author)
 
 ## Description
-
 **find-pan.py** is a Python script designed to search for Primary Account Numbers (PANs) and TRACK data in a file system or a tar file.
 
-The script was originally designed for Payments Information System projects.  It leverages regular expressions to identify patterns associated with credit card numbers and track data.
-
-## Features
+The script was originally designed for Payments Information System projects.  It leverages regular expressions to identify patterns associated with credit card numbers and track data.  This version of the tool has been highly refactored from the original version, and it supports the easy maintenance of regular expressions through a JSON file.
 
 ## Features
 - Fast file system processing.
@@ -77,8 +100,7 @@ export PATH=$PATH:/usr/local/Find-PAN/bin:
 </pre>
 
 ## Virtual Python Environment
-Python works best when using virtual environments.  Doing so allows the system administrator and other users to maintain 
-their enthronements necessary for unencumbered operation.
+While it is not required to use a Python Virtual Environment, it does reduce the complexities assocatied with maintaining a usable Python solution for the system and a solution that works for your everyday tasks.
 
 For complete instructions, see here: [Python Virtual Environment](https://docs.python.org/3/library/venv.html)
 
@@ -87,18 +109,37 @@ Briefly:
 $ python -m venv /path/to/new/virtual/environment
 </pre>
 
+## Configure python environment
 Next, activate the environment.  I use the following in my bash profile script: 
 <pre>
-### Configure python environment
 export VIRTUAL_ENV_DISABLE_PROMPT=True
 source $HOME/.pyenv/bin/activate
 </pre>
 
-## Install Required Packages
-Install the required packages for the tools.
+## Install the Required Packages
+find-pan.py makes use of these modules:
 <pre>
-$ sudo apt install libmagic
-$ sudo apt install pip
+$ cat requirements.txt
+names>=0.3.0
+python-magic>=0.4.27
+random-address>=1.1.1
+</pre>
+
+The `python-magic` module requires the installation of `libmagic.`  The installation of the Python modules requires `pip.`  
+
+### "Just the Facts, Ma'am"
+These are the commands necessary to install `pip, libmagic` and the modules specified by `requirements.txt.`
+<pre>
+$ sudo apt install -y libmagic python3-pip 
+$ pip install -r requirements.txt
+</pre>
+### Update, Upgrade, and Install Python
+These are the commands to install all of the necessary bits, including support for a virtual environment.
+<pre>
+$ sudo apt update
+$ sudo app upgrade -y
+$ sudo apt install -y libmagic
+$ sudo apt install -y python3-full python3-pip python3-venv
 $ pip install -r requirements.txt
 </pre>
 
@@ -108,7 +149,7 @@ find-pan.py [--path PATH] [--tar TAR] [--temp TEMP] [--log-dir LOG_DIR]
             [--skip-binary]  [--verbose] [--debug]
 </pre>
 
-# Command-line Arguments:
+## Command-line Arguments:
 |Switch|Description|
 |-------------------|:-------------------------------------------------------|
 |**-h,--help**      |Show this information and exit.|
@@ -134,7 +175,6 @@ The script generates two log files:
 Log files are generated in the specified log directory or the current working directory if no log directory is provided.
 
 ## PAN and TRACK Patterns
-
 The script uses predefined regular expressions to identify PAN and TRACK 1 & 2 data. Supported PAN types include:
 
 - American Express
@@ -146,18 +186,15 @@ The script uses predefined regular expressions to identify PAN and TRACK 1 & 2 d
 
 
 ## Anti-PAN (Suspect) Patterns
-
 The script also checks for patterns indicative of non-PAN data, such as sequential or repeated numbers.
 
 ## Binary File Handling
 The script can be instructed to detects binary files and skip them during the scanning process.
 
 ## Secure Deletion
-
 For files processed during scanning, the script securely deletes them using platform-specific methods (``shred`` on Linux, and ``sdelete`` on Windows).
 
 ## Examples
-
 Scan a directory:
 <pre>
 $ find-pan.py --path /path/to/directory
@@ -241,12 +278,20 @@ Parameters and Defaults
 2024-09-15 20:04:44,333 [INFO]: Total matches: 80225
 </pre>
 
-## Notes
-- Ensure the necessary platform-specific tools (shred, sdelete) are available for secure file deletion.
-- Use `$ pip install -r requirements.txt` to install required modules.
-- Ensure 'libmagic' is installed for your platform, e.g., `brew install libmagic`.
+# Notes
+- Ensure the necessary platform-specific tools (shred, sdelete/sdelete64) are available for secure file deletion.
 
-## Author
+# Potential Future Enhancements
+## Regular Expression Support
+- Enable the tool to select a set of regular expressions.
+- Investigate pre-compilation of regular expressions for performance improvement.
+- Add support for Non-PCI Primary Account Numbers
+## Processing Metrics
+- Investigate adding process timing support on a per-file basis.
+## Logging
+- Add support for logging extra details for items skipped.
+
+# Author
 - **Author:** David Means
-- **Contact:** w1t3h4t@gmail.com
+- **Contact:** W1T3H4T@GMAIL.COM
 - **LinkedIn:** [LinkedIn](https://www.linkedin.com/in/davidcmeans/)
