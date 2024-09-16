@@ -173,8 +173,41 @@ Specify a log directory:
 $ find-pan.py --path /path/to/directory --log-dir /path/to/logs
 </pre>
 
+# Example Run
+<pre>
+$ bin/find-pan.py --path test --report-delta 100 --skip-binary 
+find-pan.py v1.5.0
+Python 3.12.6 (main, Sep  6 2024, 19:03:47) [Clang 15.0.0 (clang-1500.3.9.4)]
+Command-line arguments: ['--path', 'test', '--report-delta', '100', '--skip-binary']
+2024-09-15 23:21:17,226 [INFO]: 
+Parameters and Defaults
+ --path=test
+ --tar=None
+ --tar_tmp=/Users/dmeans/Find-PAN-Logs/tar-temp
+ --log_dir=/Users/dmeans/Find-PAN-Logs
+ --skip_binary=True
+ --patterns=/usr/local/Find-PAN/patterns/find-pan-patterns.json
+ --line_limit=0
+ --rgx_prefix=False
+ --report_delta=100
+ --verbose=False
+ --debug=False
+ --version=False
+
+2024-09-15 23:21:17,226 [INFO]: Scanning test ...
+2024-09-15 23:21:20,877 [INFO]: Scanned 100 files; matched 37708 PANs, 6411 TRACKs
+2024-09-15 23:21:23,721 [INFO]: Scanned 200 files; matched 64061 PANs, 15521 TRACKs
+2024-09-15 23:21:23,773 [INFO]: 
+2024-09-15 23:21:23,773 [INFO]: -- Processing Summary --
+2024-09-15 23:21:23,773 [INFO]: Scanned 200 files.
+2024-09-15 23:21:23,773 [INFO]: Matched 64704 PANs.
+2024-09-15 23:21:23,773 [INFO]: Matched 15521 TRACKs.
+2024-09-15 23:21:23,773 [INFO]: Skipped 69 Anti-PANs.
+2024-09-15 23:21:23,773 [INFO]: Skipped 1 Files
+2024-09-15 23:21:23,773 [INFO]: Total matches: 80225
+</pre>
+
 ## Notes
-- The script supports scanning of filesystems and tarfiles.  Tarfile scanning requires a temporary directory for extracting files from the tar archive, which has a default value pre-applied.
 - Ensure the necessary platform-specific tools (shred, sdelete) are available for secure file deletion.
 - Use `$ pip install -r requirements.txt` to install required modules.
 - Ensure 'libmagic' is installed for your platform, e.g., `brew install libmagic`.
@@ -182,3 +215,4 @@ $ find-pan.py --path /path/to/directory --log-dir /path/to/logs
 ## Author
 - **Author:** David Means
 - **Contact:** w1t3h4t@gmail.com
+- **LinkedIn:** [LinkedIn](https://www.linkedin.com/in/davidcmeans/)

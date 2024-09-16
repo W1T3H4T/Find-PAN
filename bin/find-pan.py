@@ -29,6 +29,7 @@
 #  ===========================================================================
 
 from datetime import datetime
+import magic
 import argparse
 import json
 import logging
@@ -53,7 +54,7 @@ global pattern_prefix_path
 
 # - Version information
 major, minor, patch = map(int, '1 5 0'.split()) 
-Match_Count = { "PAN" : 0, "TRACK" : 0 }
+Match_Count = { "PAN" : 0, "TRACK" : 0 , "ANTI-PAN" : 0, "SKIPPED": 0 }
 pattern_prefix_path="/usr/local/Find-PAN/patterns" 
 
 _DEBUG = False
@@ -96,6 +97,7 @@ def print_exception_info(e):
 ##  ===========================================================================
 def handle_interrupt(signal, frame):
     TraceLog.error("KeyboardInterrupt caught. Exiting.")
+    PrintScanSummary()
     sys.exit(0)
 
 ##  ===========================================================================
@@ -281,6 +283,7 @@ def process_file(file_path, json_data ):
         with open(file_path, 'r') as f:
             if is_binary(file_path) is not None:
                 PanLog.info(f"Binary file skipped: {file_path}")
+                Match_Count['SKIPPED'] += 1
                 return
 
         with open(file_path, "r", encoding="utf-8", errors="replace") as f:
@@ -296,26 +299,26 @@ def process_file(file_path, json_data ):
                 if match_data is None:
                     continue
 
-
-                if matched_info.lower().startswith('track'):
-                    type='TRACK'
-                else:
-                    type='PAN'
-
-                if type == "PAN":
+                if matched_info.lower().startswith('pan'):
                     pan = extract_pan_from_match(match_data)                    
                     if luhn_check(pan):
-                        Match_Count[type] += 1
+                        Match_Count['PAN'] += 1
                         PanLog.info(f"{file_path}:{line_count}->{pan}: {matched_info}")
                     else:
                         PanLog.info(f"{file_path}:{line_count}->{pan} (Luhn Check: Failed)")
-                else:
+                    continue
+
+                if matched_info.lower().startswith('track'):
                     pan = extract_pan_from_match(match_data)                    
                     if luhn_check(pan):
-                        Match_Count[type] += 1
+                        Match_Count['TRACK'] += 1
                         PanLog.info(f"{file_path}:{line_count}->{match_data}: {matched_info}")
                     else:
                         PanLog.info(f"{file_path}:{line_count}->{match_data}: {matched_info} (Luhn Check: Failed)")
+                    continue
+
+                if matched_info.lower().startswith('anti-pan'):
+                    Match_Count['ANTI-PAN'] += 1
 
     except PermissionError:
         TraceLog.warning(f"Skipping file due to PermissionError: {file_path}")
@@ -456,13 +459,15 @@ def printVersionInfo(argParse):
 ##  ===========================================================================
 ##  Print Scan Summary Results
 ##  ===========================================================================
-def print_scan_results():
+def PrintScanSummary():
     total_match_count = Match_Count['PAN'] + Match_Count['TRACK']
     TraceLog.info("")
     TraceLog.info("-- Processing Summary --")
     TraceLog.info(f"Scanned {FILE_Count-1} files.")
     TraceLog.info(f"Matched {Match_Count['PAN']} PANs.")
     TraceLog.info(f"Matched {Match_Count['TRACK']} TRACKs.")
+    TraceLog.info(f"Skipped {Match_Count['ANTI-PAN']} Anti-PANs.")
+    TraceLog.info(f"Skipped {Match_Count['SKIPPED']} Files")
     TraceLog.info(f"Total matches: {total_match_count}")
 
 ##  ===========================================================================
@@ -599,7 +604,7 @@ if __name__ == '__main__':
     try:
         # -- Run the finders
         main(argParse)
-        print_scan_results()
+        PrintScanSummary()
 
     except KeyboardInterrupt:
         TraceLog.error("KeyboardInterrupt caught in main()")
