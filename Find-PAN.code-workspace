@@ -1,0 +1,14 @@
+{
+	"folders": [
+		{
+			"path": "."
+		}
+	],
+	"settings": {
+		"AREPL.pythonOptions": [
+			"-u"
+		],
+		"wolf.pythonPath": "/usr/local/bin/python3",
+		"python.analysis.autoFormatStrings": true
+	}
+}
