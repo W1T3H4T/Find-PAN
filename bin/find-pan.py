@@ -47,21 +47,19 @@ import signal
 ##  ===========================================================================
 global _VS_DEBUG, _DEBUG, _VERBOSE
 global TraceLog, PanLog
-global FILE_Count
 global reportDelta, ProgramName, Match_Count
 global major, minor, patch, rgx_prefix
 global pattern_prefix_path
 
 # - Version information
 major, minor, patch = map(int, '1 5 0'.split()) 
-Match_Count = { "PAN" : 0, "TRACK" : 0 , "ANTI-PAN" : 0, "SKIPPED": 0 }
+Match_Count = { "FILES": 0, "PAN" : 0, "TRACK" : 0 , "ANTI-PAN" : 0, "SKIPPED": 0 }
 pattern_prefix_path="/usr/local/Find-PAN/patterns" 
 
-_DEBUG = False
-_VS_DEBUG = True
-TraceLog = None
-PanLog   = None
-FILE_Count        = 0
+_DEBUG      = False
+_VS_DEBUG   = False
+TraceLog    = None
+PanLog      = None
 
 ##  ===========================================================================
 ##  Print consolidated exception info
@@ -188,6 +186,7 @@ def setup_custom_loggers(args):
 
     return {'Trace': trace_logger, 'Log': pan_logger}
 
+
 ##  ===========================================================================
 ##  Check if file is binary
 ##  ===========================================================================
@@ -267,7 +266,7 @@ def luhn_check(num):
 ##  Process a file for credit card patterns
 ##  ===========================================================================
 def process_file(file_path, json_data ):
-    global FILE_Count, Match_Count
+    global Match_Count
     line_count = 0
 
     if not os.path.isfile(file_path):
@@ -275,10 +274,10 @@ def process_file(file_path, json_data ):
 
     try:
         PanLog.info(f"Scanning {os.path.basename(file_path)}")
-        if FILE_Count > 0:
-            if FILE_Count % reportDelta == 0:
-                TraceLog.info(f"Scanned {FILE_Count} files; matched {Match_Count['PAN']} PANs, {Match_Count['TRACK']} TRACKs")
-        FILE_Count += 1
+        if Match_Count['FILES'] > 0:
+            if Match_Count['FILES'] % reportDelta == 0:
+                TraceLog.info(f"Scanned {Match_Count['FILES']} files; matched {Match_Count['PAN']} PANs, {Match_Count['TRACK']} TRACKs")
+        Match_Count['FILES'] += 1
 
         with open(file_path, 'r') as f:
             if is_binary(file_path) is not None:
@@ -335,6 +334,7 @@ def scan_directory(dir_name, json_data ):
                 continue
             process_file(file_path, json_data )
 
+
 ##  ===========================================================================
 ##  Match REGEX patterns from the JSON data
 ##  ===========================================================================
@@ -367,7 +367,6 @@ def scan_text_line(text_line, line_number, json_data):
     if _DEBUG:
         TraceLog.debug(f"No match found for {text_line}")
     return None , None
-
 
 
 ##  ===========================================================================
@@ -463,7 +462,7 @@ def PrintScanSummary():
     total_match_count = Match_Count['PAN'] + Match_Count['TRACK']
     TraceLog.info("")
     TraceLog.info("-- Processing Summary --")
-    TraceLog.info(f"Scanned {FILE_Count-1} files.")
+    TraceLog.info(f"Scanned {Match_Count['FILES']-1} files.")
     TraceLog.info(f"Matched {Match_Count['PAN']} PANs.")
     TraceLog.info(f"Matched {Match_Count['TRACK']} TRACKs.")
     TraceLog.info(f"Skipped {Match_Count['ANTI-PAN']} Anti-PANs.")
@@ -527,10 +526,51 @@ def setupArgParse():
 
 
 ##  ===========================================================================
+##  Tar file filter for safety
+##  ===========================================================================
+def custom_tar_filter(tarinfo, path):
+    # Ensure that tarinfo has a safe path (no absolute paths or path traversal)
+    if ".." in tarinfo.name or tarinfo.name.startswith("/"):
+        TraceLog.warning(f"Skipping potentially dangerous file: {tarinfo.name}")
+        return None  # Skip this file
+    
+    # Modify tarinfo (e.g., change file permissions)
+    tarinfo.mode &= 0o755  # Ensure no world-writable permissions
+    return tarinfo  # Return tarinfo to proceed with extraction
+
+##  ===========================================================================
+##  Scan a TAR file for PAN and TRACK data
+##  ===========================================================================
+def process_tar_file(args, json_data):
+    if args.tar and args.tar_tmp:
+        TraceLog.info(f"Scanning {args.tar} ...")
+        with tarfile.open(args.tar, 'r:*') as tar:
+            for tarinfo in tar:
+                if tarinfo.isreg():
+                    # Define the temp path where the file will be extracted
+                    temp_path = os.path.join(args.tar_tmp, tarinfo.name)
+                    
+                    tar.extract(tarinfo, path=args.tar_tmp, filter=custom_tar_filter)
+
+                    # Process the extracted file
+                    process_file(temp_path, json_data)
+
+                    # Securely delete the file after processing
+                    secure_delete(temp_path)
+
+
+##  ===========================================================================
+##  Scan a filesystem / pathname for PAN data
+##  ===========================================================================
+def process_filesystem(args, json_data):
+    TraceLog.info(f"Scanning {args.path} ...")
+    scan_directory(args.path, json_data)
+        
+        
+##  ===========================================================================
 ##  MAIN is here
 ##  ===========================================================================
 def main(argParse):
-
     args = argParse.parse_args()
 
     # Load JSON data and compile prefix patterns
@@ -545,22 +585,17 @@ def main(argParse):
         TraceLog.error("No JSON data file found.")
         return
 
+    ##   Scan a filesystem
     if args.path:
-        TraceLog.info(f"Scanning {args.path} ...")
-        scan_directory(args.path, json_data )
+        process_filesystem(args, json_data)
         return
     
-    if args.tar and args.temp:
-        TraceLog.info(f"Scanning {args.tar} ...")
-        with tarfile.open(args.tar, 'r:*') as tar:
-            for tarinfo in tar:
-                if tarinfo.isreg():
-                    temp_path = os.path.join(args.temp, tarinfo.name)
-                    tar.extract(tarinfo, path=args.temp)
-                    process_file(temp_path, json_data )
-                    secure_delete(temp_path)
+    ##   Scan a tar file
+    if args.tar and args.tar_tmp:
+        process_tar_file(args, json_data)
         return
     
+    ##   No valid arguments found
     PanLog.error("Required arguments not found.")
     print("\n\n")
     argParse.print_help()
@@ -571,38 +606,42 @@ def main(argParse):
 ##  MAIN Entry Point
 ##  ===========================================================================
 if __name__ == '__main__':
+    ## -- Set up signal handler for keyboard interrupt
     signal.signal(signal.SIGINT, handle_interrupt)
+
+    ## -- Initialize global variables
     ProgramName = None
     reportDelta = None
     _DEBUG = None
     _VERBOSE = None
     rgx_prefix = None
 
-    # -- Process command line arguments
+    ## -- Process command line arguments
     argParse, args = setupArgParse()
 
-    # -- set default values
+    ## -- Set default values from command line arguments
     ProgramName  = argParse.prog
     reportDelta  = args.report_delta
     _DEBUG       = args.debug
     _VERBOSE     = args.verbose
 
+    ## -- Set the regular expression prefix
     if args.rgx_prefix:
         rgx_prefix = r"[ '\"{]"
     else:
         rgx_prefix = None
 
-    # -- set loggers
+    ## -- Configure our loggers
     loggers = setup_custom_loggers(args)
     PanLog = loggers['Log']
     TraceLog = loggers['Trace']
 
-    # -- Enumerate parameters
+    ## -- Enumerate the command line arguments
     usage_info = enumerate_command_line_arguments(argParse)
     TraceLog.info(f"{usage_info}")
 
     try:
-        # -- Run the finders
+        ##  --  Main processing -- 
         main(argParse)
         PrintScanSummary()
 

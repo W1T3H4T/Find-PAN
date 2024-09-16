@@ -173,18 +173,18 @@ Specify a log directory:
 $ find-pan.py --path /path/to/directory --log-dir /path/to/logs
 </pre>
 
-# Example Run
+# Example Usage for a File System Scan
 <pre>
 $ bin/find-pan.py --path test --report-delta 100 --skip-binary 
 find-pan.py v1.5.0
 Python 3.12.6 (main, Sep  6 2024, 19:03:47) [Clang 15.0.0 (clang-1500.3.9.4)]
 Command-line arguments: ['--path', 'test', '--report-delta', '100', '--skip-binary']
-2024-09-15 23:21:17,226 [INFO]: 
+2024-09-15 20:04:44,333 [INFO]: 
 Parameters and Defaults
  --path=test
  --tar=None
- --tar_tmp=/Users/dmeans/Find-PAN-Logs/tar-temp
- --log_dir=/Users/dmeans/Find-PAN-Logs
+ --tar_tmp=/Users/anyone/Find-PAN-Logs/tar-temp
+ --log_dir=/Users/anyone/Find-PAN-Logs
  --skip_binary=True
  --patterns=/usr/local/Find-PAN/patterns/find-pan-patterns.json
  --line_limit=0
@@ -194,17 +194,51 @@ Parameters and Defaults
  --debug=False
  --version=False
 
-2024-09-15 23:21:17,226 [INFO]: Scanning test ...
-2024-09-15 23:21:20,877 [INFO]: Scanned 100 files; matched 37708 PANs, 6411 TRACKs
-2024-09-15 23:21:23,721 [INFO]: Scanned 200 files; matched 64061 PANs, 15521 TRACKs
-2024-09-15 23:21:23,773 [INFO]: 
-2024-09-15 23:21:23,773 [INFO]: -- Processing Summary --
-2024-09-15 23:21:23,773 [INFO]: Scanned 200 files.
-2024-09-15 23:21:23,773 [INFO]: Matched 64704 PANs.
-2024-09-15 23:21:23,773 [INFO]: Matched 15521 TRACKs.
-2024-09-15 23:21:23,773 [INFO]: Skipped 69 Anti-PANs.
-2024-09-15 23:21:23,773 [INFO]: Skipped 1 Files
-2024-09-15 23:21:23,773 [INFO]: Total matches: 80225
+2024-09-15 20:04:44,333 [INFO]: Scanning test ...
+2024-09-15 20:04:44,333 [INFO]: Scanned 100 files; matched 37708 PANs, 6411 TRACKs
+2024-09-15 20:04:44,333 [INFO]: Scanned 200 files; matched 64061 PANs, 15521 TRACKs
+2024-09-15 20:04:44,333 [INFO]: 
+2024-09-15 20:04:44,333 [INFO]: -- Processing Summary --
+2024-09-15 20:04:44,333 [INFO]: Scanned 200 files.
+2024-09-15 20:04:44,333 [INFO]: Matched 64704 PANs.
+2024-09-15 20:04:44,333 [INFO]: Matched 15521 TRACKs.
+2024-09-15 20:04:44,333 [INFO]: Skipped 69 Anti-PANs.
+2024-09-15 20:04:44,333 [INFO]: Skipped 1 Files
+2024-09-15 20:04:44,333 [INFO]: Total matches: 80225
+</pre>
+
+# Example Usage for a TAR File Scan
+<pre>
+$ bin/find-pan.py --tar test-archive.tar.gz 
+find-pan.py v1.5.0
+Python 3.12.6 (main, Sep  6 2024, 19:03:47) [Clang 15.0.0 (clang-1500.3.9.4)]
+Command-line arguments: ['--tar', 'test-archive.tar.gz']
+2024-09-16 20:04:44,333 [INFO]: 
+Parameters and Defaults
+ --path=None
+ --tar=test-archive.tar.gz
+ --tar_tmp=/Users/anyone/Find-PAN-Logs/tar-temp
+ --log_dir=/Users/anyone/Find-PAN-Logs
+ --skip_binary=False
+ --patterns=/usr/local/Find-PAN/patterns/find-pan-patterns.json
+ --line_limit=0
+ --rgx_prefix=False
+ --report_delta=100
+ --verbose=False
+ --debug=False
+ --version=False
+
+2024-09-15 20:04:44,333 [INFO]: Scanning test-archive.tar.gz ...
+2024-09-15 20:04:44,333 [INFO]: Scanned 100 files; matched 37060 PANs, 6260 TRACKs
+2024-09-15 20:04:44,333 [INFO]: Scanned 200 files; matched 62728 PANs, 15521 TRACKs
+2024-09-15 20:04:44,333 [INFO]: 
+2024-09-15 20:04:44,333 [INFO]: -- Processing Summary --
+2024-09-15 20:04:44,333 [INFO]: Scanned 202 files.
+2024-09-15 20:04:44,333 [INFO]: Matched 64704 PANs.
+2024-09-15 20:04:44,333 [INFO]: Matched 15521 TRACKs.
+2024-09-15 20:04:44,333 [INFO]: Skipped 69 Anti-PANs.
+2024-09-15 20:04:44,333 [INFO]: Skipped 0 Files
+2024-09-15 20:04:44,333 [INFO]: Total matches: 80225
 </pre>
 
 ## Notes
