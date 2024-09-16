@@ -191,10 +191,10 @@ The script uses predefined regular expressions to identify PAN and TRACK 1 & 2 d
 The script also checks for patterns indicative of non-PAN data, such as sequential or repeated numbers.
 
 ## Binary File Handling
-The script can be instructed to detects binary files and skip them during the scanning process.
+The script can be instructed to detect binary files and skip them during the scanning process.
 
 ## Secure Deletion
-For files processed during scanning, the script securely deletes them using platform-specific methods (``shred`` on Linux, and ``sdelete`` on Windows).
+For files processed during scanning, the script securely deletes them using platform-specific methods (`shred` on Linux, and `sdelete` on Windows).
 
 ## Examples
 Scan a directory:
@@ -285,7 +285,7 @@ Parameters and Defaults
 
 # Potential Future Enhancements
 ## Regular Expression Support
-- Enable the tool to select a set of regular expressions, support more than one set in the JSON configuration file.
+- Enable the tool to select a set of regular expressions: support more than one set in the JSON configuration file.
 - Investigate pre-compilation of regular expressions for performance improvement.
 - Add support for Non-PCI Primary Account Numbers.
 ## Processing Metrics
