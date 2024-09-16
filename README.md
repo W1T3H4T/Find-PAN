@@ -24,6 +24,8 @@
   - [Regular Expression Support](#regular-expression-support)
   - [Processing Metrics](#processing-metrics)
   - [Logging](#logging)
+  - [](#)
+- [PCI DSS 4.0 Compliance Notes](#pci-dss-40-compliance-notes)
 - [Author](#author)
 
 ## Description
@@ -283,13 +285,35 @@ Parameters and Defaults
 
 # Potential Future Enhancements
 ## Regular Expression Support
-- Enable the tool to select a set of regular expressions.
+- Enable the tool to select a set of regular expressions, support more than one set in the JSON configuration file.
 - Investigate pre-compilation of regular expressions for performance improvement.
-- Add support for Non-PCI Primary Account Numbers
+- Add support for Non-PCI Primary Account Numbers.
 ## Processing Metrics
 - Investigate adding process timing support on a per-file basis.
 ## Logging
 - Add support for logging extra details for items skipped.
+<br><br><br>
+---
+
+# PCI DSS 4.0 Compliance Notes
+*Control 3.2.1* - Account data storage is kept to a minimum through the implementation of data retention and disposal policies, procedures, and processes that include at least the following:
+
+- Coverage for all locations of stored account data.
+- Coverage for any sensitive authentication data (SAD) stored prior to completion of authorization. This bullet is a best practice until its effective date; refer to Applicability Notes below for details.
+- Limiting data storage amount and retention time to that which is required for legal or regulatory, and/or business requirements.
+- Specific retention requirements for stored account data that defines length of retention period and includes a documented business justification.
+- Processes for secure deletion or rendering account data unrecoverable when no longer needed per the retention policy.
+- A process for verifying, at least once every three months, that stored account data exceeding the defined retention period has been securely deleted or rendered unrecoverable.
+
+*Control 3.5* - Primary account number (PAN) is secured wherever it is stored.<br>
+
+*Control 3.5.1* - PAN is rendered unreadable anywhere it is stored by using any of the following approaches:<br>
+
+- One-way hashes based on strong cryptography of the entire PAN.
+- Truncation (hashing cannot be used to replace the truncated segment of PAN).
+- If hashed and truncated versions of the same PAN, or different truncation formats of the same PAN, are present in an environment, additional controls are in place such that the different versions cannot be correlated to reconstruct the original PAN.
+- Index tokens.
+- Strong cryptography with associated key-management processes and procedures.
 
 # Author
 - **Author:** David Means
