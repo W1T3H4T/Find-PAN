@@ -46,21 +46,20 @@ import signal
 ##  ===========================================================================
 global _VS_DEBUG, _DEBUG, _VERBOSE
 global TraceLog, PanLog
-global TOTAL_Match_Count, TRACK_Match_count, PAN_Match_count, FILE_Count
+global FILE_Count
 global reportDelta, ProgramName, Match_Count
-global major, minor, patch, rgx_prefix 
+global major, minor, patch, rgx_prefix
+global pattern_prefix_path
 
 # - Version information
 major, minor, patch = map(int, '1 5 0'.split()) 
 Match_Count = { "PAN" : 0, "TRACK" : 0 }
+pattern_prefix_path="/usr/local/Find-PAN/patterns" 
 
 _DEBUG = False
 _VS_DEBUG = True
 TraceLog = None
 PanLog   = None
-TOTAL_Match_Count= 0
-TRACK_Match_count = 0 
-PAN_Match_count   = 0
 FILE_Count        = 0
 
 ##  ===========================================================================
@@ -96,9 +95,8 @@ def print_exception_info(e):
 ##  Handle keyboard interrupt
 ##  ===========================================================================
 def handle_interrupt(signal, frame):
-    print("\nKeyboardInterrupt caught. Exiting gracefully...")
+    TraceLog.error("KeyboardInterrupt caught. Exiting.")
     sys.exit(0)
-
 
 ##  ===========================================================================
 ##  Set the logfile basename
@@ -267,8 +265,7 @@ def luhn_check(num):
 ##  Process a file for credit card patterns
 ##  ===========================================================================
 def process_file(file_path, json_data ):
-    global FILE_Count, PAN_Match_count, TRACK_Match_count
-    global TOTAL_Match_Count, Match_Count
+    global FILE_Count, Match_Count
     line_count = 0
 
     if not os.path.isfile(file_path):
@@ -278,7 +275,7 @@ def process_file(file_path, json_data ):
         PanLog.info(f"Scanning {os.path.basename(file_path)}")
         if FILE_Count > 0:
             if FILE_Count % reportDelta == 0:
-                TraceLog.info(f"Scanned {FILE_Count} files; matched {PAN_Match_count} PANs, {TRACK_Match_count} TRACKs")
+                TraceLog.info(f"Scanned {FILE_Count} files; matched {Match_Count['PAN']} PANs, {Match_Count['TRACK']} TRACKs")
         FILE_Count += 1
 
         with open(file_path, 'r') as f:
@@ -299,14 +296,11 @@ def process_file(file_path, json_data ):
                 if match_data is None:
                     continue
 
-                TOTAL_Match_Count += 1
 
                 if matched_info.lower().startswith('track'):
                     type='TRACK'
-                    TRACK_Match_count += 1
                 else:
                     type='PAN'
-                    PAN_Match_count += 1
 
                 if type == "PAN":
                     pan = extract_pan_from_match(match_data)                    
@@ -463,11 +457,13 @@ def printVersionInfo(argParse):
 ##  Print Scan Summary Results
 ##  ===========================================================================
 def print_scan_results():
+    total_match_count = Match_Count['PAN'] + Match_Count['TRACK']
+    TraceLog.info("")
     TraceLog.info("-- Processing Summary --")
     TraceLog.info(f"Scanned {FILE_Count-1} files.")
     TraceLog.info(f"Matched {Match_Count['PAN']} PANs.")
     TraceLog.info(f"Matched {Match_Count['TRACK']} TRACKs.")
-    TraceLog.info(f"Total matches: {TOTAL_Match_Count}")
+    TraceLog.info(f"Total matches: {total_match_count}")
 
 ##  ===========================================================================
 ##  Get the number of arguments passed
@@ -493,7 +489,7 @@ def setupArgParse():
     parser.add_argument('--tar-tmp',    help='Temporary directory for tar file extraction.', default=tar_dir)
     parser.add_argument('--log-dir',    help='Directory for log files.', default=log_dir)
     parser.add_argument('--skip-binary',help='Skip binary files.', action='store_true', default=False )
-    parser.add_argument('--patterns',   help='JSON file containing pattern regular expressions.', type=str, default='patterns/find-pan-patterns.json')
+    parser.add_argument('--patterns',   help='JSON file containing pattern regular expressions.', type=str, default=f'{pattern_prefix_path}/find-pan-patterns.json')
     parser.add_argument('--line-limit', help='Line scan limit per file.', type=int, default=0)
     parser.add_argument('--rgx-prefix', help='Prefix for regular expressions.', default=False, action='store_true') 
     ##
@@ -570,6 +566,7 @@ def main(argParse):
 ##  MAIN Entry Point
 ##  ===========================================================================
 if __name__ == '__main__':
+    signal.signal(signal.SIGINT, handle_interrupt)
     ProgramName = None
     reportDelta = None
     _DEBUG = None
@@ -603,6 +600,6 @@ if __name__ == '__main__':
         # -- Run the finders
         main(argParse)
         print_scan_results()
+
     except KeyboardInterrupt:
-        # Handle the KeyboardInterrupt exception here
-        TraceLog.error("KeyboardInterrupt caught in main function. Exiting.")
+        TraceLog.error("KeyboardInterrupt caught in main()")
