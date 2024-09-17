@@ -32,6 +32,7 @@ import argparse
 import os
 import time
 import logging
+import platform
 from shutil import which
 from datetime import datetime
 from subprocess import call, CalledProcessError
@@ -51,6 +52,34 @@ def init_logger():
     file_handler.setFormatter(logging.Formatter(log_format))
     logger.addHandler(file_handler)
     return logger
+
+
+#   ==========================================================================
+#   Get the file age in days
+#   ==========================================================================
+def get_file_age_in_days(file_path):
+    stat_info = os.stat(file_path)
+
+    # On Windows, the st_ctime is the creation time
+    if platform.system() == 'Windows':
+        creation_time = stat_info.st_ctime
+    # On Unix-like systems, st_birthtime is the creation time (if available)
+    elif hasattr(stat_info, 'st_birthtime'):
+        creation_time = stat_info.st_birthtime
+    else:
+        # Fallback: Use the last modification time as the creation time isn't available
+        creation_time = stat_info.st_mtime
+
+    # Get the current time
+    current_time = time.time()
+
+    # Calculate the age of the file in seconds
+    age_in_seconds = current_time - creation_time
+
+    # Convert the age to days
+    age_in_days = age_in_seconds / (60 * 60 * 24)
+
+    return age_in_days
 
 #   ===========================================================================
 #   Delete old files
@@ -94,21 +123,23 @@ def main(path, age, prefix):
     for file_name in os.listdir(path):
         if file_name.startswith(prefix):
             full_path = os.path.join(path, file_name)
-            file_stat = os.stat(full_path)
-            file_age = (time.time() - file_stat.st_mtime) // (24 * 3600)
+            file_age = get_file_age_in_days(full_path)
 
             if file_age > age:
                 delete_file(full_path)
             else:
                 logger.info(f"Retained {full_path}")
 
+#   ===========================================================================
+#   Main is here
+#   ===========================================================================
 logger = init_logger()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="File deletion based on age and prefix.")
     parser.add_argument("--path", type=str, required=True, help="Log file directory to process.")
     parser.add_argument("--age", type=int, required=True, help="Age in days for file retention.")
-    parser.add_argument("--prefix", type=str, required=True, default='file-', help="The required log file prefix pattern.")
+    parser.add_argument("--prefix", type=str, required=False, default='file-', help="The required log file prefix pattern.")
     args = parser.parse_args()
 
     main(args.path, args.age, args.prefix)
