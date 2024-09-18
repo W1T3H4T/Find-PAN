@@ -45,34 +45,35 @@ import magic
 # ===========================================================================
 # Global variables
 # ===========================================================================
-global _VS_DEBUG, _DEBUG, _VERBOSE
-global TraceLog, PanLog
-global reportDelta, ProgramName, Match_Count
-global major, minor, patch, rgx_prefix
-global pattern_prefix_path
-
+LastReportDelta = 0
+RegexPatternPrefix = None
+FindPANVersion = "2 1 0"  # Major, Minor, Patch
 # - Version information
-major, minor, patch = map(int, '2 1 0'.split())
-Match_Count = {"FILES": 0, "PAN": 0, "TRACK": 0, "ANTI-PAN": 0, "SKIPPED": 0}
-pattern_prefix_path = "/usr/local/Find-PAN/patterns"
+MatchCount = {"FILES": 0, "PAN": 0, "TRACK": 0, "ANTI-PAN": 0, "SKIPPED": 0, "EXEC": 0, "BINARY" :0}
 
-_DEBUG = False
-_VS_DEBUG = False
-TraceLog = None
-PanLog = None
+#   Location of JSON REGEX Patterns
+pattern_prefix_path = \
+    "/usr/local/Find-PAN/patterns"  # pylint: disable=invalid-name
+
+#   Global Variables
+EnableVSArgParse = False  # Use custom argparse for Visual Studio
+LoggingDebug = False  # Emit debug log messages
+LoggingVerbose = False  # Emit verbose log messagest
+
+#   Loggers for Trace log and std Log file
+TraceLogger = None
+PanLogger = None
 
 # ===========================================================================
 # Print consolidated exception info
 # ===========================================================================
-
-
 def print_exception_info(e):
     exc_type, exc_value, exc_traceback = sys.exc_info()
     tb_stack = traceback.extract_tb(exc_traceback)
 
     # Traverse the traceback to find the first call outside the current module
     for frame in reversed(tb_stack):
-        if f"{ProgramName}" in frame.filename:
+        if f"{ProgramName}" in frame.filename: # pylint: disable=possibly-used-before-assignment
             file_name = frame.filename
             line_number = frame.lineno
             func_name = frame.name
@@ -93,21 +94,25 @@ def print_exception_info(e):
         print(f"Exception Info: {e}")
     sys.exit(1)
 
+
 # ===========================================================================
 # Handle keyboard interrupt
 # ===========================================================================
-
-
 def handle_interrupt(signal, frame):
-    TraceLog.error("KeyboardInterrupt caught. Exiting.")
+    # Log the signal number
+    TraceLogger.error(f"KeyboardInterrupt caught (signal number: {signal}). Exiting.")
+
+    # Log the stack frame details
+    TraceLogger.debug("Stack frame at the time of interrupt:")
+    TraceLogger.debug(''.join(traceback.format_stack(frame)))
+
     PrintScanSummary()
-    sys.exit(0)
+    sys.exit(1)
+
 
 # ===========================================================================
 # Set the logfile basename
 # ===========================================================================
-
-
 def generate_logfile_name(basename):
     date_str = datetime.now().strftime("%d%b%Y")
     formatted_basename = f"{basename}-{date_str}.log"
@@ -117,20 +122,20 @@ def generate_logfile_name(basename):
 # ===========================================================================
 # Create our log file names
 # ===========================================================================
-def set_log_directory_and_filenames(args):
+def set_log_directory_and_filenames(MyArgs):
     try:
-        if not os.path.exists(args.log_dir):
+        if not os.path.exists(MyArgs.log_dir):
             os.makedirs(args.log_dir)
 
-        if not os.path.exists(args.tar_tmp):
-            os.makedirs(args.tar_tmp)
+        if not os.path.exists(MyArgs.tar_tmp):
+            os.makedirs(MyArgs.tar_tmp)
 
         pan_logfile = os.path.join(
-            args.log_dir, generate_logfile_name("Find-PAN"))
+            MyArgs.log_dir, generate_logfile_name("Find-PAN"))
         trace_logfile = os.path.join(
             args.log_dir, generate_logfile_name("Find-PAN-trace"))
 
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-exception-caught
         print_exception_info(e)
 
     return pan_logfile, trace_logfile
@@ -138,9 +143,7 @@ def set_log_directory_and_filenames(args):
 # ===========================================================================
 # Create our logging objects
 # ===========================================================================
-
-
-def setup_custom_loggers(args):
+def setup_custom_loggers(MyArgs):
     pan_logfile, trace_logfile = set_log_directory_and_filenames(args)
 
     #   Remove pre-existing log files
@@ -161,7 +164,7 @@ def setup_custom_loggers(args):
         trace_file_handler.setLevel(trace_level)
     except FileNotFoundError:
         print_exception_info(None)
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-exception-caught
         print_exception_info(e)
 
     trace_formatter = logging.Formatter(
@@ -192,7 +195,7 @@ def setup_custom_loggers(args):
     pan_console_handler.setLevel(logging.DEBUG)
     pan_console_handler.setFormatter(log_formatter)
 
-    if _VERBOSE:
+    if LoggingVerbose:
         pan_logger.addHandler(pan_console_handler)
 
     pan_logger.addHandler(log_file_handler)
@@ -204,44 +207,52 @@ def setup_custom_loggers(args):
 # Check if file is binary
 # ===========================================================================
 def is_executable(file_path) -> bool | None:
+    global MatchCount
+    
     try:
-        def is_executable(file_path) -> bool | None:
-            if os.path.isfile(file_path):
-                mime = magic.Magic()
-                file_type = mime.from_file(file_path)
+        if os.path.isfile(file_path):
+            file_type = magic.from_file(file_path, mime=True)
 
-                # Define magic numbers for executable file types
-                executable_magic_numbers = [
-                    'application/x-executable',
-                    'application/x-shared-library',  # Linux shared library
-                    'application/x-dosexec',
-                    # Windows executable (PE format)
-                ]
+            # Define magic numbers for executable file types
+            executable_mime_types = [
+                'application/x-executable',     # (Executable)
+                'application/x-sharedlib',      # (shared libraries)
+                'application/x-shared-library', # Linux shared library
+                'application/x-pie-executable', # (position-independent executables)
+                'application/x-mach-binary',    # (Mach-O binaries, used in macOS)
+                'application/x-dosexec',        # (DOS/Windows executables, PE format)
+                'application/vnd.microsoft.portable-executable', # (Portable Executable format)
+                'application/x-dylib'           # (dynamic libraries)
+            ]
 
-                return any(
-                    magic_number in file_type for magic_number in executable_magic_numbers)
+            if any(magic_number in file_type for magic_number in executable_mime_types):
+                return True
             else:
-                return None
+                if LoggingVerbose:
+                    TraceLogger.info(f"Mime: {file_type}: {file_path}")
+        else:
+            return False
 
     except PermissionError:
-        TraceLog.warning(f"Skipping file due to PermissionError: {file_path}")
-        return None
+        TraceLogger.warning(
+            f"Skipping file due to PermissionError: {file_path}")
 
-    except Exception as e:
-        TraceLog.error(f"Skipping file due to error: {file_path}: {e}")
-        return None
-
+    except Exception as e:  # pylint: disable=broad-exception-caught
+        TraceLogger.error(f"Skipping file due to error: {file_path}: {e}")
+    return False
 
 # ===========================================================================
 # Check if file is binary
 # ===========================================================================
 def is_binary(file_path):
-    binary_offsets = []
+    global MatchCount
+    binary_triggers = {"0x00" : 0, "0xFF" : 0 }
 
-    if (args.skip_binary == False):
-        return None     # Skip binary check
+    if not args.skip_binary:
+        return False     # Skip binary check
 
     if is_executable(file_path):
+        MatchCount['EXEC'] += 1
         return True
 
     try:
@@ -249,21 +260,26 @@ def is_binary(file_path):
             buffer = f.read(1024)
             for index, byte in enumerate(
                     buffer[:-2]):  # Skip the last two bytes
-                if byte == 0x00 or byte == 0xFF:
-                    binary_offsets.append((hex(byte), index))
+                if byte == 0x00:
+                    binary_triggers['0x00'] += 1
+                    continue
+                if byte == 0xFF:
+                    binary_triggers['0xFF'] += 1
                     continue
 
-        if len(binary_offsets) >= 2:
+        if binary_triggers['0x00'] >=1 and binary_triggers['0xFF'] >= 1:
+            MatchCount['BINARY'] += 1
             return True
 
+    except FileNotFoundError:
+        PanLogger.warning(f"Skipping file due to FileNotFoundError: {file_path}")
+        return False
+
     except PermissionError:
-        PanLog.warning(f"Skipping file due to PermissionError: {file_path}")
-        return None
+        PanLogger.warning(f"Skipping file due to PermissionError: {file_path}")
+        return False
 
-    except Exception as e:
-        PanLog.error(f"Skipping file due to error: {file_path}: {e}")
-
-    return None
+    return False
 
 
 # ===========================================================================
@@ -279,31 +295,46 @@ def luhn_check(num):
 
 
 # ===========================================================================
+# Calculate delta for reporting
+# ===========================================================================
+def calculate_delta():
+    global LastReportDelta
+
+    thisDelta = MatchCount['FILES']
+    if LastReportDelta < thisDelta and thisDelta % ReportDelta == 0:
+        LastReportDelta = thisDelta
+        return True
+    return False
+
+
+# ===========================================================================
 # Process a file for credit card patterns
 # ===========================================================================
 def process_file(file_path, json_data):
-    global Match_Count
+    global MatchCount
+    global LastReportDelta
     line_count = 0
 
     if not os.path.isfile(file_path):
         return
 
     try:
-        PanLog.info(f"Scanning {os.path.basename(file_path)}")
-        if Match_Count['FILES'] > 0:
-            if Match_Count['FILES'] % reportDelta == 0:
-                TraceLog.info(
-                    f"Scanned {
-                        Match_Count['FILES']} files; matched {
-                        Match_Count['PAN']} PANs, {
-                        Match_Count['TRACK']} TRACKs")
-        Match_Count['FILES'] += 1
+        PanLogger.info(f"Scanning {os.path.basename(file_path)}")
+        if calculate_delta():
+            TraceLogger.info(
+                f"Scanned {
+                    MatchCount['FILES']} files; matched {
+                    MatchCount['PAN']} PANs, {
+                    MatchCount['TRACK']} TRACKs, {
+                    MatchCount['SKIPPED']} Skipped")
 
-        with open(file_path, 'r') as f:
-            if is_binary(file_path) is not None:
-                PanLog.info(f"Binary file skipped: {file_path}")
-                Match_Count['SKIPPED'] += 1
+        with open(file_path, 'rb') as f:
+            if is_binary(file_path) == True:
+                PanLogger.info(f"Binary file skipped: {file_path}")
+                MatchCount['SKIPPED'] += 1
                 return
+
+        MatchCount['FILES'] += 1
 
         with open(file_path, "r", encoding="utf-8", errors="replace") as f:
             line_count = 0
@@ -311,7 +342,7 @@ def process_file(file_path, json_data):
             for line_number, text_line in enumerate(f, 1):
                 line_count += 1
                 if args.line_limit > 0 and line_count >= args.line_limit:
-                    TraceLog.warning(
+                    TraceLogger.warning(
                         f"Line Limit reached: stopped after {line_count} lines.")
                     break
 
@@ -323,30 +354,36 @@ def process_file(file_path, json_data):
                 if matched_info.lower().startswith('pan'):
                     pan = extract_pan_from_match(match_data)
                     if luhn_check(pan):
-                        Match_Count['PAN'] += 1
-                        PanLog.info(
+                        MatchCount['PAN'] += 1
+                        PanLogger.info(
                             f"{file_path}:{line_count}->{pan}: {matched_info}")
                     else:
-                        PanLog.info(
+                        PanLogger.info(
                             f"{file_path}:{line_count}->{pan} (Luhn Check: Failed)")
                     continue
 
                 if matched_info.lower().startswith('track'):
                     pan = extract_pan_from_match(match_data)
                     if luhn_check(pan):
-                        Match_Count['TRACK'] += 1
-                        PanLog.info(
+                        MatchCount['TRACK'] += 1
+                        PanLogger.info(
                             f"{file_path}:{line_count}->{match_data}: {matched_info}")
                     else:
-                        PanLog.info(
+                        PanLogger.info(
                             f"{file_path}:{line_count}->{match_data}: {matched_info} (Luhn Check: Failed)")
                     continue
 
                 if matched_info.lower().startswith('anti-pan'):
-                    Match_Count['ANTI-PAN'] += 1
+                    MatchCount['ANTI-PAN'] += 1
 
     except PermissionError:
-        TraceLog.warning(f"Skipping file due to PermissionError: {file_path}")
+        TraceLogger.warning(
+            f"Skipping file due to PermissionError: {file_path}")
+    except FileNotFoundError:
+        TraceLogger.warning(
+            f"Skipping file due to FileNotFoundError: {file_path}")
+    except Exception as e:
+        print_exception_info(e)
 
 
 # ===========================================================================
@@ -367,13 +404,13 @@ def scan_directory(dir_name, json_data):
 def scan_text_line(text_line, line_number, json_data):
     try:
         for section_name, section_data in json_data.items():
-            if _DEBUG:
-                TraceLog.debug(f"Checking section: {section_name}")
+            if LoggingDebug:
+                TraceLogger.debug(f"Checking section: {section_name}")
 
             for pattern_name, pattern_info in section_data.items():
-                if rgx_prefix is not None:
+                if RegexPatternPrefix is not None:
                     #  If we have a prefix, add it to the regex pattern
-                    regex_pattern = rgx_prefix + pattern_info['regex']
+                    regex_pattern = RegexPatternPrefix + pattern_info['regex']
                 else:
                     #  Otherwise, just use the regex pattern
                     regex_pattern = pattern_info['regex']
@@ -383,15 +420,16 @@ def scan_text_line(text_line, line_number, json_data):
 
                 if match:
                     regex_info = f"{section_name} '{pattern_name}': {regex_pattern}"
-                    if _DEBUG:
-                        TraceLog.debug(f"{regex_info} in line: {line_number}")
+                    if LoggingDebug:
+                        TraceLogger.debug(
+                            f"{regex_info} in line: {line_number}")
                     return regex_info, match.group(0)
 
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-exception-caught
         print_exception_info(e)
 
-    if _DEBUG:
-        TraceLog.debug(f"No match found for {text_line}")
+    if LoggingDebug:
+        TraceLogger.debug(f"No match found for {text_line}")
     return None, None
 
 
@@ -436,7 +474,7 @@ def load_json_data(filename):
 
     except FileNotFoundError:
         print_exception_info(f"Error: File '{filename}' not found.")
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-exception-caught
         print_exception_info(e)
 
     return None
@@ -467,7 +505,7 @@ def load_json_data(filename):
         print(f"Error: File '{filename}' not found.")
         return None
 
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-exception-caught
         print_exception_info(None)
 
 
@@ -475,26 +513,35 @@ def load_json_data(filename):
 # Version Information
 # ===========================================================================
 def printVersionInfo(argParse):
-    args = argParse.parse_args()
-    python_version = f"Python {sys.version}"
-    print(f"{argParse.prog} v{major}.{minor}.{patch}\n{python_version}")
-    if not args.version:
-        print("Command-line arguments:", list(sys.argv[1:]))
+
+    def format_version():
+        major, minor, patch = map(int, FindPANVersion.split())
+        return f"{argParse.prog} v{major}.{minor}.{patch}"
+
+    print(f"{format_version()}\nPython {sys.version}")
+
+    if not argParse.parse_args().version:
+        print("Command-line arguments: ", list(sys.argv[1:]))
 
 
 # ===========================================================================
 # Print Scan Summary Results
 # ===========================================================================
 def PrintScanSummary():
-    total_match_count = Match_Count['PAN'] + Match_Count['TRACK']
-    TraceLog.info("")
-    TraceLog.info("-- Processing Summary --")
-    TraceLog.info(f"Scanned {Match_Count['FILES'] - 1} files.")
-    TraceLog.info(f"Matched {Match_Count['PAN']} PANs.")
-    TraceLog.info(f"Matched {Match_Count['TRACK']} TRACKs.")
-    TraceLog.info(f"Skipped {Match_Count['ANTI-PAN']} Anti-PANs.")
-    TraceLog.info(f"Skipped {Match_Count['SKIPPED']} Files")
-    TraceLog.info(f"Total matches: {total_match_count}")
+    total_match_count = MatchCount['PAN'] + MatchCount['TRACK']
+    TraceLogger.info("")
+    TraceLogger.info("-- Processing Summary --")
+    TraceLogger.info(f"Matched {MatchCount['PAN']} PANs.")
+    TraceLogger.info(f"Matched {MatchCount['TRACK']} TRACKs.")
+    TraceLogger.info("")
+    TraceLogger.info(f"Skipped {MatchCount['SKIPPED']} Files")
+    TraceLogger.info(f"Skipped {MatchCount['ANTI-PAN']} Anti-PANs.")
+    TraceLogger.info(f"Skipped {MatchCount['EXEC']} Executable Files")
+    TraceLogger.info(f"Skipped {MatchCount['BINARY']} Binary Files")
+    TraceLogger.info("")
+    TraceLogger.info(f"Scanned      : {MatchCount['FILES'] - 1} files.")
+    TraceLogger.info(f"Total matches: {total_match_count}")
+    # TraceLogger.info(f"{MatchCount}")
 
 # ===========================================================================
 # Get the number of arguments passed
@@ -509,7 +556,7 @@ def get_num_args():
 # ===========================================================================
 
 
-def setupArgParse():
+def process_cmdline_arguments():
     log_dir = os.path.join(os.path.expanduser("~"), "Find-PAN-Logs")
     tar_dir = os.path.join(log_dir, "tar-temp")
     parser = argparse.ArgumentParser(
@@ -559,7 +606,7 @@ def setupArgParse():
     parser.add_argument(
         '--report-delta',
         type=int,
-        default=100,
+        default=500,
         help='Files to process before reporting progress.')
     parser.add_argument(
         '--verbose',
@@ -578,12 +625,10 @@ def setupArgParse():
         help='Print version information.')
 
     #  Parse command line arguments
-    if _VS_DEBUG:
+    if EnableVSArgParse:
         # debugging configuration here
-        # test_data_path = os.path.join(os.getcwd(),'test')
-        # args = parser.parse_args(['--path', test_data_path] )
+        args = parser.parse_args(['--path', os.path.join(os.getcwd(),'test')
         # args = parser.parse_args(['--version'] )
-        args = parser.parse_args()
     else:
         args = parser.parse_args()
 
@@ -604,7 +649,7 @@ def setupArgParse():
 def custom_tar_filter(tarinfo, path):
     # Ensure that tarinfo has a safe path (no absolute paths or path traversal)
     if ".." in tarinfo.name or tarinfo.name.startswith("/"):
-        TraceLog.warning(
+        TraceLogger.warning(
             f"Skipping potentially dangerous file: {
                 tarinfo.name}")
         return None  # Skip this file
@@ -619,8 +664,8 @@ def custom_tar_filter(tarinfo, path):
 
 
 def process_tar_file(args, json_data):
-    TraceLog.info("TAR File Scan")
-    TraceLog.info(f"Scanning {args.tar} using {args.tar_tmp} ...")
+    TraceLogger.info("TAR File Scan")
+    TraceLogger.info(f"Scanning {args.tar} using {args.tar_tmp} ...")
     with tarfile.open(args.tar, 'r:*') as tar:
         for tarinfo in tar:
             if tarinfo.isreg():
@@ -643,8 +688,8 @@ def process_tar_file(args, json_data):
 # Scan a filesystem / pathname for PAN data
 # ===========================================================================
 def process_filesystem(args, json_data):
-    TraceLog.info(f"Filesystem Scan")
-    TraceLog.info(f"Scanning {args.path} ...")
+    TraceLogger.info(f"Filesystem Scan")
+    TraceLogger.info(f"Scanning {args.path} ...")
     scan_directory(args.path, json_data)
 
 
@@ -659,11 +704,11 @@ def main(argParse):
     json_data = load_json_data(json_filename)
     if json_data:
         pan_patterns = {}
-        if _DEBUG:
+        if LoggingDebug:
             formatted_pan_patterns = json.dumps(json_data, indent=4)
             print(formatted_pan_patterns)
     else:
-        TraceLog.error("No JSON data file found.")
+        TraceLogger.error("No JSON data file found.")
         return
 
     # Scan a filesystem
@@ -677,7 +722,7 @@ def main(argParse):
         return
 
     # No valid arguments found
-    PanLog.error("Required arguments not found.")
+    PanLogger.error("Required arguments not found.")
     print("\n\n")
     argParse.print_help()
     argParse.exit(1)
@@ -690,36 +735,27 @@ if __name__ == '__main__':
     # -- Set up signal handler for keyboard interrupt
     signal.signal(signal.SIGINT, handle_interrupt)
 
-    # -- Initialize global variables
-    ProgramName = None
-    reportDelta = None
-    _DEBUG = None
-    _VERBOSE = None
-    rgx_prefix = None
-
     # -- Process command line arguments
-    argParse, args = setupArgParse()
+    argParse, args = process_cmdline_arguments()
 
     # -- Set default values from command line arguments
     ProgramName = argParse.prog
-    reportDelta = args.report_delta
-    _DEBUG = args.debug
-    _VERBOSE = args.verbose
+    ReportDelta = args.report_delta
+    LoggingDebug = args.debug
+    LoggingVerbose = args.verbose
 
     # -- Set the regular expression prefix
     if args.rgx_prefix:
-        rgx_prefix = r"[ '\"{]"
-    else:
-        rgx_prefix = None
+        RegexPatternPrefix = r"[ '\"{]"
 
     # -- Configure our loggers
     loggers = setup_custom_loggers(args)
-    PanLog = loggers['Log']
-    TraceLog = loggers['Trace']
+    PanLogger = loggers['Log']
+    TraceLogger = loggers['Trace']
 
     # -- Enumerate the command line arguments
     usage_info = enumerate_command_line_arguments(argParse)
-    TraceLog.info(f"{usage_info}")
+    TraceLogger.info(f"{usage_info}")
 
     try:
         # --  Main processing --
@@ -727,4 +763,4 @@ if __name__ == '__main__':
         PrintScanSummary()
 
     except KeyboardInterrupt:
-        TraceLog.error("KeyboardInterrupt caught in main()")
+        TraceLogger.error("KeyboardInterrupt caught in main()")
