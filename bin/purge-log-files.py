@@ -6,19 +6,19 @@
 #   ===========================================================================
 #
 #   MIT License
-#   
+#
 #   Copyright (c) 2023 David Means <w1t3h4t@gmail.com>
-#   
+#
 #   Permission is hereby granted, free of charge, to any person obtaining a copy
 #   of this software and associated documentation files (the "Software"), to deal
 #   in the Software without restriction, including without limitation the rights
 #   to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 #   copies of the Software, and to permit persons to whom the Software is
 #   furnished to do so, subject to the following conditions:
-#   
+#
 #   The above copyright notice and this permission notice shall be included in all
 #   copies or substantial portions of the Software.
-#   
+#
 #   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 #   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 #   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -29,13 +29,13 @@
 #   ===========================================================================
 
 import argparse
-import os
-import time
 import logging
+import os
 import platform
-from shutil import which
+import time
 from datetime import datetime
-from subprocess import call, CalledProcessError
+from shutil import which
+from subprocess import CalledProcessError, call
 
 _REPORTED = None
 
@@ -47,7 +47,9 @@ def init_logger():
     logging.basicConfig(level=logging.INFO, format=log_format)
     logger = logging.getLogger(__name__)
 
-    log_file = f"{os.path.basename(__file__).split('.')[0]}_{datetime.now().strftime('%Y%m%d')}.log"
+    log_file = f"{
+        os.path.basename(__file__).split('.')[0]}_{
+        datetime.now().strftime('%Y%m%d')}.log"
     file_handler = logging.FileHandler(log_file)
     file_handler.setFormatter(logging.Formatter(log_format))
     logger.addHandler(file_handler)
@@ -67,7 +69,8 @@ def get_file_age_in_days(file_path):
     elif hasattr(stat_info, 'st_birthtime'):
         creation_time = stat_info.st_birthtime
     else:
-        # Fallback: Use the last modification time as the creation time isn't available
+        # Fallback: Use the last modification time as the creation time isn't
+        # available
         creation_time = stat_info.st_mtime
 
     # Get the current time
@@ -130,17 +133,25 @@ def main(path, age, prefix):
             else:
                 logger.info(f"Retained {full_path}")
 
+
 #   ===========================================================================
 #   Main is here
 #   ===========================================================================
 logger = init_logger()
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="File deletion based on age and prefix.")
-    parser.add_argument("--path", type=str, required=True, help="Log file directory to process.")
-    parser.add_argument("--age", type=int, required=True, help="Age in days for file retention.")
-    parser.add_argument("--prefix", type=str, required=False, default='file-', help="The required log file prefix pattern.")
+    parser = argparse.ArgumentParser(
+        description="File deletion based on age and prefix.")
+    parser.add_argument("--path", type=str, required=True,
+                        help="Log file directory to process.")
+    parser.add_argument("--age", type=int, required=True,
+                        help="Age in days for file retention.")
+    parser.add_argument(
+        "--prefix",
+        type=str,
+        required=False,
+        default='file-',
+        help="The required log file prefix pattern.")
     args = parser.parse_args()
 
     main(args.path, args.age, args.prefix)
-
