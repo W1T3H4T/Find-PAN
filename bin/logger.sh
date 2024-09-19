@@ -36,6 +36,7 @@ log_message() {
     fi
 
     #   Log file defined and found
+    [[ -f "${_LOG_FILE}" ]] || touch "${_LOG_FILE}"
     if [[ -f "${_LOG_FILE}" ]]; then
         [[ $_LOG_TIMESTAMP -eq 1 ]] && (echo "[$TIMESTAMP] [$LEVEL] $MESSAGE" | tee -a ${_LOG_FILE} ) || \
             ( echo "[$LEVEL] $MESSAGE" | tee -a ${_LOG_FILE} )
