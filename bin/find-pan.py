@@ -33,16 +33,16 @@ import json
 import logging
 import os
 import re
+import shutil
 import signal
 import subprocess
 import sys
 import tarfile
 import traceback
-import shutil
-from datetime import datetime
 from collections import defaultdict
-import magic
+from datetime import datetime
 
+import magic
 
 # ===========================================================================
 # Global variables
@@ -105,7 +105,7 @@ def print_exception_info(e):
 # ===========================================================================
 def handle_interrupt(sig, frame):
     # Log the signal number
-    _TraceLogObj.error( f"KeyboardInterrupt caught (signal number: {sig}). Exiting.")
+    _TraceLogObj.error(f"KeyboardInterrupt caught (signal number: {sig}). Exiting.")
 
     # Log the stack frame details
     _TraceLogObj.debug("Stack frame at the time of interrupt:")
@@ -190,7 +190,7 @@ def setup_custom_loggers(args):
     log_file_handler = logging.FileHandler(pan_logfile)
     log_file_handler.setLevel(logging.DEBUG)
 
-    log_formatter = logging.Formatter( '%(asctime)s [%(levelname)s]: %(message)s')
+    log_formatter = logging.Formatter('%(asctime)s [%(levelname)s]: %(message)s')
     log_file_handler.setFormatter(log_formatter)
     pan_logger.addHandler(log_file_handler)
 
@@ -250,7 +250,7 @@ def is_executable(file_path) -> bool | None:
 def is_binary(file_path):
     binary_triggers = {"0x00": [], "0xFF": []}
 
-    if not _Args.skip_binary: # pylint: disable=possibly-used-before-assignment
+    if not _Args.skip_binary:  # pylint: disable=possibly-used-before-assignment
         # Do not perform binary file check
         return False
 
@@ -296,7 +296,7 @@ def luhn_check(num):
 # ===========================================================================
 def calculate_delta():
     # pylint: disable=global-statement,possibly-used-before-assignment
-    global _LastReportDelta 
+    global _LastReportDelta
 
     this_delta = _MatchCount['FILES']
     if _LastReportDelta < this_delta and this_delta % ReportDelta == 0:
@@ -343,7 +343,7 @@ def process_file(file_path, json_data):
                         f"Line Limit reached: stopped after {line_count} lines.")
                     break
 
-                matched_info, match_data = scan_text_line( text_line, line_number, json_data)
+                matched_info, match_data = scan_text_line(text_line, line_number, json_data)
                 if match_data is None:
                     continue
 
@@ -373,15 +373,15 @@ def process_file(file_path, json_data):
                     _MatchCount['ANTI-PAN'] += 1
 
     except PermissionError:
-        _TraceLogObj.warning( f"Skipping file due to PermissionError: {file_path}")
+        _TraceLogObj.warning(f"Skipping file due to PermissionError: {file_path}")
 
     except FileNotFoundError:
-        _TraceLogObj.warning( f"Skipping file due to FileNotFoundError: {file_path}")
+        _TraceLogObj.warning(f"Skipping file due to FileNotFoundError: {file_path}")
 
     except IOError as e:
         _TraceLogObj.warning(f"Skipping file due to IOError: {file_path} - {e}")
 
-    except Exception as e: 
+    except Exception as e:
         print_exception_info(e)
 
 
@@ -453,7 +453,7 @@ def extract_pan_from_match(match_data):
 # ===========================================================================
 def find_secure_delete_program():
 
-    nt = [ 'sdelete64.exe', 'sdelete.exe' ]
+    nt = ['sdelete64.exe', 'sdelete.exe']
     posix = ['shred', 'gshred']
 
     if os.name == 'posix':
@@ -461,14 +461,14 @@ def find_secure_delete_program():
             tool_path = shutil.which(tool)
             if tool_path:
                 _TraceLogObj.info(f"Using {os.name} {tool_path} for secure delete.")
-                return [tool_path,'-u']
+                return [tool_path, '-u']
 
     if os.name == 'nt':
         for tool in nt:
             tool_path = shutil.which(tool)
             if tool_path:
                 _TraceLogObj.info(f"Using {os.name} {tool_path} for secure delete.")
-                return [tool_path] 
+                return [tool_path]
 
     _TraceLogObj.warning(f"No Secure delete app found for {os.name}.")
     return None  # Unsupported operating system
@@ -478,7 +478,7 @@ def find_secure_delete_program():
 # Securely delete a file
 # ===========================================================================
 def secure_delete(secure_del_app, file_path):
-    
+
     try:
         if secure_del_app is None:
             os.remove(file_path)
@@ -499,7 +499,7 @@ def secure_delete(secure_del_app, file_path):
 # ===========================================================================
 def load_json_data(filename):
     try:
-        with open(filename, 'r', encoding="utf-8", errors="replace")  as file:
+        with open(filename, 'r', encoding="utf-8", errors="replace") as file:
             data = json.load(file)
             return data
 
@@ -519,7 +519,7 @@ def enumerate_command_line_arguments(arg_parse):
     print_version_info(arg_parse)
     argument_list = ['']
     for arg, value in vars(args).items():
-        arg = str(arg).replace("_","-")
+        arg = str(arg).replace("_", "-")
         argument_list.append(f'--{arg}={value}\n')
     return '\nParameters and Defaults\n' + ' '.join(argument_list)
 
@@ -580,22 +580,22 @@ def process_cmdline_arguments():
     ##
     # Mutable Processing Arguments
     ##
-    parser.add_argument( '--path', help='Filesystem pathname to scan.', type=str, default=None)
-    parser.add_argument( '--tar', help='TAR file path.', type=str, default=None)
-    parser.add_argument( '--tar-tmp', help='Temporary directory for tar file extraction.', default=tar_dir)
-    parser.add_argument( '--log-dir', help='Directory for log files.', default=log_dir)
-    parser.add_argument( '--skip-binary', help='Skip binary files.', action='store_true', default=False)
-    parser.add_argument( '--patterns', help='JSON file containing PAN and TRACK regular expressions.', type=str,
+    parser.add_argument('--path', help='Filesystem pathname to scan.', type=str, default=None)
+    parser.add_argument('--tar', help='TAR file path.', type=str, default=None)
+    parser.add_argument('--tar-tmp', help='Temporary directory for tar file extraction.', default=tar_dir)
+    parser.add_argument('--log-dir', help='Directory for log files.', default=log_dir)
+    parser.add_argument('--skip-binary', help='Skip binary files.', action='store_true', default=False)
+    parser.add_argument('--patterns', help='JSON file containing PAN and TRACK regular expressions.', type=str,
                         default=f'{_JSONPtrnPrefixPath}/find-pan-patterns.json')
-    parser.add_argument( '--line-limit', help='Line scan limit per file.', type=int, default=0)
-    parser.add_argument( '--rgx-prefix', help='Prefix for regular expressions.', default=False, action='store_true')
-    parser.add_argument( '--report-delta', type=int, default=500, help='Files to process before reporting progress.')
+    parser.add_argument('--line-limit', help='Line scan limit per file.', type=int, default=0)
+    parser.add_argument('--rgx-prefix', help='Prefix for regular expressions.', default=False, action='store_true')
+    parser.add_argument('--report-delta', type=int, default=500, help='Files to process before reporting progress.')
     ##
     # Non-functional Arguments
     ##
-    parser.add_argument( '--verbose', default=False, action='store_true', help='Verbose output.')
-    parser.add_argument( '--debug', default=False, action='store_true', help='Enable debug logging.')
-    parser.add_argument( '--version', default=False, action='store_true', help='Print version information.')
+    parser.add_argument('--verbose', default=False, action='store_true', help='Verbose output.')
+    parser.add_argument('--debug', default=False, action='store_true', help='Enable debug logging.')
+    parser.add_argument('--version', default=False, action='store_true', help='Print version information.')
 
     #  Parse command line arguments
     if _EnableVSArgParams:
@@ -734,4 +734,3 @@ if __name__ == '__main__':
 
     except KeyboardInterrupt:
         _TraceLogObj.error("KeyboardInterrupt caught in '__main__'")
-
