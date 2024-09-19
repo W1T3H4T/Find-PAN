@@ -36,8 +36,8 @@ import time
 from datetime import datetime
 from shutil import which
 from subprocess import CalledProcessError, call
-
 _REPORTED = None
+
 
 #   ===========================================================================
 #   Initialize the Logger
@@ -84,6 +84,7 @@ def get_file_age_in_days(file_path):
 
     return age_in_days
 
+
 #   ===========================================================================
 #   Delete old files
 #   ===========================================================================
@@ -118,6 +119,7 @@ def delete_file(file_path):
             _REPORTED = True
         logger.info(f"Removed {file_path}")
 
+
 #   ===========================================================================
 #   Main
 #   ===========================================================================
@@ -138,7 +140,6 @@ def main(path, age, prefix):
 #   Main is here
 #   ===========================================================================
 logger = init_logger()
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="File deletion based on age and prefix.")

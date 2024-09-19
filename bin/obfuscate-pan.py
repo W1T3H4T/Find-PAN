@@ -32,6 +32,7 @@ import sys
 unique_numbers = set()  # Store unique obfuscated numbers
 card_pattern = r"(\d{6})(\d+)(\d{4}$)"  # Regex for card pattern
 
+
 #   =================================================================
 #   Function to replace the middle digits with '*' and add two
 #   hyphens evenly spaced
