@@ -63,9 +63,11 @@ def process_pattern_data(pattern_data, card_type):
 
     return integers_array
 
-##  ===========================================================================
-##  Pattern generation functions
-##  ===========================================================================
+# ===========================================================================
+# Pattern generation functions
+# ===========================================================================
+
+
 def get_card_prefix_digits(json_data, card_type):
     card_regex = json_data['PAN Pattern'][card_type]['regex']
 
@@ -95,9 +97,11 @@ def generate_numbers(pattern):
     # print(f"Numbers: {numbers}")
     return numbers
 
-##  ===========================================================================
-##  PAN generation functions
-##  ===========================================================================
+# ===========================================================================
+# PAN generation functions
+# ===========================================================================
+
+
 def generate_pan_numbers(json_data, card_type):
     card_pattern = json_data['PAN Pattern'][card_type]['regex']
     card_len_pattern = json_data['PAN Pattern'][card_type]['length']
@@ -183,9 +187,11 @@ def get_pan_pattern_sections(json_data):
     else:
         return []
 
-##  ==========================================================================
-##  Select a REGEX prefix character
-##  ==========================================================================
+# ==========================================================================
+# Select a REGEX prefix character
+# ==========================================================================
+
+
 def format_pan(args, pan):
 
     if args.delimited:
