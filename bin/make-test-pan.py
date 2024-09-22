@@ -15,17 +15,21 @@ import traceback
 
 # _JSONPtrnPrefixPath = "/usr/local/Find-PAN/patterns"
 _JSONPtrnPrefixPath = "/Users/dmeans/Library/CloudStorage/OneDrive-Personal/Projects/W1T3H4T/Find-PAN/patterns"
-_EnableVSArgParams =True
+_EnableVSArgParams = False
+_Parse_Arge = ""
 
 # ===========================================================================
 # log_debug()
 # ===========================================================================
-def log_debug(message=None, myFile=sys.stderr) -> None:
+def log_debug(message: str, myFile=sys.stderr) -> None:
     if message is None:
         return
 
-    if parse_args.debug:
+    if _Parse_Args.debug == True:
+        if message[0] != '-':
+            print("",file=myFile)
         print(message, file=myFile)
+
 
 # ===========================================================================
 # Print consolidated exception info
@@ -51,8 +55,7 @@ def print_exception_info(e):
 
     exception_message = str(exc_value)
 
-    print(
-        f"Exception occurred in function: '{func_name}', at line: {line_number}, in file: '{file_name}'")
+    print(f"Exception occurred in function: '{func_name}', at line: {line_number}, in file: '{file_name}'")
     print(f"Exception type: {exc_type.__name__}, Message: {exception_message}")
     sys.exit(1)
 
@@ -60,34 +63,35 @@ def print_exception_info(e):
 # ===========================================================================
 # Pattern generation functions
 # ===========================================================================
-def get_card_prefix_values(pattern_data, card_type):
+def get_card_prefix_values(pattern_data: list[str], card_type: str) -> list[int]:
     """
-    This function processes pattern data based on the specified card type.
+    Return the discrete prefix values as a list
 
     :param: pattern_data    The pattern data related to card type
     :param: card_type       The card brand, e.g., Visa, Mastercard, American Express, etc
     """
     integers_array = []
-    log_debug(f"get_card_prefix_values(pattern_data={pattern_data}, card_type={card_type})", sys.stderr)
+    log_debug(f"get_card_prefix_values(pattern_data={pattern_data}, card_type={card_type})")
 
-    patterns = pattern_data.split('|')
+    for data in  pattern_data:
+        patterns = data.split('|')
 
-    for pattern in patterns:
-        if '[' in pattern and ']' in pattern:
-            # Extract the integer and range from the pattern using a corrected
-            # regular expression
-            match = re.match(r'(\d+)\[(\d+)-(\d+)\]', pattern)
-            if match:
-                integer_part, start, end = match.groups()
-                # Convert to integers
-                integer = int(integer_part)
-                start, end = int(start), int(end)
-                # Append the integer and the range values to the array
-                integers_array.extend(
-                    [integer * 10 + num for num in range(start, end + 1)])
-        elif pattern.isdigit():
-            # Append the integer to the array
-            integers_array.append(int(pattern))
+        for pattern in patterns:
+            if '[' in pattern and ']' in pattern:
+                # Extract the integer and range from the pattern using a corrected
+                # regular expression
+                match = re.match(r'(\d+)\[(\d+)-(\d+)\]', pattern)
+                if match:
+                    integer_part, start, end = match.groups()
+                    # Convert to integers
+                    integer = int(integer_part)
+                    start, end = int(start), int(end)
+                    # Append the integer and the range values to the array
+                    integers_array.extend(
+                        [integer * 10 + num for num in range(start, end + 1)])
+            elif pattern.isdigit():
+                # Append the integer to the array
+                integers_array.append(int(pattern))
 
     return integers_array
 
@@ -97,23 +101,35 @@ def get_card_prefix_values(pattern_data, card_type):
 # ===========================================================================
 def get_card_prefix_pattern(JsonData, card_type):
     """
-    This function extracts the prefix digits for a specific card type
+    This function returns the PAN prefix digits for card_type
 
-    :param dict JsonData:    This variable contains the JSON data.
+    :param dict JsonData:   This variable contains the JSON data.
     :param str card_type:   credit card type, such as Visa, Mastercard, etc
-    :return:            The prefix digits associated with 'card_type'
+    :return:                The prefix digits associated with 'card_type'
+    :rtype: list
     """
-    card_regex = JsonData['PAN Pattern'][card_type]['regex']
+    log_debug(f"get_card_prefix_pattern('JsonData', card_type={card_type})")
 
-    # Regular expression to match a string surrounded by parentheses
-    regex_pattern = r'\((.*?)\)'
+    card_regex_patterns = []
+    json_cardtype_regex = []
+    json_cardtype_regex = JsonData['PAN Pattern'][card_type]['regex']
+    log_debug(f"-> Got REGEX {json_cardtype_regex} for {card_type}")
 
-    # Search for the pattern within parentheses
-    match = re.search(regex_pattern, card_regex)
+    # Extract the PAN/CARD prefix data from the regular expression(s)
+    # used to detect the PAN data: extract the pattern surrounded by '()'
+    regex_finder = r'\((.*?)\)'
 
-    # If a match is found, return the string inside parentheses, otherwise
-    # return the pattern as is
-    return match.group(1) if match else regex_pattern
+    # Retrieve the prefix pattern data from within parentheses
+    for data in json_cardtype_regex:
+        match = re.search(regex_finder, data)
+        if match:
+            log_debug(f"-> Found: {match.group(1)}")
+            card_regex_patterns.append(match.group(1))
+        else:
+            print(f"-> Couldn't find a '(pattern)' in {data} for {card_type}", file=sys.stderr)
+            sys.exit(1)
+
+    return card_regex_patterns
 
 
 # ===========================================================================
@@ -121,7 +137,7 @@ def get_card_prefix_pattern(JsonData, card_type):
 # ===========================================================================
 def get_pan_length_values( pattern=None ) ->list:
     """
-    Returns a list of numbers based on the pattern provided.
+    Returns a list PAN prefix numbers based on the pattern provided.
 
     :param str pattern: The pattern for generating numbers. The pattern can be a single
                         number or a range specified using a hyphen (e.g., "1-10" for numbers 1 to 10)
@@ -131,7 +147,7 @@ def get_pan_length_values( pattern=None ) ->list:
             list containing that single number.
     :rtype: list of int
     """
-    log_debug(f"get_pan_length_values(pattern={pattern}")
+    log_debug(f"get_pan_length_values(pattern={pattern})")
 
     if pattern is None:
         print(f"Error: 'pattern' is {pattern}")
@@ -153,7 +169,7 @@ def get_pan_length_values( pattern=None ) ->list:
 #   =================================================================
 #   test_pan_with_pattern
 #   =================================================================
-def test_pan_with_pattern(pan=None, pattern=None) -> bool:
+def test_pan_with_pattern(pan: str, pattern: list[str], card_type: str) -> bool:
     """
     :param str pan:     The PAN to check
     :param str pattern: The regex to check the PAN
@@ -166,17 +182,18 @@ def test_pan_with_pattern(pan=None, pattern=None) -> bool:
         print(f"-> Error: 'pan' = [{pan}], 'pattern' = [{pattern}]'", file=sys.stderr)
         sys.exit(1)
 
-    matches = re.search(pattern, pan)
+    for regex in pattern:
+        matches = re.search(regex, pan)
 
-    if matches:
-        log_debug(f"-> Found a valid PAN: {pan}!!")
-        return True
-    else:
-        print(f"Error: No pattern match for pan={pan}", file=sys.stderr)
-        print(f"pattern={pattern}", file=sys.stderr)
-        print(f"matches={matches}", file=sys.stderr)
-        sys.exit(1)
-    return False 
+        if matches:
+            log_debug(f"-> Found a valid PAN: {pan}!!")
+            return True
+
+    print(f"Error: No pattern match for pan={pan}, length={len(pan)}", file=sys.stderr)
+    print(f"card type= {card_type}")
+    print(f"pattern  = {regex}", file=sys.stderr)
+    print(f"matches  = {matches}", file=sys.stderr)
+    sys.exit(1)
 
 #   =================================================================
 #   generate_pan_for_length
@@ -269,8 +286,8 @@ def generate_pan_for_card_type(JsonData = None, card_type = None) -> list:
                 local_pan = '4111111111111112' #  bad value
                 while not luhn_check(local_pan):
                     local_pan = generate_pan_for_length(pan_prefix, pan_length)
-                    if test_pan_with_pattern(local_pan, pan_regex):
-                        log_debug("-> Saved {local_pan}")
+                    if test_pan_with_pattern(local_pan, pan_regex, card_type):
+                        log_debug(f"-> Saved {local_pan}")
                         pan_array.append(local_pan)
                     else:
                         local_pan = '4111111111111112' #  bad value
@@ -309,8 +326,6 @@ def calculate_luhn_digit(pan):
     :return:    The function `calculate_luhn_digit` returns a string representing the Luhn digit calculated
                 based on the input Primary Account Number (PAN).
     """
-    # if parse_args.debug:
-    #     print(f"-> Calculating Luhn digit for {pan}", file=sys.stderr)
     digits = list(map(int, pan))
     checksum = sum(digits[-1::-2]) + sum(sum(divmod(2 * d, 10)) for d in digits[-2::-2])
     return str((10 - checksum % 10) % 10)
@@ -330,7 +345,7 @@ def load_json_data(file_path):
         return json.load(json_file)
 
 
-def get_pan_pattern_sections(JsonData):
+def get_pan_pattern_sections(JsonData, section='PAN Pattern'):
     """
     The function `get_pan_pattern_sections` extracts keys (card brandss) from the 'PAN Pattern' section of a JSON data
     object.
@@ -338,21 +353,21 @@ def get_pan_pattern_sections(JsonData):
     :param JsonData:   The JSON data itself.
     :return:            Thee list of regular expressions associated with 'PAN Pattern'
     """
-    if 'PAN Pattern' in JsonData:
-        pan_patterns = JsonData['PAN Pattern']
-        if parse_args.debug:
-            print(f"-> PAN Card Brands='{pan_patterns.keys()}'", file=sys.stderr)
+    log_debug(f"get_pan_pattern_secions('JsonData', {section})")
+    if section in JsonData:
+        pan_patterns = JsonData[section]
+        log_debug(f"-> PAN Card Brands='{pan_patterns.keys()}")
         return list(pan_patterns.keys())
     else:
         return []
 
 
-def format_pan(parse_args, pan):
+def format_pan(pan):
     """
     The function `format_pan` formats a PAN (Primary Account Number) based on the provided arguments,
     including whether to use delimiters.
 
-    :param parse_args: The command-line arguments provided to the script, which includes
+    :param _Parse_Args: The command-line arguments provided to the script, which includes
                 the --delimited  option to format the PAN with delimiters.
     :param pan: The `pan` is the Primary Account Number (PAN) generated by the script, which is a
                 unique number used to identify the cardholder and is typically found on
@@ -360,7 +375,7 @@ def format_pan(parse_args, pan):
     :return:    Pan pattern with a random character from a list of characters associated with
                 --delimited
     """
-    if parse_args.delimited:
+    if _Parse_Args.delimited:
         rgx_prefix = r"[ '\"{]"
         rgx_rejected = r"[]\\"
         char = random.choice([c for c in rgx_prefix if c not in rgx_rejected])
@@ -383,9 +398,9 @@ try:
     parser.add_argument("--count", type=int, default=100, help="Number of patterns to create for each PAN type.")
     parser.print_help(file=sys.stderr)
     if not _EnableVSArgParams:
-        parse_args = parser.parse_args()
+        _Parse_Args = parser.parse_args()
     else:
-        parse_args = parser.parse_args( ["--count","1","--debug"] )
+        _Parse_Args = parser.parse_args( ["--count","1","--debug"] )
 
     _ProgramName = os.path.basename(sys.argv[0])
 
@@ -398,7 +413,6 @@ try:
         pan_prefix_pattern  = get_card_prefix_pattern(json_data, card_name)
         pan_prefix_values   = get_card_prefix_values(pan_prefix_pattern, card_name)
 
-
         print( "##  ====================================================================")
         print(f"##  PCI Brand   : {card_name}")
         print(f"##  BIN Prefixes: {pan_prefix_pattern}")
@@ -406,10 +420,10 @@ try:
         print( "##  ====================================================================")
 
         count = 0
-        while count < parse_args.count:
+        while count < _Parse_Args.count:
             pan_data = generate_pan_for_card_type(json_data, card_name)
             for pan in pan_data:
-                print(format_pan(parse_args, pan))
+                print(format_pan(pan))
             count += 1
 
 except Exception as e:
