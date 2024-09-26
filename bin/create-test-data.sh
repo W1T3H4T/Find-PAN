@@ -1,8 +1,23 @@
 #!/bin/bash
-thisHome=$HOME/Projects/W1T3H4T/Find-PAN
+thisHome=$(pwd)
 thisTest=${thisHome}/test
 declare -i count=0
-declare -i max=100
+declare -i max=50
+
+function promptUser() {
+    echo "NOTICE: Test data will be created in ${thisTest}"
+    read -p "Continue (yes/NO)? " response
+    response=${response:-no}
+    response_lower=$(echo "$response" | tr '[:upper:]' '[:lower:]')
+    
+    if [[ "$response_lower" == "y" || "$response_lower" == "yes" ]]; then
+        return 1
+    else
+        echo "Exiting. No test data will be created."
+        exit 1
+    fi
+    return 0
+}
 
 function printCount() { 
     myCount=$1
@@ -10,16 +25,21 @@ function printCount() {
         echo -n " ${count},"
     fi
 }
+
+#   Prompt the user to continue or not
+promptUser
+[[ $? -ne 1 ]] && exit 1
+
 echo "Building $(( ${max} * 2 )) test PAN & Track data files"
 while [[ $count -lt $max  ]]; do
-    create-pan-data.py   --count 50              > ${thisTest}/pan-log-file-${count}.log
-    create-pan-data.py   --count 50 --delimited >> ${thisTest}/pan-log-file-${count}.log
-    create-track-data.py --count 50              > ${thisTest}/track-log-file-${count}.log
-    create-track-data.py --count 50 --delimited >> ${thisTest}/track-log-file-${count}.log
+    make-test-pan.py   --count 10              > ${thisTest}/pan-log-file-${count}.log
+    make-test-pan.py   --count 10 --delimited >> ${thisTest}/pan-log-file-${count}.log
+    make-test-track.py --count 10             > ${thisTest}/track-log-file-${count}.log
+    make-test-track.py --count 10 --delimited >> ${thisTest}/track-log-file-${count}.log
     count=$(( count + 1 ))
     printCount $count
     #echo "${thisTest}/track-log-file-${count}.log: done"
     #echo "${thisTest}/pan-log-file-${count}.log: done"
 done
 echo
-ls -l test/pan-log-file*
+ls -l ${thisTest}/*.log
