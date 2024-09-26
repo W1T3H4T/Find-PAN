@@ -2,9 +2,9 @@
 bin_SCRIPTS = \
 	../bin/logger.sh \
 	../bin/create-logs-for-purge-test.py \
-	../bin/create-pan-data.py \
+	../bin/make-test-pan.py \
 	../bin/create-test-data.sh \
-	../bin/create-track-data.py \
+	../bin/make-test-track.py \
 	../bin/find-pan.py \
 	../bin/get-strings.sh \
 	../bin/grep-find-pan.sh \
@@ -12,13 +12,18 @@ bin_SCRIPTS = \
 	../bin/obfuscate-pan.py \
 	../bin/purge-log-files.py \
 	../bin/regex-test.py \
+	../bin/test-env-conf.sh \
 	../bin/test_luhn_check.py 
-#
+
 # Specify patterns directory files
-patternsdir = $(prefix)/patterns
+patternsdir = $(prefix)/etc
 patterns_DATA = \
-   	../patterns/find-pan-patterns.json \
-	../patterns/find-pan-patterns.schema.json
+   	../etc/find-pan-patterns.json \
+	../etc/find-pan-patterns.schema.json
+
+# Install env.conf in $(prefix)/etc
+etcdir = $(prefix)/etc
+etc_DATA = ../etc/env.conf
 
 # Documentation and other files
 dist_doc_DATA = ../README.md ../LICENSE ../requirements.txt
@@ -27,6 +32,8 @@ dist_doc_DATA = ../README.md ../LICENSE ../requirements.txt
 install-exec-hook:
 	@echo "Updating PATH in .bashrc"
 	echo "export PATH=\$$PATH:$(bindir):$(toolsdir)" >> $(HOME)/.bashrc
+	@echo "Changing ownership of $(prefix)"
+
 
 uninstall-hook:
 	@echo "Removing $(bindir) from PATH"
