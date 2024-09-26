@@ -1,47 +1,26 @@
 #!/usr/bin/env python3
 #  ===========================================================================
-#  Name    :    create-track-data.py
+#  Name    :    make-test-track.py
 #  Function:    Create test patterns for track data
 #  Author  :    David Means <w1t3h4t@gmail.com>
-#  ===========================================================================
-#
-#  MIT License
-#
-#  Copyright (c) 2023 David Means
-#
-#  Permission is hereby granted, free of charge, to any person obtaining a copy
-#  of this software and associated documentation files (the "Software"), to deal
-#  in the Software without restriction, including without limitation the rights
-#  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-#  copies of the Software, and to permit persons to whom the Software is
-#  furnished to do so, subject to the following conditions:
-#
-#  The above copyright notice and this permission notice shall be included in all
-#  copies or substantial portions of the Software.
-#
-#  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-#  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-#  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-#  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-#  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-#  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-#  SOFTWARE.
 #  ===========================================================================
 
 import argparse
 import random
-import re
 import string
 from datetime import datetime
 
 import names
 from random_address import real_random_address
 
+_Parse_Args = None
 
 # =======================================================
 # Calculate LUHN Checksum
 # =======================================================
-def luhn_checksum(card_number):
+
+
+def luhn_checksum(card_number: str) -> int:
     def digits_of(n):
         return [int(d) for d in str(n)]
     digits = digits_of(card_number)
@@ -52,18 +31,19 @@ def luhn_checksum(card_number):
         checksum += sum(digits_of(d * 2))
     return checksum % 10
 
-
 # =======================================================
 # Generate PAN
 # =======================================================
-def generate_luhn_valid_pan(length):
-    pan = "111111"
-    while not (luhn_checksum(pan) == 0):
+
+
+def generate_luhn_valid_pan(length: int) -> str:
+    pan = "111111"  # default value used initially fail luhn_checksum
+    while not luhn_checksum(pan) == 0:
         pan = random.choice(['3', '4', '5', '6'])
         # Generate a random PAN of length-2
         pan += ''.join(str(random.randint(0, 9)) for _ in range(length - 2))
-        checksum_digit = (10 - luhn_checksum(pan + '0')
-                          ) % 10  # Calculate Luhn checksum
+        # Calculate Luhn checksum
+        checksum_digit = (10 - luhn_checksum(pan + '0')) % 10
         pan = pan + str(checksum_digit)  # Append checksum digit to the PAN
     return pan
 
@@ -86,6 +66,8 @@ def generate_random_address():
         # return f"{data['address1']} {data['city']} {data['state']}
         # {data['postalCode']}"
         return f"{data['postalCode']}"
+
+    # pylint: disable=W0718
     except Exception:
         pass
     return "30308"
@@ -155,7 +137,7 @@ def generate_track1_data():
 def generate_track2_data():
     pan_lengths = [13, 15, 16, 19]
     pan = generate_luhn_valid_pan(random.choice(pan_lengths))
-    name = generate_random_name()
+    # name = generate_random_name()
     expiration_date = generate_valid_date()
     service_code = generate_service_code()
     discretionary_data = generate_discretionary_data()
@@ -180,22 +162,16 @@ def format_track(args, pan):
 
 
 # =======================================================
-# MAIN
+# Main is here
 # =======================================================
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Generate random track data based on provided patterns.")
-    parser.add_argument(
-        "--delimited",
-        default=False,
-        action="store_true",
-        help="Create data with prefix anchors")
-    parser.add_argument(
-        "--count",
-        type=int,
-        default=200,
-        help="Number of patterns to create for each track type")
-    args = parser.parse_args()
+    parser.add_argument("--delimited", default=False, action="store_true",
+                        help="Create data with prefix anchors")
+    parser.add_argument("--count", type=int, required=True,
+                        help="Number of patterns to create for each track type")
+    _Parse_Args = parser.parse_args()
 
     # Generate and print N track data for each track pattern
     track_generators = [generate_track1_data, generate_track2_data]
@@ -203,6 +179,6 @@ if __name__ == "__main__":
         print("##  ====================================================================")
         print(f"##  Generated data for {generator.__name__}")
         print("##  ====================================================================")
-        for _ in range(args.count):
+        for _ in range(_Parse_Args.count):
             track_data = generator()
-            print(format_track(args, track_data))
+            print(format_track(track_data))

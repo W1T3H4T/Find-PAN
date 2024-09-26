@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 #  ===========================================================================
-#  Name    :    create-pan-data.py
+#  Name    :    make-test-pan.py
 #  Function:    Create test patterns for credit card numbers
 #  Author  :    David Means <w1t3h4t@gmail.com>
 #  ===========================================================================
 """
-Module create_pan_data
+Module make_test_pan
 
-This script consumes the JSON regex file and creates appropriate test data.
+This script consumes the configured JSON regex file and creates appropriate test data.
 """
 
 import argparse
@@ -25,8 +25,9 @@ _Parse_Args = ""
 
 
 #   =================================================================
+#   Log a debug message
+#   =================================================================
 def log_debug(message: str, myFile=sys.stderr):
-    #   =================================================================
     """
     Prints debug information
     :param str message:     The info to print
@@ -42,26 +43,31 @@ def log_debug(message: str, myFile=sys.stderr):
 
 
 #   =================================================================
+#   Log an error message and abort
+#   =================================================================
 def log_error(message: str, stop: bool = True, myFile=sys.stderr) -> None:  # pylint: disable=R1711
-    #   =================================================================
     """
     Prints an error message, stop the program by default
     :param str message:     The info to print
-    :param bool stop:       Stop the program
+    :param bool stop:       Abort the program
     :param file myFile:     The output stream
     """
     caller_frame = sys._getframe(1)     # pylint: disable=W0212
     line_number = caller_frame.f_lineno
-    print(f"Error: {message} (called from line {line_number})", file=myFile)
+    print(f"Error: {message}\n",
+          f"      -> Line {line_number} of"
+          f" {os.path.basename(__file__)}",
+          file=myFile)
     if stop:
+        print("Abort", file=sys.stderr)
         sys.exit(1)
     return None
 
+
 #   =================================================================
-
-
+#   Handle an exception
+#   =================================================================
 def print_exception_info(e):
-    #   =================================================================
     """
     Prints exception information, stops the progam
     :param str e:   Exception message, or userdefinded info
@@ -92,8 +98,9 @@ def print_exception_info(e):
 
 
 #   =================================================================
+#   Convert the PCI prefixes into literal values
+#   =================================================================
 def get_card_prefix_values(pattern_data: List[str], card_type: str) -> list[int]:
-    #   =================================================================
     """
     Return the discrete prefix values as a list
     :param list pattern_data:   The pattern data related to card type
@@ -128,8 +135,9 @@ def get_card_prefix_values(pattern_data: List[str], card_type: str) -> list[int]
 
 
 #   =================================================================
+#   Get all of the PCI prefix values for this card type
+#   =================================================================
 def get_card_prefix_pattern(JsonData, card_type) -> list[str]:
-    #   =================================================================
     """
     This function returns the PAN prefix digits for card_type
 
@@ -156,14 +164,15 @@ def get_card_prefix_pattern(JsonData, card_type) -> list[str]:
             log_debug(f"-> Found: {match.group(1)}")
             card_regex_patterns.append(match.group(1))
         else:
-            return log_error(f"-> Couldn't find a '(pattern)' in {data} for {card_type}")
+            return log_error(f"-> Couldn't find and elisped '(pattern)' in '{data}' for '{card_type}'")
 
     return card_regex_patterns
 
 
 #   =================================================================
+#   Get all of the valid lengths for this PAN
+#   =================================================================
 def get_pan_length_values(pattern=None) -> list[int]:
-    #   =================================================================
     """
     Returns a list PAN prefix numbers based on the pattern provided.
 
@@ -190,11 +199,11 @@ def get_pan_length_values(pattern=None) -> list[int]:
     return numbers
     # pylint: disable=R1710
 
+
 #   =================================================================
-
-
+#   Given a PAN, test it against a regex pattern
+#   =================================================================
 def test_pan_with_pattern(pan: str, pattern: List[str], card_type: str) -> bool:
-    #   =================================================================
     """
     :param str pan:         The PAN to check
     :param str pattern:     The regex to check the PAN
@@ -203,14 +212,14 @@ def test_pan_with_pattern(pan: str, pattern: List[str], card_type: str) -> bool:
     :rtype:     bool
     """
     log_debug(f"test_pan_with_pattern(pan={pan}, pattern={pattern})")
-    outer_regex = ""
+    outer_regex = ""    # only for error reporting
     if pan is None or pattern is None:
         message = "Required parameters for 'test_pan_with_pattern()' not found\n"
         message += f"-> 'pan' = [{pan}], 'pattern' = [{pattern}]'"
         return log_error(message)
 
     for regex in pattern:
-        outer_regex = regex
+        outer_regex = regex  # only for error reporting
         matches = re.search(regex, pan)
 
         if matches:
@@ -223,11 +232,11 @@ def test_pan_with_pattern(pan: str, pattern: List[str], card_type: str) -> bool:
     message += f"matches  = {matches}\n"
     return log_error(message)
 
+
 #   =================================================================
-
-
+#   Given a PAN length, generate the PAN number
+#   =================================================================
 def generate_pan_for_length(prefix=None, pan_length=0) -> str:
-    #   =================================================================
     """
     Create a PAN using a Prefix and a Length.
 
@@ -268,8 +277,9 @@ def generate_pan_for_length(prefix=None, pan_length=0) -> str:
 
 
 #   =================================================================
+#   Generate a PAN for a given card type
+#   =================================================================
 def generate_pan_for_card_type(JsonData=None, card_type=None) -> list:
-    #   =================================================================
     """
     Generate valid PAN numbers based the provided card type and PAN pattern data.
 
@@ -332,8 +342,9 @@ def generate_pan_for_card_type(JsonData=None, card_type=None) -> list:
 
 
 #   =================================================================
+#   Perform a check sum
+#   =================================================================
 def luhn_check(num: str) -> bool:
-    #   =================================================================
     """
     Validate a given number using the Luhn algorithm to determine if it is a
     valid credit card number.
@@ -351,8 +362,9 @@ def luhn_check(num: str) -> bool:
 
 
 #   =================================================================
+#   Calculate a check digit
+#   =================================================================
 def calculate_luhn_digit(pan: str) -> int:
-    #   =================================================================
     """
     Calculate the Luhn check digit for a given PAN
     :param str pan:     A Primary Account Number
@@ -364,8 +376,9 @@ def calculate_luhn_digit(pan: str) -> int:
 
 
 #   =================================================================
+#   Load JSON file data
+#   =================================================================
 def load_json_data(file_path) -> dict:
-    #   =================================================================
     """
     Load JSON data
     :param str file_path:   The pathname of the JSON file
@@ -376,8 +389,9 @@ def load_json_data(file_path) -> dict:
 
 
 #   =================================================================
+#   Get PAN pattern from section
+#   =================================================================
 def get_pan_pattern_sections(JsonData: Dict, section: str = 'PAN Pattern') -> list[str]:
-    #   =================================================================
     """
     Extracts card brands from the 'PAN Pattern' section of a JSON data
     :param dict JsonData:   The JSON data itself.
@@ -396,8 +410,9 @@ def get_pan_pattern_sections(JsonData: Dict, section: str = 'PAN Pattern') -> li
 
 
 #   =================================================================
+#   Format PAN
+#   =================================================================
 def format_pan(pan: str) -> str:
-    #   =================================================================
     """
     Returns a PAN delimited or not delimited
     :param str pan:     The PAN to format
@@ -424,8 +439,7 @@ try:
 
     parser.add_argument("--debug", action="store_true", default=False)
     parser.add_argument("--delimited", action="store_true", default=False)
-    parser.add_argument("--count", type=int, default=100, help="Number of patterns to create for each PAN type.")
-    parser.print_help(file=sys.stderr)
+    parser.add_argument("--count", type=int, required=True, help="Number of patterns to create for each PAN type.")
     if not _EnableVSArgParams:
         _Parse_Args = parser.parse_args()
     else:

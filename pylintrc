@@ -437,10 +437,7 @@ disable=raw-checker-failed,
         use-implicit-booleaness-not-comparison-to-string,
         use-implicit-booleaness-not-comparison-to-zero,
         invalid-name,
-        missing-docstring,          # Ignores missing docstrings in modules, classes, and functions
-        docstring-missing-param,    # Ignores missing parameter documentation
-        docstring-missing-type,     # Ignores missing type documentation
-        docstring-missing-raises    # Ignores missing "raises" documentation
+        missing-docstring           # Ignores missing docstrings in modules, classes, and functions
 
 
 # Enable the message, report, category or checker with the given id(s). You can
