@@ -175,3 +175,8 @@ config.log
 autom4te.cache/
 install-sh
 missing
+
+# Other
+test/
+data/
+logs/

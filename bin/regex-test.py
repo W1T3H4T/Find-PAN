@@ -42,8 +42,8 @@ def match_suspect_pattern(test_str, pattern):
     return matches[0] if matches else None
 
 
-def matched(rc):
-    return 'Matched' if rc else 'No match'
+def matched(MyRc):
+    return 'Matched' if MyRc else 'No match'
 
 
 # Patterns

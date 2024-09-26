@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 #  ===========================================================================
 #  Name    :    find-pan.py
-#  Function:    Find PAN in a file system or tar file
+#  Function:    Finds PAN in a file system or tar file
 #  Author  :    David Means <w1t3h4t@gmail.com>
 #  ===========================================================================
 #
@@ -41,6 +41,7 @@ import tarfile
 import traceback
 from collections import defaultdict
 from datetime import datetime
+from typing import Dict, List
 
 import magic
 
@@ -51,7 +52,7 @@ _LastReportDelta = 0
 _RegexPatternPrefix = None
 
 # - SemVer Information
-_FindPANVersion = "2 1 1"  # Major, Minor, Patch
+_FindPANVersion = "2 1 2"  # Major, Minor, Patch
 
 # - Item Count Array
 _MatchCount = defaultdict(int)
@@ -92,11 +93,15 @@ def print_exception_info(e):
 
     exception_message = str(exc_value)
 
-    print(
-        f"Exception occurred in function: '{func_name}', at line: {line_number}, in file: '{file_name}'")
-    print(f"Exception type: {exc_type.__name__}, Message: {exception_message}")
-    if e is not None:
-        print(f"Exception Info: {e}")
+    print("-----------------------------------------------------------------")
+    print("Exception Information:")
+    print(f"Function: '{func_name}', on line {line_number}")
+    print(f"File    : {file_name}")
+    print(f"Type    : {exc_type.__name__}")
+    print(f"Message : {exception_message}")
+    if str(e).lower() != str(exception_message).lower():
+        print(f"Info    : {e}")
+    print("-----------------------------------------------------------------")
     sys.exit(1)
 
 
@@ -105,7 +110,7 @@ def print_exception_info(e):
 # ===========================================================================
 def handle_interrupt(sig, frame):
     # Log the signal number
-    _TraceLogObj.error(f"KeyboardInterrupt caught (signal number: {sig}). Exiting.")
+    _TraceLogObj.error(f"KeyboardInterrupt caught (signal number: %s). Exiting.", sig)
 
     # Log the stack frame details
     _TraceLogObj.debug("Stack frame at the time of interrupt:")
@@ -231,16 +236,16 @@ def is_executable(file_path) -> bool | None:
                     magic_number in file_type for magic_number in executable_mime_types):
                 return True
             if _LoggingVerbose:
-                _TraceLogObj.info(f"MIME/Type: {file_type}: {file_path}")
+                _TraceLogObj.info(f"MIME/Type: %s: %s", file_type, file_path)
         else:
             return False
 
     except PermissionError:
         _TraceLogObj.warning(
-            f"Skipping file due to PermissionError: {file_path}")
+            f"Skipping file due to PermissionError: %s", file_path)
 
     except Exception as e:  # pylint: disable=broad-exception-caught
-        _TraceLogObj.error(f"Skipping file due to error: {file_path}: {e}")
+        _TraceLogObj.error(f"Skipping file due to error: %s: %s", file_path,e)
     return False
 
 
@@ -274,7 +279,7 @@ def is_binary(file_path):
                 return True
 
     except IOError as e:
-        _DefaultLogObj.warning(f"Error reading file: {file_path} - {e}")
+        _DefaultLogObj.warning("Error reading file: %s - %s", file_path, e)
 
     return False
 
@@ -327,7 +332,7 @@ def process_file(file_path, json_data):
 
         with open(file_path, 'rb') as f:
             if is_binary(file_path):
-                _DefaultLogObj.info(f"Binary file skipped: {file_path}")
+                _DefaultLogObj.info("Binary file skipped: %s", file_path)
                 _MatchCount['SKIPPED'] += 1
                 return
 
@@ -343,7 +348,9 @@ def process_file(file_path, json_data):
                         f"Line Limit reached: stopped after {line_count} lines.")
                     break
 
-                matched_info, match_data = scan_text_line(text_line, line_number, json_data)
+                matched_info, match_data = \
+                    scan_text_line(text_line,line_number, json_data, 'PAN Pattern')
+
                 if match_data is None:
                     continue
 
@@ -351,38 +358,38 @@ def process_file(file_path, json_data):
                     pan = extract_pan_from_match(match_data)
                     if luhn_check(pan):
                         _MatchCount['PAN'] += 1
-                        _DefaultLogObj.info(
-                            f"{file_path}:{line_count}->{pan}: {matched_info}")
+                        _DefaultLogObj.info("%s:%s->%s: %s",
+                                            file_path,line_count,pan,matched_info)
                     else:
-                        _DefaultLogObj.info(
-                            f"{file_path}:{line_count}->{pan} (Luhn Check: Failed)")
+                        _DefaultLogObj.info("%s:%s->%s (Luhn Check: Failed)",
+                                            file_path,line_count,pan)
                     continue
 
                 if matched_info.lower().startswith('track'):
                     pan = extract_pan_from_match(match_data)
                     if luhn_check(pan):
                         _MatchCount['TRACK'] += 1
-                        _DefaultLogObj.info(
-                            f"{file_path}:{line_count}->{match_data}: {matched_info}")
+                        _DefaultLogObj.info("%s:%s->%s: %s",
+                                            file_path,line_count,match_data,matched_info)
                     else:
-                        _DefaultLogObj.info(
-                            f"{file_path}:{line_count}->{match_data}: {matched_info} (Luhn Check: Failed)")
+                        _DefaultLogObj.info("%s:%s->%s: $s (Luhn Check Failed)",
+                                            file_path, line_count, match_data, matched_info)
                     continue
 
                 if matched_info.lower().startswith('anti-pan'):
                     _MatchCount['ANTI-PAN'] += 1
 
     except PermissionError:
-        _TraceLogObj.warning(f"Skipping file due to PermissionError: {file_path}")
+        _TraceLogObj.warning(f"Skipping file due to PermissionError: %s", file_path)
 
     except FileNotFoundError:
-        _TraceLogObj.warning(f"Skipping file due to FileNotFoundError: {file_path}")
+        _TraceLogObj.warning(f"Skipping file due to FileNotFoundError: %s", file_path)
 
     except IOError as e:
-        _TraceLogObj.warning(f"Skipping file due to IOError: {file_path} - {e}")
+        _TraceLogObj.warning(f"Skipping file due to IOError: %s - %s", file_path , e)
 
     except Exception as e:
-        print_exception_info(e)
+        print_exception_info(f'{e}')
 
 
 # ===========================================================================
@@ -400,35 +407,41 @@ def scan_directory(dir_name, json_data):
 # ===========================================================================
 # Match REGEX patterns from the JSON data
 # ===========================================================================
-def scan_text_line(text_line, line_number, json_data):
+def scan_text_line(text_line: str, line_number: int, json_data: dict, json_section: str):
     try:
+        _TraceLogObj.debug(f"scan_text_line('text_line', "
+                           f"line_number={line_number}, 'json_data',"
+                           f"section='{json_section}')"
+                           )
+
         for section_name, section_data in json_data.items():
-            if _LoggingDebug:
-                _TraceLogObj.debug(f"Checking section: {section_name}")
+            if section_name.lower() != json_section.lower():
+                continue
+
+            _TraceLogObj.debug(f"-> Processing section: '%s'",section_name)
 
             for pattern_name, pattern_info in section_data.items():
                 if _RegexPatternPrefix is not None:
                     #  If we have a prefix, add it to the regex pattern
+                    _TraceLogObj.debug(f"-> _RegexPatternPrefix: %s", _RegexPatternPrefix)
+                    _TraceLogObj.debug(f"-> pattern_info['regex']: %s", pattern_info['regex'])
                     regex_pattern = _RegexPatternPrefix + pattern_info['regex']
                 else:
                     #  Otherwise, just use the regex pattern
                     regex_pattern = pattern_info['regex']
 
                 #  Perform the match
-                match = re.search(regex_pattern, text_line)
-
-                if match:
-                    regex_info = f"{section_name} '{pattern_name}': {regex_pattern}"
-                    if _LoggingDebug:
-                        _TraceLogObj.debug(
-                            f"{regex_info} in line: {line_number}")
-                    return regex_info, match.group(0)
+                for regex in regex_pattern:
+                    match = re.search(regex, text_line)
+                    if match:
+                        regex_info = f"{section_name} '{pattern_name}': {regex_pattern}"
+                        _TraceLogObj.debug("-> %s in line: %s", regex_info, line_number)
+                        return regex_info, match.group(0)
 
     except Exception as e:  # pylint: disable=broad-exception-caught
         print_exception_info(e)
 
-    if _LoggingDebug:
-        _TraceLogObj.debug(f"No match found for {text_line}")
+    _TraceLogObj.debug(f"No match found for %s", text_line)
     return None, None
 
 
@@ -460,17 +473,17 @@ def find_secure_delete_program():
         for tool in posix:
             tool_path = shutil.which(tool)
             if tool_path:
-                _TraceLogObj.info(f"Using {os.name} {tool_path} for secure delete.")
+                _TraceLogObj.info("Using %s %s for secure delete", os.name,tool_path)
                 return [tool_path, '-u']
 
     if os.name == 'nt':
         for tool in nt:
             tool_path = shutil.which(tool)
             if tool_path:
-                _TraceLogObj.info(f"Using {os.name} {tool_path} for secure delete.")
+                _TraceLogObj.info("Using %s %s for secure delete", os.name,tool_path)
                 return [tool_path]
 
-    _TraceLogObj.warning(f"No Secure delete app found for {os.name}.")
+    _TraceLogObj.warning("No Secure delete app found for %s",os.name)
     return None  # Unsupported operating system
 
 
@@ -487,11 +500,11 @@ def secure_delete(secure_del_app, file_path):
         cmd = secure_del_app.copy()
         cmd.append(file_path)
         if _LoggingVerbose:
-            _TraceLogObj.info(f"Secure delete: {file_path}")
+            _TraceLogObj.info("Secure delete: %s", file_path)
         subprocess.run(cmd, check=True)
 
     except subprocess.CalledProcessError as e:
-        _TraceLogObj.error(f"Error securely deleting file: {file_path}. Error: {e}")
+        _TraceLogObj.error("Error securely deleting file: %s, Error: %s", file_path, e)
 
 
 # ===========================================================================
@@ -596,6 +609,7 @@ def process_cmdline_arguments():
     parser.add_argument('--verbose', default=False, action='store_true', help='Verbose output.')
     parser.add_argument('--debug', default=False, action='store_true', help='Enable debug logging.')
     parser.add_argument('--version', default=False, action='store_true', help='Print version information.')
+    parser.add_argument('--exception-test', default=False, action='store_true', help='Test exception handler.')
 
     #  Parse command line arguments
     if _EnableVSArgParams:
@@ -622,7 +636,7 @@ def process_cmdline_arguments():
 def custom_tar_filter(tarinfo, path):
     # Ensure that tarinfo has a safe path (no absolute paths or path traversal)
     if ".." in tarinfo.name or tarinfo.name.startswith("/"):
-        _TraceLogObj.warning(f"Skipping potentially dangerous file: {tarinfo.name} in {path}")
+        _TraceLogObj.warning("Skipping potentially dangerous file: %s in %s", tarinfo.name,path)
         return None  # Skip this file
 
     # Modify tarinfo (e.g., change file permissions)
@@ -636,7 +650,7 @@ def custom_tar_filter(tarinfo, path):
 def process_tar_file(args, json_data):
     _TraceLogObj.info("TAR File Scan")
     secure_del_app = find_secure_delete_program()
-    _TraceLogObj.info(f"Scanning {args.tar} using {args.tar_tmp} ...")
+    _TraceLogObj.info("Scanning %s using %s ...", arg.tar, arg.tar_tmp )
 
     with tarfile.open(args.tar, 'r:*') as tar:
         for tarinfo in tar:
@@ -661,7 +675,7 @@ def process_tar_file(args, json_data):
 # ===========================================================================
 def process_filesystem(args, json_data):
     _TraceLogObj.info("Filesystem Scan")
-    _TraceLogObj.info(f"Scanning {args.path} ...")
+    _TraceLogObj.info("Scanning %s ...", args.path)
     scan_directory(args.path, json_data)
 
 
@@ -674,9 +688,8 @@ def main(arg_parse):
     json_filename = _Args.patterns
     json_data = load_json_data(json_filename)
     if json_data:
-        if _LoggingDebug:
-            formatted_pan_patterns = json.dumps(json_data, indent=4)
-            print(formatted_pan_patterns)
+        formatted_pan_patterns = json.dumps(json_data, indent=4)
+        _TraceLogObj.debug(formatted_pan_patterns)
     else:
         _TraceLogObj.error("No JSON data file found.")
         return
@@ -699,6 +712,16 @@ def main(arg_parse):
 
 
 # ===========================================================================
+# Exception testing
+# ===========================================================================
+def exception_test():
+    try:
+        result = 10 / 0
+    except ZeroDivisionError:
+        print_exception_info("Exception test called")
+
+
+# ===========================================================================
 # MAIN Entry Point
 # ===========================================================================
 if __name__ == '__main__':
@@ -714,6 +737,10 @@ if __name__ == '__main__':
     _LoggingDebug = _Args.debug
     _LoggingVerbose = _Args.verbose
 
+    # - Test our exception handler
+    if _Args.exception_test:
+        exception_test()
+
     # -- Set the regular expression prefix
     if _Args.rgx_prefix:
         _RegexPatternPrefix = r"[ '\"{]"
@@ -725,7 +752,7 @@ if __name__ == '__main__':
 
     # -- Enumerate the command line arguments
     UsageInfo = enumerate_command_line_arguments(_ArgParse)
-    _TraceLogObj.info(f"{UsageInfo}")
+    _TraceLogObj.info("%s", UsageInfo)
 
     try:
         # --  Main processing --
@@ -734,3 +761,5 @@ if __name__ == '__main__':
 
     except KeyboardInterrupt:
         _TraceLogObj.error("KeyboardInterrupt caught in '__main__'")
+
+

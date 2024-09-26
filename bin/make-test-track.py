@@ -150,8 +150,8 @@ def generate_track2_data():
 # ==========================================================================
 # Select a REGEX prefix character
 # ==========================================================================
-def format_track(args, pan):
-    if args.delimited:
+def format_track(pan):
+    if _Parse_Args.delimited:
         rgx_prefix = r"[ '\"{]"
         rgx_rejected = r"[]\\"
         char = random.choice([c for c in rgx_prefix if c not in rgx_rejected])
