@@ -20,7 +20,7 @@ jobs:
         pip install pylint
     - name: Analysing the code with pylint
       run: |
-        pylint --disable=R0801 --rcfile=pylintrc $(git ls-files '*.py') > pylint_report.txt || true
+        pylint --disable=R0801 --rcfile=.pylintrc $(git ls-files '*.py') > pylint_report.txt || true
     - name: Check pylint result
       run: |
         score=$(tail -n 2 pylint_report.txt | grep -o '[0-9]*\.[0-9]*/10' | head -n 1 | cut -d '/' -f 1)
