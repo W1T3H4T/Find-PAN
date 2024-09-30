@@ -164,6 +164,7 @@ docs/**
 # Visual Studio
 .vs/*
 .vscode/*
+*.code-workspace
 
 # Autoconf
 Makefile
