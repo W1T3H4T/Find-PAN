@@ -1,8 +1,6 @@
 #!/bin/bash
 thisHome=$(pwd)
-thisTest=${thisHome}/test
-declare -i count=0
-declare -i max=50
+thisTest=${thisHome}/data
 
 function promptUser() {
     echo "NOTICE: Test data will be created in ${thisTest}"
@@ -30,16 +28,17 @@ function printCount() {
 promptUser
 [[ $? -ne 1 ]] && exit 1
 
-echo "Building $(( ${max} * 2 )) test PAN & Track data files"
+declare -i count=0
+declare -i max=800
+each=$(( $max / 4))
+echo "Building test PAN & Track data files"
 while [[ $count -lt $max  ]]; do
-    make-test-pan.py   --count 10              > ${thisTest}/pan-log-file-${count}.log
-    make-test-pan.py   --count 10 --delimited >> ${thisTest}/pan-log-file-${count}.log
-    make-test-track.py --count 10             > ${thisTest}/track-log-file-${count}.log
-    make-test-track.py --count 10 --delimited >> ${thisTest}/track-log-file-${count}.log
-    count=$(( count + 1 ))
+    ./test-bin/make-test-pan.py   --count ${each}              > ${thisTest}/test-pan-${count}.log
+    ./test-bin/make-test-pan.py   --count ${each} --delimited >> ${thisTest}/test-pan-delimited-${count}.log
+    ./test-bin/make-test-track.py --count ${each}              > ${thisTest}/test-track-${count}.log
+    ./test-bin/make-test-track.py --count ${each} --delimited >> ${thisTest}/test-track-delimited-${count}.log
+    count=$(( count + $each ))
     printCount $count
-    #echo "${thisTest}/track-log-file-${count}.log: done"
-    #echo "${thisTest}/pan-log-file-${count}.log: done"
 done
 echo
 ls -l ${thisTest}/*.log
