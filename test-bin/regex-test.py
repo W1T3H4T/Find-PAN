@@ -25,11 +25,10 @@ ProgramName = None
 _Parser = None
 _Args = None
 
+
 # ===========================================================================
 # Print consolidated exception info
 # ===========================================================================
-
-
 def print_exception_info(e):
     # pylint: disable=possibly-used-before-assignment
     exc_type, exc_value, exc_traceback = sys.exc_info()
@@ -102,19 +101,17 @@ def load_json_data(filename: str = None):
 
     return data
 
+
 # ===========================================================================
 # Checking a matched return value
 # ===========================================================================
-
-
 def check_matched(MyRc):
     return 'Matched' if MyRc else 'No match'
+
 
 # ===========================================================================
 # Match a 'suspect' pattern
 # ===========================================================================
-
-
 def match_suspect_pattern(test_str: str = None, pattern: str = None) -> str:
     if (test_str is not None) and (pattern is not None):
         matches = re.search(pattern, str(test_str))
@@ -148,11 +145,10 @@ test_patterns = [
     "65432100000333311111"
 ]
 
+
 # ===========================================================================
 # Process a file for credit card patterns
 # ===========================================================================
-
-
 def process_file(json_data: dict = None, file: str = None, key: str = None):
 
     regex = ""
