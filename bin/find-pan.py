@@ -471,9 +471,7 @@ def process_file(file_path, json_data):
 # ===========================================================================
 # Run the finder for track data
 # ===========================================================================
-def run_track_finder(
-    text_line: str, line_number: int, line_count: int, file_path: str, json_data: Dict
-) -> bool:
+def run_track_finder(text_line: str, line_number: int, line_count: int, file_path: str, json_data: Dict) -> bool:
 
     matched_info, matched_data = scan_text_line(text_line, line_number, json_data, "TRACK Pattern")
 
@@ -506,14 +504,10 @@ def run_track_finder(
 # ===========================================================================
 # Run the finder for pan data
 # ===========================================================================
-def run_pan_finder(
-    text_line: str, line_number: int, line_count: int, file_path: str, json_data: Dict
-) -> bool:
+def run_pan_finder(text_line: str, line_number: int, line_count: int, file_path: str, json_data: Dict) -> bool:
 
     matched_info = matched_data = None
-    matched_info, matched_data = scan_text_line(
-        text_line, line_number, json_data, "Anti-PAN Pattern"
-    )
+    matched_info, matched_data = scan_text_line(text_line, line_number, json_data, "Anti-PAN Pattern")
 
     if matched_info:
         _MatchCount["ANTI-PAN"] += 1
@@ -550,9 +544,7 @@ def run_pan_finder(
 # ===========================================================================
 # Scan a text line, Maching REGEX patterns from the JSON data
 # ===========================================================================
-def scan_text_line(
-    text_line: str, line_number: int, json_data: Dict, json_section: str
-) -> tuple[str, str]:
+def scan_text_line(text_line: str, line_number: int, json_data: Dict, json_section: str) -> tuple[str, str]:
     try:
         _TraceLogObj.debug(
             "scan_text_line('text_line', " "line_number=%s, 'json_data'," "section='%s')",
@@ -691,23 +683,29 @@ def process_cmdline_arguments():
     ##
     # Mutable Processing Arguments
     ##
-    parser.add_argument('--path', help='Filesystem pathname to scan.', type=str, default=None)
-    parser.add_argument('--tar', help='TAR file path.', type=str, default=None)
-    parser.add_argument('--tar-tmp', help='Temporary directory for tar file extraction.', default=tar_dir)
-    parser.add_argument('--log-dir', help='Directory for log files.', default=log_dir)
-    parser.add_argument('--skip-binary', help='Skip binary files.', action='store_true', default=False)
-    parser.add_argument('--patterns', help='JSON file containing PAN and TRACK regular expressions.', type=str,
-                        default=f'{_JSONPtrnPrefixPath}/find-pan-patterns.json')
-    parser.add_argument('--line-limit', help='Line scan limit per file.', type=int, default=0)
-    parser.add_argument('--rgx-prefix', help='Prefix for regular expressions.', default=False, action='store_true')
-    parser.add_argument('--report-delta', type=int, default=500, help='Files to process before reporting progress.')
+    parser.add_argument("--path", help="Filesystem pathname to scan.", type=str, default=None)
+    parser.add_argument("--tar", help="TAR file path.", type=str, default=None)
+    parser.add_argument("--tar-tmp", help="Temporary directory for tar file extraction.", default=tar_dir)
+    parser.add_argument("--log-dir", help="Directory for log files.", default=log_dir)
+    parser.add_argument("--skip-binary", help="Skip binary files.", action="store_true", default=False)
+    parser.add_argument(
+        "--patterns",
+        help="JSON file containing PAN and TRACK regular expressions.",
+        type=str,
+        default=f"{_JSONPtrnPrefixPath}/find-pan-patterns.json",
+    )
+    parser.add_argument("--line-limit", help="Line scan limit per file.", type=int, default=0)
+    parser.add_argument("--rgx-prefix", help="Prefix for regular expressions.", default=False, action="store_true")
+    parser.add_argument(
+        "--report-delta", type=int, default=500, help="Files to process before reporting progress."
+    )
     ##
     # Non-functional Arguments
     ##
-    parser.add_argument('--verbose', default=False, action='store_true', help='Verbose output.')
-    parser.add_argument('--debug', default=False, action='store_true', help='Enable debug logging.')
-    parser.add_argument('--version', default=False, action='store_true', help='Print version information.')
-    parser.add_argument('--exception-test', default=False, action='store_true', help='Test exception handler.')
+    parser.add_argument("--verbose", default=False, action="store_true", help="Verbose output.")
+    parser.add_argument("--debug", default=False, action="store_true", help="Enable debug logging.")
+    parser.add_argument("--version", default=False, action="store_true", help="Print version information.")
+    parser.add_argument("--exception-test", default=False, action="store_true", help="Test exception handler.")
 
     #  Parse command line arguments
     if _EnableVSArgParams:

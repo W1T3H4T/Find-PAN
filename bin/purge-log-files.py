@@ -22,13 +22,12 @@ secure_del_app = None
 #   Initialize the Logger
 #   ===========================================================================
 def init_logger():
-    log_format = '%(asctime)s - %(levelname)s - %(message)s'
+    log_format = "%(asctime)s - %(levelname)s - %(message)s"
     logging.basicConfig(level=logging.INFO, format=log_format)
     log_instance = logging.getLogger(__name__)
 
     # pylint: disable=consider-using-f-string
-    log_file = "%s_%s.log" % (os.path.basename(__file__).split('.')[0],
-                              datetime.now().strftime('%Y%m%d'))
+    log_file = "%s_%s.log" % (os.path.basename(__file__).split(".")[0], datetime.now().strftime("%Y%m%d"))
     file_handler = logging.FileHandler(log_file)
     file_handler.setFormatter(logging.Formatter(log_format))
     log_instance.addHandler(file_handler)
@@ -42,10 +41,10 @@ def get_file_age_in_days(file_path):
     stat_info = os.stat(file_path)
 
     # On Windows, use st_ctime as the creation time
-    if platform.system() == 'Windows':
+    if platform.system() == "Windows":
         creation_time = stat_info.st_ctime
     # On Unix-like systems, use st_birthtime if available
-    elif hasattr(stat_info, 'st_birthtime'):
+    elif hasattr(stat_info, "st_birthtime"):
         creation_time = stat_info.st_birthtime
     else:
         # Fallback to last modification time
@@ -62,17 +61,17 @@ def get_file_age_in_days(file_path):
 # ===========================================================================
 def find_secure_delete_program():
 
-    nt = ['sdelete64.exe', 'sdelete.exe']
-    posix = ['shred', 'gshred']
+    nt = ["sdelete64.exe", "sdelete.exe"]
+    posix = ["shred", "gshred"]
 
-    if os.name == 'posix':
+    if os.name == "posix":
         for tool in posix:
             tool_path = which(tool)
             if tool_path:
                 _LogObj.info("Using %s %s for secure delete.", os.name, tool_path)
-                return [tool_path, '-u']
+                return [tool_path, "-u"]
 
-    if os.name == 'nt':
+    if os.name == "nt":
         for tool in nt:
             tool_path = which(tool)
             if tool_path:
@@ -129,12 +128,12 @@ def process_log_dir(path: str, age: int, prefix: str) -> None:
 if __name__ == "__main__":
     _LogObj = init_logger()
 
-    parser = argparse.ArgumentParser(
-        description="File deletion based on age and prefix.")
+    parser = argparse.ArgumentParser(description="File deletion based on age and prefix.")
     parser.add_argument("--path", type=str, required=True, help="Log file directory to process.")
     parser.add_argument("--age", type=int, required=True, help="Age in days for file retention.")
-    parser.add_argument("--prefix", type=str, required=False,
-                        default='file-', help="The required log file prefix pattern.")
+    parser.add_argument(
+        "--prefix", type=str, required=False, default="file-", help="The required log file prefix pattern."
+    )
     args = parser.parse_args()
 
     secure_del_app = find_secure_delete_program()
