@@ -7,6 +7,7 @@
 #
 #  MIT License
 #  Copyright (c) 2023 David Means  <w1t3h4t@gmail.com>
+#
 #  ===========================================================================
 
 import argparse
@@ -19,12 +20,13 @@ import signal
 import subprocess
 import sys
 import tarfile
+import time
 import traceback
-import magic
 from collections import defaultdict
 from datetime import datetime
 from typing import Dict, List
-import time
+import magic
+
 
 # ===========================================================================
 # Global variables
@@ -450,7 +452,7 @@ def process_file(file_path, compiled_patterns):
                 if _Args.line_limit > 0 and line_count >= _Args.line_limit:
                     break
 
-                ## Run the PAN & TRACK Data Finder using Pre-Coimpiled Patterns
+                # Run the PAN & TRACK Data Finder using Pre-Coimpiled Patterns
                 for category, pattern_name, compiled_pattern in compiled_patterns:
                     match = compiled_pattern.search(line)
                     if not match:
@@ -661,7 +663,7 @@ def print_scan_summary():
     _TraceLogObj.info("PANs Matched  : %s", f"{_MatchCount['PAN']:8d}")
     _TraceLogObj.info("TRACKs Matched: %s", f"{_MatchCount['TRACK']:8d}")
     _TraceLogObj.info("Total matches : %s", f"{total_match_count:8d}")
-    _TraceLogObj.info("Scanned       : %s Files.", f"{_MatchCount['FILES']-1:8d}")
+    _TraceLogObj.info("Scanned       : %s Files.", f"{_MatchCount['FILES'] - 1:8d}")
     _TraceLogObj.info("Average time  : %s seconds per file", f"{_AverageTime:8.3f}")
     _TraceLogObj.info("Total time    : %s seconds", f"{_TotalTime:8.3f}")
     _TraceLogObj.info("")
