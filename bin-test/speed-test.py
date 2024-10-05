@@ -50,11 +50,12 @@ def compile_regex_patterns_with_prefix(json_data):
     return compiled_patterns
 
 
-def compile_regex_patterns(json_data):
+def compile_regex_patterns(json_data:dict) -> []:
     """Compile the regex patterns found in the JSON data."""
     compiled_patterns = []
 
     for category, patterns in json_data.items():
+        print(f"category: {category}")
         if isinstance(patterns, dict):
             for pattern_name, details in patterns.items():
                 if "regex" in details:
@@ -117,6 +118,20 @@ def print_patterns(patterns):
         print(f"Regex Pattern: {pattern.pattern}")
 
 
+
+# Function to calculate Delta Percent between runs
+def delta_percent(first, second):
+    if first > second:
+        change = first - second 
+        delta = ( change / second ) * 100 
+        return round(delta, 2)  # Round to two decimal places for percentage
+    elif second > first:
+        change = second - first
+        delta = ( change / first ) * 100 
+        return round(delta * -1, 2)  # Round to two decimal places for percentage
+    else:
+        raise ValueError("Both pre and post-observation times must be positive.")
+
 def main(json_file, directory):
     """Main function to load JSON, compile regex, and benchmark performance."""
     # Load JSON data
@@ -129,11 +144,11 @@ def main(json_file, directory):
     # Get all files in the directory
     files = get_files_in_directory(directory)
 
-    print("=" * 50)
-    print_patterns(compiled_patterns)
-    print("=" * 50)
-    print_patterns(compiled_prefix_patterns)
-    print("=" * 50)
+    #print("=" * 50)
+    #print_patterns(compiled_patterns)
+    #print("=" * 50)
+    #print_patterns(compiled_prefix_patterns)
+    #print("=" * 50)
 
     # Benchmark the pre-compiled regex performance
     precompiled_time: float = 0.0
@@ -155,8 +170,9 @@ def main(json_file, directory):
     print("-" * 50)
     print(f"Precompiled regex time  : {precompiled_time:.4f} seconds")
     print(f"Non-compiled regex time : {noncompiled_time:.4f} seconds")
-    improvement = ((noncompiled_time - precompiled_time) / precompiled_time) * 100
-    print(f"Pre-compiled improvement: {improvement:6.2f}%")
+    delta  = delta_percent(noncompiled_time, precompiled_time)
+    print("-" * 50)
+    print(f"Pre-compiled improvement: {delta:6.2f}%")
     print("-" * 50)
 
 

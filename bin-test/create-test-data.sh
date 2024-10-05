@@ -33,10 +33,10 @@ declare -i max=800
 each=$(( $max / 4))
 echo "Building test PAN & Track data files"
 while [[ $count -lt $max  ]]; do
-    ./test-bin/make-test-pan.py   --count ${each}              > ${thisTest}/test-pan-${count}.log
-    ./test-bin/make-test-pan.py   --count ${each} --delimited >> ${thisTest}/test-pan-delimited-${count}.log
-    ./test-bin/make-test-track.py --count ${each}              > ${thisTest}/test-track-${count}.log
-    ./test-bin/make-test-track.py --count ${each} --delimited >> ${thisTest}/test-track-delimited-${count}.log
+    ./bin-test/make-test-pan.py   --count ${each}              > ${thisTest}/test-pan-${count}.log
+    ./bin-test/make-test-pan.py   --count ${each} --delimited >> ${thisTest}/test-pan-delimited-${count}.log
+    ./bin-test/make-test-track.py --count ${each}              > ${thisTest}/test-track-${count}.log
+    ./bin-test/make-test-track.py --count ${each} --delimited >> ${thisTest}/test-track-delimited-${count}.log
     count=$(( count + $each ))
     printCount $count
 done
