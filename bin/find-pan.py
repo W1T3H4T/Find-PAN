@@ -6,26 +6,7 @@
 #  ===========================================================================
 #
 #  MIT License
-#
 #  Copyright (c) 2023 David Means  <w1t3h4t@gmail.com>
-#
-#  Permission is hereby granted, free of charge, to any person obtaining a copy
-#  of this software and associated documentation files (the "Software"), to deal
-#  in the Software without restriction, including without limitation the rights
-#  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-#  copies of the Software, and to permit persons to whom the Software is
-#  furnished to do so, subject to the following conditions:
-#
-#  The above copyright notice and this permission notice shall be included in all
-#  copies or substantial portions of the Software.
-#
-#  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-#  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-#  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-#  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-#  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-#  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-#  SOFTWARE.
 #  ===========================================================================
 
 import argparse
@@ -43,15 +24,18 @@ import magic
 from collections import defaultdict
 from datetime import datetime
 from typing import Dict, List
+import time
 
 # ===========================================================================
 # Global variables
 # ===========================================================================
 _LastReportDelta = 0
 _RegexPatternPrefix = None
+_TotalTime = 0
+_AverageTime = 0
 
 # - SemVer Information
-_FindPANVersion = "2 1 2"  # Major, Minor, Patch
+_FindPANVersion = "2 2 0"  # Major, Minor, Patch
 
 # - Item Count Array
 _MatchCount = defaultdict(int)
@@ -140,7 +124,9 @@ def set_log_directory_and_filenames(args):
             os.makedirs(args.tar_tmp)
 
         pan_logfile = os.path.join(args.log_dir, generate_logfile_name("Find-PAN"))
-        trace_logfile = os.path.join(args.log_dir, generate_logfile_name("Find-PAN-trace"))
+        trace_logfile = os.path.join(
+            args.log_dir, generate_logfile_name("Find-PAN-trace")
+        )
 
     except Exception as e:  # pylint: disable=broad-exception-caught
         print_exception_info(e)
@@ -210,6 +196,24 @@ def setup_custom_loggers(args):
 
 
 # ===========================================================================
+# Initialize time tracking
+# ===========================================================================
+def initialize_time_tracking():
+    global _StartTime
+    _StartTime = time.time()
+
+
+# ===========================================================================
+# Stop time tracking and calculate time spent
+# ===========================================================================
+def stop_time_tracking(files_processed):
+    end_time = time.time()
+    total_time = end_time - _StartTime
+    average_time_per_file = total_time / files_processed if files_processed > 0 else 0
+    return total_time, average_time_per_file
+
+
+# ===========================================================================
 # Check if file is binary
 # ===========================================================================
 def is_executable(file_path) -> bool | None:
@@ -250,9 +254,7 @@ def is_executable(file_path) -> bool | None:
 # Check if file is binary
 # ===========================================================================
 def is_binary(file_path):
-
     if _Args.skip_binary:  # pylint: disable=possibly-used-before-assignment
-
         if is_executable(file_path):
             _MatchCount["EXEC"] += 1
             return True
@@ -269,7 +271,10 @@ def is_binary(file_path):
                         binary_triggers["0xFF"].append((index, byte))
                         continue
 
-                if len(binary_triggers["0x00"]) >= 1 and len(binary_triggers["0xFF"]) >= 1:
+                if (
+                    len(binary_triggers["0x00"]) >= 1
+                    and len(binary_triggers["0xFF"]) >= 1
+                ):
                     _MatchCount["BINARY"] += 1
                     return True
 
@@ -334,7 +339,9 @@ def process_tar_file(args, json_data):
 def custom_tar_filter(tarinfo, path):
     # Ensure that tarinfo has a safe path (no absolute paths or path traversal)
     if ".." in tarinfo.name or tarinfo.name.startswith("/"):
-        _TraceLogObj.warning("Skipping potentially dangerous file: %s in %s", tarinfo.name, path)
+        _TraceLogObj.warning(
+            "Skipping potentially dangerous file: %s in %s", tarinfo.name, path
+        )
         return None  # Skip this file
 
     # Modify tarinfo (e.g., change file permissions)
@@ -346,7 +353,6 @@ def custom_tar_filter(tarinfo, path):
 # Find the secure delete app for the OS
 # ===========================================================================
 def find_secure_delete_program():
-
     nt = ["sdelete64.exe", "sdelete.exe"]
     posix = ["shred", "gshred"]
 
@@ -372,7 +378,6 @@ def find_secure_delete_program():
 # Securely delete a file
 # ===========================================================================
 def secure_delete(secure_del_app, file_path):
-
     try:
         if secure_del_app is None:
             os.remove(file_path)
@@ -412,7 +417,7 @@ def scan_directory(dir_name, json_data):
 # ===========================================================================
 # Process a file for defined patterns
 # ===========================================================================
-def process_file(file_path, json_data):
+def process_file(file_path, compiled_patterns):
     # pylint: disable=possibly-used-before-assignment,broad-exception-caught
     line_count = 0
 
@@ -439,153 +444,113 @@ def process_file(file_path, json_data):
         _MatchCount["FILES"] += 1
 
         with open(file_path, "r", encoding="utf-8", errors="replace") as f:
-
             line_count = 0
-            for line_number, text_line in enumerate(f, 1):
+            for line_number, line in enumerate(f, 1):
                 line_count += 1
                 if _Args.line_limit > 0 and line_count >= _Args.line_limit:
-                    _TraceLogObj.warning("Line Limit reached: stopped after %s lines.", line_count)
                     break
 
-                # - Run the Track Pattern Matcher
-                if run_track_finder(text_line, line_number, line_count, file_path, json_data):
-                    continue
+                ## Run the PAN & TRACK Data Finder using Pre-Coimpiled Patterns
+                for category, pattern_name, compiled_pattern in compiled_patterns:
+                    match = compiled_pattern.search(line)
+                    if not match:
+                        continue
 
-                # - Run the PAN Pattern Matcher
-                if run_pan_finder(text_line, line_number, line_count, file_path, json_data):
-                    continue
+                    if category == "Anti-PAN Pattern":
+                        # We have found an Anti-PAN pattern
+                        report_antipan_data(
+                            file_path,
+                            line_number,
+                            match.group(0),
+                            line,
+                            pattern_name,
+                            compiled_pattern.pattern,
+                        )
+                        break
 
-    except PermissionError:
-        _TraceLogObj.warning("Skipping file due to PermissionError: %s", file_path)
+                    if category == "PAN Pattern":
+                        # We have found a PAN pattern
+                        report_pan_data(
+                            file_path,
+                            line_number,
+                            match.group(0),
+                            line,
+                            pattern_name,
+                            compiled_pattern.pattern,
+                        )
+                        break
 
-    except FileNotFoundError:
-        _TraceLogObj.warning("Skipping file due to FileNotFoundError: %s", file_path)
+                    if category == "TRACK Pattern":
+                        # We have found a TRACK pattern
+                        report_track_data(
+                            file_path,
+                            line_number,
+                            match.group(0),
+                            line,
+                            pattern_name,
+                            compiled_pattern.pattern,
+                        )
+                        break
 
-    except IOError as e:
-        _TraceLogObj.warning("Skipping file due to IOError: %s - %s", file_path, e)
+                    # - We shouldn't get here
+                    raise ValueError(
+                        "Unexpected match: %s:%s->%s,%s: %s",
+                        file_path,
+                        line_number,
+                        pattern_name,
+                        search,
+                        line,
+                    )
+
+    except (PermissionError, FileNotFoundError, IOError) as e:
+        _TraceLogObj.warning("Skipping file due to error: %s - %s", file_path, e)
 
     except Exception as e:
         print_exception_info(f"{e}")
 
 
 # ===========================================================================
-# Run the finder for track data
+# Report Anti-PAN
 # ===========================================================================
-def run_track_finder(text_line: str, line_number: int, line_count: int, file_path: str, json_data: Dict) -> bool:
+def report_antipan_data(
+    file_path, line_number, matched_data, line, pattern_name, search
+):
 
-    matched_info, matched_data = scan_text_line(text_line, line_number, json_data, "TRACK Pattern")
+    _MatchCount["ANTI-PAN"] += 1
+    _DefaultLogObj.info(
+        "%s:%s->%s,%s: %s", file_path, line_number, pattern_name, search, line
+    )
 
-    if matched_info is None:
-        _DefaultLogObj.info("No Match: %s, count=%s", text_line, _MatchCount["TRACK"])
-        return False
+
+# ===========================================================================
+# Report track data
+# ===========================================================================
+def report_track_data(file_path, line_number, matched_data, line, pattern_name, search):
 
     pan = extract_pan_from_match(matched_data)
 
-    if luhn_check(pan):
-        _MatchCount["TRACK"] += 1
-        _DefaultLogObj.info(
-            "%s:%s->%s: %s (Luhn Check SUCCESS)",
-            file_path,
-            line_count,
-            matched_data,
-            matched_info,
-        )
-    else:
-        _DefaultLogObj.info(
-            "%s:%s->%s: %s (Luhn Check FAILED)",
-            file_path,
-            line_count,
-            matched_data,
-            matched_info,
-        )
-    return True
+    _MatchCount["TRACK"] += 1
+    if not luhn_check(pan):
+        _MatchCount["BAD-LUHN"] += 1
+
+    _DefaultLogObj.info(
+        "%s:%s->%s,%s: %s", file_path, line_number, pattern_name, search, line
+    )
 
 
 # ===========================================================================
-# Run the finder for pan data
+# Report pan data
 # ===========================================================================
-def run_pan_finder(text_line: str, line_number: int, line_count: int, file_path: str, json_data: Dict) -> bool:
-
-    matched_info = matched_data = None
-    matched_info, matched_data = scan_text_line(text_line, line_number, json_data, "Anti-PAN Pattern")
-
-    if matched_info:
-        _MatchCount["ANTI-PAN"] += 1
-        return False
-
-    matched_info, matched_data = scan_text_line(text_line, line_number, json_data, "PAN Pattern")
-
-    if matched_info is None:
-        _DefaultLogObj.info("No Match: %s, count=%s", text_line, _MatchCount["PAN"])
-        return False
-
+def report_pan_data(file_path, line_number, matched_data, line, pattern_name, search):
     pan = extract_pan_from_match(matched_data)
 
-    if luhn_check(pan):
-        _MatchCount["PAN"] += 1
-        _DefaultLogObj.info(
-            "%s:%s->%s: %s (Luhn Check SUCCESS)",
-            file_path,
-            line_count,
-            matched_data,
-            matched_info,
-        )
-    else:
-        _DefaultLogObj.info(
-            "%s:%s->%s: %s (Luhn Check FAILED)",
-            file_path,
-            line_count,
-            matched_data,
-            matched_info,
-        )
-    return True
+    _MatchCount["PAN"] += 1
+    if not luhn_check(pan):
+        _MatchCount["BAD-LUHN"] += 1
 
-
-# ===========================================================================
-# Scan a text line, Maching REGEX patterns from the JSON data
-# ===========================================================================
-def scan_text_line(text_line: str, line_number: int, json_data: Dict, json_section: str) -> tuple[str, str]:
-    try:
-        _TraceLogObj.debug(
-            "scan_text_line('text_line', " "line_number=%s, 'json_data'," "section='%s')",
-            line_number,
-            json_section,
-        )
-
-        for section_name, section_data in json_data.items():
-            if section_name.lower() != json_section.lower():
-                continue
-
-            _TraceLogObj.debug("-> Processing section: '%s'", section_name)
-
-            for pattern_name, pattern_info in section_data.items():
-                if _RegexPatternPrefix is not None:
-                    #  If we have a prefix, add it to the regex pattern
-                    _TraceLogObj.debug("-> _RegexPatternPrefix: %s", _RegexPatternPrefix)
-                    _TraceLogObj.debug("-> pattern_info['regex']: %s", pattern_info["regex"])
-                    regex_pattern = _RegexPatternPrefix + pattern_info["regex"]
-                else:
-                    #  Otherwise, just use the regex pattern
-                    regex_pattern = pattern_info["regex"]
-
-                #  Perform the match
-                for regex in regex_pattern:
-                    match = re.search(regex, text_line)
-                    if match:
-                        regex_info = f"{section_name} '{pattern_name}': {regex_pattern}"
-                        _TraceLogObj.debug("-> %s in line: %s", regex_info, line_number)
-                        _TraceLogObj.debug(
-                            "-> regex_info: %s, match.group: %s",
-                            regex_info,
-                            match.group(0),
-                        )
-                        return str(regex_info), str(match.group(0))
-
-    except Exception as e:  # pylint: disable=broad-exception-caught
-        print_exception_info(e)
-
-    # _TraceLogObj.debug("-> No match found for %s", text_line)
-    return None, None
+    _DefaultLogObj.info(
+        "%s:%s->%s,%s: %s", file_path, line_number, pattern_name, search, line
+    )
 
 
 # ===========================================================================
@@ -593,7 +558,7 @@ def scan_text_line(text_line: str, line_number: int, json_data: Dict, json_secti
 # ===========================================================================
 def extract_pan_from_match(match_data):
     # Assuming Track 1 & 2 Data
-    if match_data.startswith("%B"):
+    if match_data.startswith("%B") or match_data.startswith("%M"):
         return re.sub(r"\D", "", match_data[2:].split("^")[0])
 
     if match_data.startswith(";"):
@@ -602,6 +567,44 @@ def extract_pan_from_match(match_data):
     # Otherwise, we're not sure what we have,
     # other than a regex match.  Return the digits
     return re.sub(r"\D", "", match_data)
+
+
+# ===========================================================================
+# Compile the regex patterns with a prefix
+# ===========================================================================
+def compile_regex_patterns_with_prefix(json_data) -> []:
+    compiled_patterns = []
+
+    for category, patterns in json_data.items():
+        if isinstance(patterns, dict):
+            for pattern_name, details in patterns.items():
+                if "regex" in details:
+                    for pattern in details["regex"]:
+                        prefix_pattern = f"{_RegexPatternPrefix}{pattern}"
+                        compiled_patterns.append(
+                            (category, pattern_name, re.compile(prefix_pattern))
+                        )
+
+    return compiled_patterns
+
+
+# ===========================================================================
+# Compile the regex patterns
+# ===========================================================================
+def compile_regex_patterns(json_data: dict) -> []:
+    compiled_patterns = []
+
+    for category, patterns in json_data.items():
+        # print(f"category: {category}")
+        if isinstance(patterns, dict):
+            for pattern_name, details in patterns.items():
+                if "regex" in details:
+                    for pattern in details["regex"]:
+                        compiled_patterns.append(
+                            (category, pattern_name, re.compile(pattern))
+                        )
+
+    return compiled_patterns
 
 
 # ===========================================================================
@@ -638,7 +641,6 @@ def enumerate_command_line_arguments(arg_parse) -> List:
 # Version Information
 # ===========================================================================
 def print_version_info(arg_parse: Dict = None) -> str:
-
     def format_version():
         major, minor, patch = map(int, _FindPANVersion.split())
         return f"{arg_parse.prog} v{major}.{minor}.{patch}"
@@ -656,17 +658,23 @@ def print_scan_summary():
     total_match_count = _MatchCount["PAN"] + _MatchCount["TRACK"]
     _TraceLogObj.info("")
     _TraceLogObj.info("-- Processing Summary --")
-    _TraceLogObj.info("Matched %s PANs.", _MatchCount["PAN"])
-    _TraceLogObj.info("Matched %s TRACKs.", _MatchCount["TRACK"])
+    _TraceLogObj.info("PANs Matched  : %s", f"{_MatchCount['PAN']:8d}")
+    _TraceLogObj.info("TRACKs Matched: %s", f"{_MatchCount['TRACK']:8d}")
+    _TraceLogObj.info("Total matches : %s", f"{total_match_count:8d}")
+    _TraceLogObj.info("Scanned       : %s Files.", f"{_MatchCount['FILES']-1:8d}")
+    _TraceLogObj.info("Average time  : %s seconds per file", f"{_AverageTime:8.3f}")
+    _TraceLogObj.info("Total time    : %s seconds", f"{_TotalTime:8.3f}")
     _TraceLogObj.info("")
+    _TraceLogObj.info("-- Skipped Summary --")
+    _TraceLogObj.info("Detected %s Luhn Check Failures.", _MatchCount["BAD-LUHN"])
+    _TraceLogObj.info("Detected %s Anti-PANs.", _MatchCount["ANTI-PAN"])
     _TraceLogObj.info("Skipped %s Files.", _MatchCount["SKIPPED"])
-    _TraceLogObj.info("Skipped %s Anti-PANs.", _MatchCount["ANTI-PAN"])
     _TraceLogObj.info("Skipped %s Executable Files.", _MatchCount["EXEC"])
     _TraceLogObj.info("Skipped %s Binary Files.", _MatchCount["BINARY"])
     _TraceLogObj.info("")
-    _TraceLogObj.info("Scanned      : %s Files.", _MatchCount["FILES"] - 1)
-    _TraceLogObj.info("Total matches: %s", total_match_count)
-    # _TraceLogObj.info(f"{_MatchCount}")
+    _TraceLogObj.info("Scan complete.")
+    _TraceLogObj.info("")
+    _TraceLogObj.info("Log files are located in: %s", _Args.log_dir)
 
 
 # ===========================================================================
@@ -683,29 +691,63 @@ def process_cmdline_arguments():
     ##
     # Mutable Processing Arguments
     ##
-    parser.add_argument("--path", help="Filesystem pathname to scan.", type=str, default=None)
+    parser.add_argument(
+        "--path", help="Filesystem pathname to scan.", type=str, default=None
+    )
     parser.add_argument("--tar", help="TAR file path.", type=str, default=None)
-    parser.add_argument("--tar-tmp", help="Temporary directory for tar file extraction.", default=tar_dir)
+    parser.add_argument(
+        "--tar-tmp",
+        help="Temporary directory for tar file extraction.",
+        default=tar_dir,
+    )
     parser.add_argument("--log-dir", help="Directory for log files.", default=log_dir)
-    parser.add_argument("--skip-binary", help="Skip binary files.", action="store_true", default=False)
+    parser.add_argument(
+        "--skip-binary", help="Skip binary files.", action="store_true", default=False
+    )
     parser.add_argument(
         "--patterns",
         help="JSON file containing PAN and TRACK regular expressions.",
         type=str,
         default=f"{_JSONPtrnPrefixPath}/find-pan-patterns.json",
     )
-    parser.add_argument("--line-limit", help="Line scan limit per file.", type=int, default=0)
-    parser.add_argument("--rgx-prefix", help="Prefix for regular expressions.", default=False, action="store_true")
     parser.add_argument(
-        "--report-delta", type=int, default=500, help="Files to process before reporting progress."
+        "--line-limit", help="Line scan limit per file.", type=int, default=0
+    )
+
+    parser.add_argument(
+        "--rgx-prefix",
+        help="Prefix for regular expressions.",
+        default=False,
+        action="store_true",
+    )
+
+    parser.add_argument(
+        "--report-delta",
+        type=int,
+        default=500,
+        help="Files to process before reporting progress.",
     )
     ##
     # Non-functional Arguments
     ##
-    parser.add_argument("--verbose", default=False, action="store_true", help="Verbose output.")
-    parser.add_argument("--debug", default=False, action="store_true", help="Enable debug logging.")
-    parser.add_argument("--version", default=False, action="store_true", help="Print version information.")
-    parser.add_argument("--exception-test", default=False, action="store_true", help="Test exception handler.")
+    parser.add_argument(
+        "--verbose", default=False, action="store_true", help="Verbose output."
+    )
+    parser.add_argument(
+        "--debug", default=False, action="store_true", help="Enable debug logging."
+    )
+    parser.add_argument(
+        "--version",
+        default=False,
+        action="store_true",
+        help="Print version information.",
+    )
+    parser.add_argument(
+        "--exception-test",
+        default=False,
+        action="store_true",
+        help="Test exception handler.",
+    )
 
     #  Parse command line arguments
     if _EnableVSArgParams:
@@ -726,6 +768,8 @@ def process_cmdline_arguments():
 # MAIN is here
 # ===========================================================================
 def main(arg_parse):
+    global _TotalTime, _AverageTime
+    _Compiled_Patterns = []
 
     # Load JSON data and compile prefix patterns
     json_filename = _Args.patterns
@@ -737,14 +781,23 @@ def main(arg_parse):
         _TraceLogObj.error("No JSON data file found.")
         return
 
+    if _Args.rgx_prefix:
+        _Compiled_Patterns = compile_regex_patterns_with_prefix(json_data)
+    else:
+        _Compiled_Patterns = compile_regex_patterns(json_data)
+
     # Scan a filesystem
     if _Args.path:
-        process_filesystem(_Args, json_data)
+        initialize_time_tracking()
+        process_filesystem(_Args, _Compiled_Patterns)
+        _TotalTime, _AverageTime = stop_time_tracking(_MatchCount["FILES"])
         return
 
     # Scan a tar file
     if _Args.tar and _Args.tar_tmp:
-        process_tar_file(_Args, json_data)
+        initialize_time_tracking()
+        process_tar_file(_Args, _Compiled_Patterns)
+        _TotalTime, _AverageTime = stop_time_tracking(_MatchCount["FILES"])
         return
 
     # No valid arguments found
