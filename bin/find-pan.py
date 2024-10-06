@@ -25,16 +25,26 @@ import traceback
 from collections import defaultdict
 from datetime import datetime
 from typing import Dict, List
+
 import magic
 
+# ===========================================================================
+# Disable some pylint warnings
+# ===========================================================================
+# pylint: disable=too-many-positional-arguments,too-many-arguments
+# pylint: disable=possibly-used-before-assignment
+# pylint: disable=broad-exception-caught
+# pylint: disable=global-statement
 
 # ===========================================================================
 # Global variables
 # ===========================================================================
 _LastReportDelta = 0
 _RegexPatternPrefix = None
+_StartTime = 0
 _TotalTime = 0
 _AverageTime = 0
+_Args = {}
 
 # - SemVer Information
 _FindPANVersion = "2 2 0"  # Major, Minor, Patch
@@ -58,7 +68,6 @@ _DefaultLogObj = None
 # Print consolidated exception info
 # ===========================================================================
 def print_exception_info(e):
-    # pylint: disable=possibly-used-before-assignment
     exc_type, exc_value, exc_traceback = sys.exc_info()
     tb_stack = traceback.extract_tb(exc_traceback)
 
@@ -130,7 +139,7 @@ def set_log_directory_and_filenames(args):
             args.log_dir, generate_logfile_name("Find-PAN-trace")
         )
 
-    except Exception as e:  # pylint: disable=broad-exception-caught
+    except Exception as e:
         print_exception_info(e)
 
     return pan_logfile, trace_logfile
@@ -160,7 +169,7 @@ def setup_custom_loggers(args):
         trace_file_handler.setLevel(trace_level)
     except FileNotFoundError:
         print_exception_info(None)
-    except Exception as e:  # pylint: disable=broad-exception-caught
+    except Exception as e:
         print_exception_info(e)
 
     trace_formatter = logging.Formatter("%(asctime)s [%(levelname)s]: %(message)s")
@@ -246,7 +255,7 @@ def is_executable(file_path) -> bool | None:
     except PermissionError:
         _TraceLogObj.warning("Skipping file due to PermissionError: %s", file_path)
 
-    except Exception as e:  # pylint: disable=broad-exception-caught
+    except Exception as e:
         print_exception_info(f"Skipping file due to error: {file_path}, {e}")
 
     return False
@@ -256,7 +265,7 @@ def is_executable(file_path) -> bool | None:
 # Check if file is binary
 # ===========================================================================
 def is_binary(file_path):
-    if _Args.skip_binary:  # pylint: disable=possibly-used-before-assignment
+    if _Args.skip_binary:
         if is_executable(file_path):
             _MatchCount["EXEC"] += 1
             return True
@@ -302,7 +311,6 @@ def luhn_check(num):
 # Calculate delta for reporting
 # ===========================================================================
 def calculate_delta():
-    # pylint: disable=global-statement,possibly-used-before-assignment
     global _LastReportDelta
 
     this_delta = _MatchCount["FILES"]
@@ -420,7 +428,7 @@ def scan_directory(dir_name, json_data):
 # Process a file for defined patterns
 # ===========================================================================
 def process_file(file_path, compiled_patterns):
-    # pylint: disable=possibly-used-before-assignment,broad-exception-caught
+
     line_count = 0
 
     if not os.path.isfile(file_path):
@@ -460,14 +468,13 @@ def process_file(file_path, compiled_patterns):
 
                     if category == "Anti-PAN Pattern":
                         # We have found an Anti-PAN pattern
-                        report_antipan_data(
-                            file_path,
-                            line_number,
-                            match.group(0),
-                            line,
-                            pattern_name,
-                            compiled_pattern.pattern,
-                        )
+                        _MatchCount["ANTI-PAN"] += 1
+                        _DefaultLogObj.info("%s:%s->%s,%s: %s",
+                                            file_path,
+                                            line_number,
+                                            pattern_name,
+                                            compiled_pattern.pattern,
+                                            line)
                         break
 
                     if category == "PAN Pattern":
@@ -478,8 +485,7 @@ def process_file(file_path, compiled_patterns):
                             match.group(0),
                             line,
                             pattern_name,
-                            compiled_pattern.pattern,
-                        )
+                            compiled_pattern.pattern)
                         break
 
                     if category == "TRACK Pattern":
@@ -490,38 +496,21 @@ def process_file(file_path, compiled_patterns):
                             match.group(0),
                             line,
                             pattern_name,
-                            compiled_pattern.pattern,
-                        )
+                            compiled_pattern.pattern)
                         break
 
                     # - We shouldn't get here
-                    raise ValueError(
-                        "Unexpected match: %s:%s->%s,%s: %s",
-                        file_path,
-                        line_number,
-                        pattern_name,
-                        search,
-                        line,
-                    )
+                    message = "Unexpected match: " +\
+                        f"{file_path}:{line_number} " +\
+                        f"->{pattern_name}={compiled_pattern.pattern} " +\
+                        f"{line}"
+                    raise ValueError(message)
 
     except (PermissionError, FileNotFoundError, IOError) as e:
         _TraceLogObj.warning("Skipping file due to error: %s - %s", file_path, e)
 
     except Exception as e:
         print_exception_info(f"{e}")
-
-
-# ===========================================================================
-# Report Anti-PAN
-# ===========================================================================
-def report_antipan_data(
-    file_path, line_number, matched_data, line, pattern_name, search
-):
-
-    _MatchCount["ANTI-PAN"] += 1
-    _DefaultLogObj.info(
-        "%s:%s->%s,%s: %s", file_path, line_number, pattern_name, search, line
-    )
 
 
 # ===========================================================================
@@ -544,6 +533,7 @@ def report_track_data(file_path, line_number, matched_data, line, pattern_name, 
 # Report pan data
 # ===========================================================================
 def report_pan_data(file_path, line_number, matched_data, line, pattern_name, search):
+
     pan = extract_pan_from_match(matched_data)
 
     _MatchCount["PAN"] += 1
@@ -620,7 +610,7 @@ def load_json_data(filename):
 
     except FileNotFoundError:
         print_exception_info(f"Error: File '{filename}' not found.")
-    except Exception as e:  # pylint: disable=broad-exception-caught
+    except Exception as e:
         print_exception_info(e)
 
     return None
