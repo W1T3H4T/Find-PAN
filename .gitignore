@@ -181,3 +181,4 @@ missing
 test/
 data/
 logs/
+pylinter-logs/
