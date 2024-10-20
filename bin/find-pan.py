@@ -50,7 +50,7 @@ _ArgParse = {}
 _Args = {}
 
 # - Semantic Version Information
-_FindPANVersion = "2 3 0"  # Major, Minor, Patch
+_FindPANVersion = "2 3 1"  # Major, Minor, Patch
 
 # - Item Count Array
 _MatchCount = defaultdict(int)
@@ -627,8 +627,12 @@ def load_json_data(filename: str) -> dict | None:
 # ===========================================================================
 # Enumerate command line arguments
 # ===========================================================================
-def enumerate_command_line_arguments(arg_parse: argparse.ArgumentParser) -> List[str]:
+def enumerate_command_line_arguments(arg_parse: argparse.ArgumentParser) -> List[str | None]:
     print_version_info(arg_parse)
+
+    if len(sys.argv) <= 1:
+        return None
+
     argument_list = [""]
     for arg, value in vars(_Args).items():
         arg = str(arg).replace("_", "-")
@@ -640,13 +644,14 @@ def enumerate_command_line_arguments(arg_parse: argparse.ArgumentParser) -> List
 # Version Information
 # ===========================================================================
 def print_version_info(arg_parse: argparse.ArgumentParser = None) -> None:
+
     def format_version():
         major, minor, patch = map(int, _FindPANVersion.split())
         return f"{arg_parse.prog} v{major}.{minor}.{patch}"
 
     print(f"{format_version()}\nPython {sys.version}")
 
-    if not arg_parse.parse_args().version:
+    if len(sys.argv) > 1 and not arg_parse.parse_args().version:
         print("Command-line arguments: ", list(sys.argv[1:]))
 
 
@@ -787,7 +792,7 @@ def main() -> None:
 
     # Valid arguments not found
     _DefaultLogObj.error("Required arguments not found.")
-    print("\n\n")
+    print("\n")
     _ArgParse.print_help()
     _ArgParse.exit(1)
 
@@ -827,7 +832,8 @@ if __name__ == "__main__":
 
     # -- Enumerate the command line arguments
     UsageInfo = enumerate_command_line_arguments(_ArgParse)
-    _TraceLogObj.info("%s", UsageInfo)
+    if not UsageInfo == None:
+        _TraceLogObj.info("%s", UsageInfo)
 
     try:
         # --  Main processing --
