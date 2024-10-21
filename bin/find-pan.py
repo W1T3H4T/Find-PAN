@@ -18,7 +18,6 @@ import json
 import logging
 import os
 import re
-import magic
 import shutil
 import signal
 import subprocess
@@ -30,6 +29,7 @@ from collections import defaultdict
 from datetime import datetime
 from typing import Dict, List
 
+import magic
 
 # ===========================================================================
 # Disable some pylint warnings
@@ -62,7 +62,7 @@ _JSONRegexPatternPath = None
 _RegexPatternPrefix = r"[ '\"{]"
 
 #   Use custom argparse for Visual Studio Debug
-_EnableVSArgParams = False  
+_EnableVSArgParams = False
 
 # - Loggers for Trace log and std Log file
 _TraceLogObj = None
@@ -474,37 +474,22 @@ def process_file(file_path: str, compiled_patterns: list) -> None:
                     if not match:
                         continue
 
+                    data_type = None
                     if category == "Anti-PAN Pattern":
-                        # We have found an Anti-PAN pattern
-                        _MatchCount["ANTI-PAN"] += 1
-                        _DefaultLogObj.info("%s:%s->%s,%s: %s",
-                                            file_path,
-                                            line_number,
-                                            pattern_name,
-                                            compiled_pattern.pattern,
-                                            line)
-                        break
+                        data_type = "ANTI-PAN"
+                    elif category in ["PAN Pattern", "TRACK Pattern"]:
+                        data_type = "PAN" if category == "PAN Pattern" else "TRACK"
 
-                    if category == "PAN Pattern":
-                        # We have found a PAN pattern
-                        report_pan_data(
+                    if data_type:
+                        DataReporter(
                             file_path,
                             line_number,
                             match.group(0),
                             line,
                             pattern_name,
-                            compiled_pattern.pattern)
-                        break
-
-                    if category == "TRACK Pattern":
-                        # We have found a TRACK pattern
-                        report_track_data(
-                            file_path,
-                            line_number,
-                            match.group(0),
-                            line,
-                            pattern_name,
-                            compiled_pattern.pattern)
+                            compiled_pattern.pattern,
+                            data_type
+                        )
                         break
 
                     # - We shouldn't get here
@@ -522,51 +507,45 @@ def process_file(file_path: str, compiled_patterns: list) -> None:
 
 
 # ===========================================================================
-# Report track data
+# Class to report PAN and TRACK data
 # ===========================================================================
-def report_track_data(file_path: str, line_number: int, matched_data: str, line: str, pattern_name: str, search: str) -> None:
+class DataReporter:  # pylint: disable=too-many-instance-attributes
+    def __init__(self, file_path: str, line_number: int, matched_data: str,
+                 line: str, pattern_name: str, search: str, data_type: str):
+        self.file_path = file_path
+        self.line_number = line_number
+        self.matched_data = matched_data
+        self.line = line
+        self.pattern_name = pattern_name
+        self.search = search
+        self.data_type = data_type
 
-    pan = extract_pan_from_match(matched_data)
+        self.pan = self.extract_pan_from_match()
+        self.update_match_count()
+        self.print_info()
 
-    _MatchCount["TRACK"] += 1
-    if not luhn_check(pan):
-        _MatchCount["BAD-LUHN"] += 1
+    def extract_pan_from_match(self) -> str:
+        # Assuming Track 1 & 2 Data
+        if self.matched_data.startswith(
+                "%B") or self.matched_data.startswith("%M"):
+            return re.sub(r"\D", "", self.matched_data[2:].split("^")[0])
 
-    _DefaultLogObj.info(
-        "%s:%s->%s,%s: %s", file_path, line_number, pattern_name, search, line
-    )
+        if self.matched_data.startswith(";"):
+            return re.sub(r"\D", "", self.matched_data[1:].split("=")[0])
 
+        # Otherwise, we're not sure what we have,
+        # other than a regex match.  Return the digits
+        return re.sub(r"\D", "", self.matched_data)
 
-# ===========================================================================
-# Report pan data
-# ===========================================================================
-def report_pan_data(file_path: str, line_number: int, matched_data: str, line: str, pattern_name: str, search: str) -> None:
+    def update_match_count(self) -> None:
+        _MatchCount[self.data_type] += 1
+        if not luhn_check(self.pan):
+            _MatchCount["BAD-LUHN"] += 1
 
-    pan = extract_pan_from_match(matched_data)
-
-    _MatchCount["PAN"] += 1
-    if not luhn_check(pan):
-        _MatchCount["BAD-LUHN"] += 1
-
-    _DefaultLogObj.info(
-        "%s:%s->%s,%s: %s", file_path, line_number, pattern_name, search, line
-    )
-
-
-# ===========================================================================
-# Extract PAN from track data
-# ===========================================================================
-def extract_pan_from_match(match_data: str) -> str:
-    # Assuming Track 1 & 2 Data
-    if match_data.startswith("%B") or match_data.startswith("%M"):
-        return re.sub(r"\D", "", match_data[2:].split("^")[0])
-
-    if match_data.startswith(";"):
-        return re.sub(r"\D", "", match_data[1:].split("=")[0])
-
-    # Otherwise, we're not sure what we have,
-    # other than a regex match.  Return the digits
-    return re.sub(r"\D", "", match_data)
+    def print_info(self) -> None:
+        _DefaultLogObj.info(
+            "%s:%s->%s,%s: %s", self.file_path, self.line_number, self.pattern_name, self.search, self.line
+        )
 
 
 # ===========================================================================
@@ -686,11 +665,10 @@ def print_scan_summary() -> None:
 # ===========================================================================
 # Find the JSON pattern file
 # ===========================================================================
-def find_json_pattern_file() -> str:
+def find_json_regex_config() -> str:
     # Potential config paths
     config_paths = [
-        os.environ.get("XDG_CONFIG_HOME"), 
-        os.path.expanduser("~"),
+        os.environ.get("XDG_CONFIG_HOME"),
         os.path.join(os.path.expanduser("~"), ".config"),
         os.path.join(os.path.expanduser("~"), ".local"),
         os.path.join(os.path.expanduser("~"), ".local/share"),
@@ -707,7 +685,7 @@ def find_json_pattern_file() -> str:
 
     # Raise error if none of the paths exist
     raise FileNotFoundError("JSON configuration file not found")
-    return None
+
 
 # ===========================================================================
 # Configure our command line options
@@ -722,30 +700,32 @@ def process_cmdline_arguments() -> argparse.ArgumentParser:
     )
 
     # -- Set the JSON file path
-    _JSONRegexPatternPath = find_json_pattern_file()
+    _JSONRegexPatternPath = find_json_regex_config()
 
     #
-    #   Mutable Processing Arguments (change our runtime/detection behavior)
+    #   Mutable processing (change our runtime/detection behavior)
     #
     parser.add_argument( "--path", help="Filesystem pathname to scan.", type=str, default=None)
     parser.add_argument( "--tar", help="TAR file path.", type=str, default=None)
     parser.add_argument( "--tar-tmp", help="Temporary directory for tar file extraction.", default=tar_dir,)
     parser.add_argument( "--log-dir", help="Directory for log files.", default=log_dir)
     parser.add_argument( "--rgx-patterns", help="JSON file containing PAN and TRACK regular expressions.",
-                         type=str, default=f"{_JSONRegexPatternPath}",)
-    parser.add_argument( "--rgx-prefix", help=f"Apply prefixes ({_RegexPatternPrefix}) to regular expressions.", default=False, action="store_true",)
+                        type=str, default=f"{_JSONRegexPatternPath}",)
+    parser.add_argument( "--rgx-prefix", help=f"Apply prefixes ({_RegexPatternPrefix}) to regular expressions.",
+                        default=False, action="store_true",)
     parser.add_argument( "--skip-binary", help="Skip binary files.", action="store_true", default=False)
     parser.add_argument( "--line-limit", help="Line scan limit per file.", type=int, default=0)
-    parser.add_argument( "--report-delta", type=int, default=500, help="Files to process before reporting progress.",)
+    parser.add_argument( "--report-delta", type=int, default=500, 
+                        help="Files to process before reporting progress.",)
     #
-    #   Non-functional Arguments
+    #   Non-functional processing
     #
     parser.add_argument( "--verbose", default=False, action="store_true", help="Verbose output.")
     parser.add_argument( "--debug", default=False, action="store_true", help="Enable debug logging.")
     parser.add_argument( "--version", default=False, action="store_true", help="Print version information.",)
     parser.add_argument( "--exception-test", default=False, action="store_true", help="Test exception handler.",)
 
-    #  Parse command line arguments
+    #  Visual Studio debug command line arguments
     if _EnableVSArgParams:
         # _Args = parser.parse_args(['--version'] )
         # debugging configuration here
@@ -754,9 +734,9 @@ def process_cmdline_arguments() -> argparse.ArgumentParser:
     if parser.parse_args().version:
         print_version_info(parser)
         parser.exit()
-
     return parser
 # autopep8: on
+
 
 # ===========================================================================
 # MAIN is here
@@ -802,7 +782,7 @@ def main() -> None:
 # ===========================================================================
 def exception_test() -> None:
     try:
-        print (10 / 0 ) # pylint: disable=unused-variable
+        print(10 / 0)  # pylint: disable=unused-variable
     except ZeroDivisionError:
         print_exception_info("Exception test called")
 
@@ -832,7 +812,7 @@ if __name__ == "__main__":
 
     # -- Enumerate the command line arguments
     UsageInfo = enumerate_command_line_arguments(_ArgParse)
-    if not UsageInfo == None:
+    if UsageInfo is not None:
         _TraceLogObj.info("%s", UsageInfo)
 
     try:
