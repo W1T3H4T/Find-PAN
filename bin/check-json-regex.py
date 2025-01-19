@@ -10,8 +10,6 @@ ProgramName = None
 # ===========================================================================
 # Print consolidated exception info
 # ===========================================================================
-
-
 def print_exception_info(e: Exception) -> None:
     exc_type, exc_value, exc_traceback = sys.exc_info()
     tb_stack = traceback.extract_tb(exc_traceback)
@@ -67,7 +65,7 @@ def find_json_regex_config() -> str:
                 return json_file_path
 
         # Raise error if none of the paths exist
-        raise FileNotFoundError("JSON configuration file not found")
+        raise FileNotFoundError("Find-PAN JSON configuration file not found")
     except (FileNotFoundError, IOError, Exception) as e:
         print_exception_info(e)
 
