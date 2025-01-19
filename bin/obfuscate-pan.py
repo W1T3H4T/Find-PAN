@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
-#   ===========================================================================
-#   File    :   obfuscate-pan.py
-#   Function:   Apply PCI PAN obfuscation rules.
-#   Who     :   David Means <w1t3h4t@gmail.com>
-#   What    :   This script reads a file containing PAN numbers and obfuscates
-#               them according to PCI rules. The script reads the file line by
-#               line and extracts the PAN numbers. It then obfuscates the PAN
-#               numbers by replacing the middle digits with asterisks and
-#               adding two hyphens evenly spaced. The script then prints the
-#               obfuscated PAN numbers to stdout.
-#   ===========================================================================
+##  ===========================================================================
+##  File    :   obfuscate-pan.py
+##  Function:   Apply PCI PAN obfuscation rules to text files.
+##  Who     :   David Means <w1t3h4t@gmail.com>
+##  What    :   This script reads a file containing PAN numbers and obfuscates
+##              them according to PCI rules. The script reads the file line by
+##              line and extracts the PAN numbers. It then obfuscates the PAN
+##              numbers by replacing the middle digits with asterisks and
+##              adding two hyphens evenly spaced. The script then prints the
+##              obfuscated PAN numbers to stdout.
+##  ===========================================================================
+##  Copyright (c) 2023 David Means  <w1t3h4t@gmail.com>
+##  ===========================================================================
 
 import argparse
 import json
@@ -22,11 +24,10 @@ _Json_Data = {}
 _Args = None
 _Parser = None
 
+
 #   =================================================================
 #   Load the JSON file and return its contents.
 #   =================================================================
-
-
 def load_json(json_file):
     # pylint: disable=broad-exception-caught
     try:

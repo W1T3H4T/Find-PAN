@@ -1,17 +1,14 @@
 #!/usr/bin/env python3
-"""
-find-pan.py
-    This script scans a file system or tar file for Primary Account Number (PAN)
-    and Track Data patterns using regular expressions. It supports logging,
-    process time tracking, and secure file deletion.
-
-Usage:
-    Run the script with appropriate command line arguments to scan for PAN and
-    Track Data patterns in a file system or tar file.
-
-   MIT License
-   Copyright (c) 2023 David Means  <w1t3h4t@gmail.com>
-"""
+##  ===========================================================================
+##  File    :   Find-PAN.py
+##  Who     :   David Means <w1t3h4t@gmail.com>
+##  What    :   This script scans a file system or tar file for Primary Account 
+##              Number (PAN) and Track Data patterns using regular expressions.
+##              It supports logging, process time tracking, and secure file 
+##              deletion.
+##  ===========================================================================
+##  Copyright (c) 2023 David Means  <w1t3h4t@gmail.com>
+##  ===========================================================================
 
 import argparse
 import json

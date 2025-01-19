@@ -1,4 +1,14 @@
 #!/usr/bin/env python3
+##  ===========================================================================
+##  File    :   check-json-regex.py
+##  Who     :   David Means <w1t3h4t@gmail.com>
+##  What    :   This script reads a JSON file containing PAN patterns and
+##              validates the regular expression patterns against the specified
+##              rules.
+##  ===========================================================================
+##  Copyright (c) 2023 David Means  <w1t3h4t@gmail.com>
+##  ===========================================================================
+
 import json
 import os
 import re

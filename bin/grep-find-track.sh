@@ -1,40 +1,20 @@
 #!/bin/bash
-#   ==========================================================================
-#   File    :   grep-find-track.sh
-#   What    :   Stupid-simple script for discovering the possiblity of
-#           :   TRACK 1 or TRACK 2 data within files.
-#   Who:    :   David Means <w1t3h4t@gmail.com>
-#   Notes   :   Hits reported by this tool do not necessarily indicate the 
-#           :   presence of actual TRACK data used in a financial 
-#           :   transaction.  Luhn checking is NOT performed, and test
-#           :   TRACK data is detected as valid findings.
-#   ==========================================================================
-#
-#   MIT License
-#
-#   Copyright (c) 2023 David Means  <w1t3h4t@gmail.com>
-#
-#   Permission is hereby granted, free of charge, to any person obtaining a copy
-#   of this software and associated documentation files (the "Software"), to deal
-#   in the Software without restriction, including without limitation the rights
-#   to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-#   copies of the Software, and to permit persons to whom the Software is
-#   furnished to do so, subject to the following conditions:
-#
-#   The above copyright notice and this permission notice shall be included in all
-#   copies or substantial portions of the Software.
-#
-#   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-#   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-#   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-#   AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-#   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-#   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-#   SOFTWARE.
-#
-##  -----------------------------------------------
+##  ==========================================================================
+##  File    :   grep-find-track.sh
+##  What    :   Stupid-simple script for discovering the possiblity of
+##          :   TRACK 1 or TRACK 2 data within files.
+##  Who:    :   David Means <w1t3h4t@gmail.com>
+##  Notes   :   Hits reported by this tool do not necessarily indicate the 
+##          :   presence of actual TRACK data used in a financial 
+##          :   transaction.  Luhn checking is NOT performed, and test
+##          :   TRACK data is detected as valid findings.
+##  ==========================================================================
+##  Copyright (c) 2023 David Means  <w1t3h4t@gmail.com>
+##  ===========================================================================
+
+##  ===========================================================================
 ##  Control our logging functions
-##  -----------------------------------------------
+##  ===========================================================================
 _LOG_INFO=1
 _LOG_DEBUG=0
 _LOG_WARN=1
@@ -44,9 +24,9 @@ _LOG_INIT_MESSAGE=0
 _LOG_FILE=$(pwd)/$(basename $0 .sh).log
 rm -f ${_LOG_FILE}
 
-##  --------------------------------------------
+##  ===========================================================================
 ##  Load our logging functions
-##  --------------------------------------------
+##  ===========================================================================
 loggersh=$(which logger.sh)
 if [[ -f "${loggersh}" ]]; then
     source ${loggersh}

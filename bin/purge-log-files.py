@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
-#   ===========================================================================
-#   File    :   purge-log-files.py
-#   Function:   Remove log files of a certain age
-#   Who     :   David Means <w1t3h4t@gmail.com>
-#   ===========================================================================
+##  ===========================================================================
+##  File    :   purge-log-files.py
+##  Function:   Remove log files of a certain age
+##  Who     :   David Means <w1t3h4t@gmail.com>
+##  ===========================================================================
+##  Copyright (c) 2023 David Means  <w1t3h4t@gmail.com>
+##  ===========================================================================
 
 import argparse
 import logging
