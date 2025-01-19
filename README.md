@@ -91,7 +91,7 @@ Briefly:
 $ python -m venv /path/to/new/virtual/environment
 </pre>
 
-#### Configuration
+### Configuration
 Next, activate the environment.  I use the following in my bash profile script: 
 <pre>
 export VIRTUAL_ENV_DISABLE_PROMPT=True
