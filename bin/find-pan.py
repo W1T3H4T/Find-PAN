@@ -143,7 +143,6 @@ def set_log_directory_and_filenames() -> tuple:
 
     except Exception as e:
         print_exception_info(e)
-
     return pan_logfile, trace_logfile
 
 
@@ -204,7 +203,6 @@ def setup_custom_loggers() -> Dict[str, logging.Logger]:
         pan_logger.addHandler(pan_console_handler)
 
     pan_logger.addHandler(log_file_handler)
-
     return {"Trace": trace_logger, "Log": pan_logger}
 
 
@@ -261,7 +259,6 @@ def is_executable(file_path: str) -> bool:
 
     except Exception as e:
         print_exception_info(f"Skipping file due to error: {file_path}, {e}")
-
     return False
 
 
@@ -295,7 +292,6 @@ def is_binary(file_path: str) -> bool:
 
         except IOError as e:
             _DefaultLogObj.warning("Error reading file: %s - %s", file_path, e)
-
     return False
 
 
@@ -541,7 +537,7 @@ class DataReporter:  # pylint: disable=too-many-instance-attributes
 
     def print_info(self) -> None:
         _DefaultLogObj.info(
-            "%s:%s->%s,%s: %s", self.file_path, self.line_number, self.pattern_name, self.search, self.line
+            "%s:%s->%s (%s), %s: %s", self.file_path, self.line_number, self.pattern_name, self.data_type, self.search, self.line
         )
 
 
@@ -560,7 +556,6 @@ def compile_regex_patterns_with_prefix(json_data: dict) -> list:
                         compiled_patterns.append(
                             (category, pattern_name, re.compile(prefix_pattern))
                         )
-
     return compiled_patterns
 
 
@@ -596,7 +591,6 @@ def load_json_data(filename: str) -> dict | None:
         print_exception_info(f"Error: File '{filename}' not found.")
     except Exception as e:
         print_exception_info(e)
-
     return None
 
 
