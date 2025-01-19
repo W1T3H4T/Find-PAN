@@ -1,32 +1,5 @@
 # find-pan.py
-- [find-pan.py](#find-panpy)
-  - [Description](#description)
-  - [Features](#features)
-  - [License](#license)
-- [Installation](#installation)
-  - [Virtual Python Environment](#virtual-python-environment)
-  - [Configure python environment](#configure-python-environment)
-  - [Install the Required Packages](#install-the-required-packages)
-    - ["Just the Facts, Ma'am"](#just-the-facts-maam)
-    - [Update, Upgrade, and Install Python](#update-upgrade-and-install-python)
-- [Usage](#usage)
-  - [Command-line Arguments:](#command-line-arguments)
-  - [Log Files](#log-files)
-  - [PAN and TRACK Patterns](#pan-and-track-patterns)
-  - [Anti-PAN (Suspect) Patterns](#anti-pan-suspect-patterns)
-  - [Binary File Handling](#binary-file-handling)
-  - [Secure Deletion](#secure-deletion)
-  - [Examples](#examples)
-- [Example Usage for a File System Scan](#example-usage-for-a-file-system-scan)
-- [Example Usage for a TAR File Scan](#example-usage-for-a-tar-file-scan)
-- [Notes](#notes)
-- [Potential Future Enhancements](#potential-future-enhancements)
-  - [Regular Expression Support](#regular-expression-support)
-  - [Processing Metrics](#processing-metrics)
-  - [Logging](#logging)
-  - [](#)
-- [PCI DSS 4.0 Compliance Notes](#pci-dss-40-compliance-notes)
-- [Author](#author)
+[[TOC]]
 
 ## Description
 **find-pan.py** is a Python script designed to search for Primary Account Numbers (PANs) and TRACK data in a file system or a tar file.
@@ -48,60 +21,42 @@ The script was originally designed for Payments Information System projects.  It
 This script is released under the MIT License. See the [LICENSE](LICENSE) file for details.
 
 # Installation
-Download and extract the ZIP file, or clone the project:<br>
-`$ git clone https://github.com/W1T3H4T/Find-PAN.git`
+## Application File
+Download and extract the ZIP file, or clone the project.
+Example:
 <pre>
-$ cd ./Find-PAN/Install
-$ cat make-install.sh 
-#!/bin/bash
-set -x
-aclocal
-autoconf
-automake --add-missing
-./configure
-make
-sudo make install
-set +x
-echo
-echo "Use 'sudo make uninstall' to remove."
-echo
-
-$ ./make-install.sh 
-...
-
-$ tree /usr/local/Find-PAN/
-/usr/local/Find-PAN/
-├── bin
-│   ├── create-logs-for-purge-test.py
-│   ├── create-pan-data.py
-│   ├── create-test-data.sh
-│   ├── create-track-data.py
-│   ├── find-pan.py
-│   ├── get-strings.sh
-│   ├── grep-find-pan.sh
-│   ├── grep-find-track.sh
-│   ├── logger.sh
-│   ├── obfuscate-pan.py
-│   ├── purge-log-files.py
-│   ├── regex-test.py
-│   └── test_luhn_check.py
-├── patterns
-│   ├── find-pan-patterns.json
-│   └── find-pan-patterns.schema.json
-└── share
-    └── doc
-        └── find-pan
-            ├── LICENSE
-            ├── README.md
-            └── requirements.txt
-
-6 directories, 18 files
-
-$ cat ~/.bashrc
-export PATH=$PATH:/usr/local/Find-PAN/bin:
+$ git clone https://github.com/W1T3H4T/Find-PAN.git
+$ echo "export PATH=$PATH:$HOME/Find-PAN/bin" >> ~/.bashrc
 </pre>
 
-## Virtual Python Environment
+## Configuration File
+Find-PAN uses `find-pan.json` as its configuration file. Find-PAN will attempt to load this file from
+the following locations:
+  <pre>
+  $XDG_CONFIG_HOME
+  $HOME/.config
+  $HOME/.local
+  $HOME/.local/share
+  /usr/local </pre>
+
+## Modules and Libraries
+These are the commands necessary to install `pip, libmagic` and the modules specified by `requirements.txt.`
+<pre>
+$ sudo apt update
+$ sudo app upgrade -y
+$ sudo apt install -y libmagic python3-pip 
+$ pip install -r requirements.txt
+</pre>
+
+These are the commands to install all necessary bits, including support for a virtual environment.
+<pre>
+$ sudo apt update
+$ sudo app upgrade -y
+$ sudo apt install -y libmagic python3-full python3-venv python3-pip
+$ pip install -r requirements.txt
+</pre>
+
+### Virtual Python Environment
 While it is not required to use a Python Virtual Environment, it does reduce the complexities assocatied with maintaining a usable Python solution for the system and a solution that works for your everyday tasks.
 
 For complete instructions, see here: [Python Virtual Environment](https://docs.python.org/3/library/venv.html)
@@ -111,41 +66,16 @@ Briefly:
 $ python -m venv /path/to/new/virtual/environment
 </pre>
 
-## Configure python environment
+#### Configuration
 Next, activate the environment.  I use the following in my bash profile script: 
 <pre>
 export VIRTUAL_ENV_DISABLE_PROMPT=True
 source $HOME/.pyenv/bin/activate
 </pre>
 
-## Install the Required Packages
-find-pan.py makes use of these modules:
-<pre>
-$ cat requirements.txt
-names>=0.3.0
-python-magic>=0.4.27
-random-address>=1.1.1
-</pre>
-
-The `python-magic` module requires the installation of `libmagic.`  The installation of the Python modules requires `pip.`  
-
-### "Just the Facts, Ma'am"
-These are the commands necessary to install `pip, libmagic` and the modules specified by `requirements.txt.`
-<pre>
-$ sudo apt install -y libmagic python3-pip 
-$ pip install -r requirements.txt
-</pre>
-### Update, Upgrade, and Install Python
-These are the commands to install all of the necessary bits, including support for a virtual environment.
-<pre>
-$ sudo apt update
-$ sudo app upgrade -y
-$ sudo apt install -y libmagic
-$ sudo apt install -y python3-full python3-pip python3-venv
-$ pip install -r requirements.txt
-</pre>
 
 # Usage
+
 <pre>
 find-pan.py [--path PATH] [--tar TAR] [--temp TEMP] [--log-dir LOG_DIR]
             [--skip-binary]  [--verbose] [--debug]
@@ -194,7 +124,7 @@ The script also checks for patterns indicative of non-PAN data, such as sequenti
 The script can be instructed to detect binary files and skip them during the scanning process.
 
 ## Secure Deletion
-For files processed during scanning, the script securely deletes them using platform-specific methods (`shred` on Linux, and `sdelete` on Windows).
+For files processed during tarfile scanning (files extracted from tar files), the script securely deletes them using platform-specific methods (`shred` on Linux, and `sdelete` on Windows).
 
 ## Examples
 Scan a directory:
