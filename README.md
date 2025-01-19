@@ -1,5 +1,31 @@
 # find-pan.py
-[[TOC]]
+* [Description](#description)
+  * [Features](#features)
+  * [License](#license)
+- [Installation](#installation)
+  * [Find-PAN Application](#find-pan-application)
+  * [Find-PAN Configuration](#find-pan-configuration)
+  * [Modules and Libraries](#modules-and-libraries)
+    + [Virtual Python Environment](#virtual-python-environment)
+      - [Configuration](#configuration)
+- [Usage](#usage)
+  * [Command-line Arguments:](#command-line-arguments)
+  * [Log Files](#log-files)
+  * [PAN and TRACK Patterns](#pan-and-track-patterns)
+  * [Anti-PAN (Suspect) Patterns](#anti-pan-suspect-patterns)
+  * [Binary File Handling](#binary-file-handling)
+  * [Secure Deletion](#secure-deletion)
+  * [Examples](#examples)
+- [Example Usage for a File System Scan](#example-usage-for-a-file-system-scan)
+- [Example Usage for a TAR File Scan](#example-usage-for-a-tar-file-scan)
+- [Notes](#notes)
+- [Potential Future Enhancements](#potential-future-enhancements)
+  * [Regular Expression Support](#regular-expression-support)
+  * [Processing Metrics](#processing-metrics)
+  * [Logging](#logging)
+- [PCI DSS 4.0 Compliance Notes](#pci-dss-40-compliance-notes)
+- [Author](#author)
+
 
 ## Description
 **find-pan.py** is a Python script designed to search for Primary Account Numbers (PANs) and TRACK data in a file system or a tar file.
@@ -21,7 +47,7 @@ The script was originally designed for Payments Information System projects.  It
 This script is released under the MIT License. See the [LICENSE](LICENSE) file for details.
 
 # Installation
-## Application File
+## Find-PAN Application
 Download and extract the ZIP file, or clone the project.
 Example:
 <pre>
@@ -29,15 +55,14 @@ $ git clone https://github.com/W1T3H4T/Find-PAN.git
 $ echo "export PATH=$PATH:$HOME/Find-PAN/bin" >> ~/.bashrc
 </pre>
 
-## Configuration File
-Find-PAN uses `find-pan.json` as its configuration file. Find-PAN will attempt to load this file from
-the following locations:
+## Find-PAN Configuration
+Find-PAN uses `find-pan.json` as its configuration file. This file is found in the `config` directory.  Copy it to one of the pre-defined directories.  Find-PAN will attempt to load this file from the following locations:
   <pre>
-  $XDG_CONFIG_HOME
-  $HOME/.config
-  $HOME/.local
-  $HOME/.local/share
-  /usr/local </pre>
+  $XDG_CONFIG_HOME/find-pan
+  $HOME/.config/find-pan
+  $HOME/.local/find-pan
+  $HOME/.local/share/find-pan
+  /usr/local/find-pan </pre>
 
 ## Modules and Libraries
 These are the commands necessary to install `pip, libmagic` and the modules specified by `requirements.txt.`
