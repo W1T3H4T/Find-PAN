@@ -24,3 +24,4 @@ class Settings:
     debug: bool = False
     mask: bool = False
     log_anti_pan: bool = False
+    summary_json: str | None = None

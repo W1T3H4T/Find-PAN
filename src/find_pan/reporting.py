@@ -192,6 +192,22 @@ class Reporter:
         """Record that an archive was extracted and its contents processed."""
         self.stats.archive_expanded()
 
+    def summary_data(self) -> dict:
+        """Return the run summary as plain data (for ``--summary-json``)."""
+        stats = self.stats
+        return {
+            "pans": stats.count(MatchKind.PAN),
+            "tracks": stats.count(MatchKind.TRACK),
+            "bad_luhn": stats.count(MatchKind.BAD_LUHN),
+            "anti_pans": stats.count(MatchKind.ANTI_PAN),
+            "files_scanned": stats.files,
+            "archives_expanded": stats.archives_expanded,
+            "archives_skipped": stats.archives_skipped,
+            "skipped": [[reason.value, path] for path, reason, _ in self._skipped],
+            "total_time": float(stats.total_time),
+            "average_time": float(stats.average_time),
+        }
+
     def summary_lines(self, log_dir: str) -> list[str]:
         """Return the end-of-run summary, one string per line."""
         stats = self.stats
