@@ -303,7 +303,7 @@ config directory by discovering `tar`, `unzip`, `7z`, and `gzip` on `PATH`.
 Edit that file if tools are installed outside `PATH`.
 <pre>
 $ uv run python bin/find-pan.py --tar test-archive.tar.gz
-find-pan.py v2.3.1
+find-pan.py v3.0.0
 Python 3.12.6 (main, Sep  6 2024, 19:03:47) [Clang 15.0.0 (clang-1500.3.9.4)]
 Command-line arguments: ['--tar', 'test-archive.tar.gz']
 2024-09-16 20:04:44,333 [INFO]: Archive Scan: extracting test-archive.tar.gz as tar into C:\...\find-pan-abcd1234 ...

@@ -8,6 +8,7 @@ import pytest
 
 from find_pan import cli
 from find_pan.settings import Settings
+from find_pan.version import __version__
 
 ROOT = Path(__file__).resolve().parents[1]
 PAN = "4556737586899855"
@@ -58,7 +59,7 @@ def test_version_works_without_config(monkeypatch, capsys):
 
     monkeypatch.setattr(cli, "find_json_regex_config", no_config)
     assert cli.main(["--version"]) == 0
-    assert "find-pan.py v2.3.1" in capsys.readouterr().out
+    assert f"find-pan.py v{__version__}" in capsys.readouterr().out
 
 
 def test_parser_does_not_look_up_config():
@@ -196,7 +197,7 @@ def test_launcher_version_subprocess():
         capture_output=True, text=True, check=False, cwd=ROOT,
     )
     assert result.returncode == 0
-    assert "find-pan.py v2.3.1" in result.stdout
+    assert f"find-pan.py v{__version__}" in result.stdout
 
 
 def test_command_line_arguments_line_printed_for_real_argv(tmp_path, monkeypatch, capsys):

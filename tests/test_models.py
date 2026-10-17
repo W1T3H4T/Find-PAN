@@ -59,7 +59,7 @@ def test_stats_average_time_zero_without_files():
 
 
 def test_format_version():
-    assert version.format_version("find-pan") == "find-pan v2.3.1"
+    assert version.format_version("find-pan") == f"find-pan v{version.__version__}"
 
 
 def test_errors_share_base():

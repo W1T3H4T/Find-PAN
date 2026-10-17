@@ -36,7 +36,7 @@ def write_pyproject_version(
     new_text, count = VERSION_PATTERN.subn(new_version_line, text, count=1)
     if count == 0:
         raise ValueError(f"Could not find version line to update in {pyproject_path}")
-    pyproject_path.write_text(new_text, encoding="utf-8")
+    pyproject_path.write_bytes(new_text.encode("utf-8"))  # keep LF on Windows
 
 
 MODULE_VERSION_PATTERN = re.compile(r'^__version__\s*=\s*"\d+\.\d+\.\d+"', re.MULTILINE)
@@ -49,7 +49,7 @@ def write_version_module(version_path: Path, version: tuple[int, int, int]) -> N
     new_text, count = MODULE_VERSION_PATTERN.subn(new_line, text, count=1)
     if count == 0:
         raise ValueError(f"Could not find __version__ line to update in {version_path}")
-    version_path.write_text(new_text, encoding="utf-8")
+    version_path.write_bytes(new_text.encode("utf-8"))  # keep LF on Windows
 
 
 def parse_set_version(value: str) -> tuple[int, int, int]:

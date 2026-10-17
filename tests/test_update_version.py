@@ -145,3 +145,11 @@ def test_version_module_and_pyproject_agree():
 
     expected = ".".join(str(part) for part in read_pyproject_version(ROOT / "pyproject.toml"))
     assert __version__ == expected
+
+
+def test_updates_keep_lf_line_endings(tmp_path):
+    pyproject, module = _make_project(tmp_path)
+    pyproject.write_bytes(pyproject.read_bytes())  # LF as written by _make_project
+    assert main(["--patch", "--pyproject", str(pyproject)]) == 0
+    assert b"\r\n" not in pyproject.read_bytes()
+    assert b"\r\n" not in module.read_bytes()
