@@ -308,6 +308,21 @@ def luhn_check(num: str) -> bool:
 
 
 # ===========================================================================
+# Validate date timestamp anti-PAN matches
+# ===========================================================================
+def valid_timestamp(value: str) -> bool:
+    if not re.fullmatch(r"[0-9]{14}", value):
+        return False
+
+    try:
+        timestamp = datetime.strptime(value, "%Y%m%d%H%M%S")
+    except ValueError:
+        return False
+
+    return 1900 <= timestamp.year <= datetime.now().year + 1
+
+
+# ===========================================================================
 # Calculate delta for reporting
 # ===========================================================================
 def calculate_delta() -> bool:
@@ -467,6 +482,13 @@ def process_file(file_path: str, compiled_patterns: list) -> None:
                     if not match:
                         continue
 
+                    if (
+                        category == "Anti-PAN Pattern"
+                        and pattern_name == "Timestamp"
+                        and not valid_timestamp(match.group(0))
+                    ):
+                        continue
+
                     data_type = None
                     if category == "Anti-PAN Pattern":
                         data_type = "ANTI-PAN"
@@ -514,6 +536,10 @@ class DataReporter:  # pylint: disable=too-many-instance-attributes
         self.data_type = data_type
 
         self.pan = self.extract_pan_from_match()
+        if not luhn_check(self.pan):
+            _MatchCount["BAD-LUHN"] += 1
+            return
+
         self.update_match_count()
         self.print_info()
 
@@ -532,8 +558,6 @@ class DataReporter:  # pylint: disable=too-many-instance-attributes
 
     def update_match_count(self) -> None:
         _MatchCount[self.data_type] += 1
-        if not luhn_check(self.pan):
-            _MatchCount["BAD-LUHN"] += 1
 
     def print_info(self) -> None:
         _DefaultLogObj.info(
@@ -669,7 +693,7 @@ def find_json_regex_config() -> str:
     # Find the first valid config path
     for config_path in config_paths:
         find_pan_dir = os.path.join(config_path, "find-pan")
-        json_file_path = os.path.join(find_pan_dir, "find-pan.json")
+        json_file_path = os.path.join(find_pan_dir, "find-pan-regex.json")
 
         if os.path.exists(json_file_path):
             return json_file_path

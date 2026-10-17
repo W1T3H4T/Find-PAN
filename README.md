@@ -56,7 +56,7 @@ $ echo "export PATH=$PATH:$HOME/Find-PAN/bin" >> ~/.bashrc
 </pre>
 
 ## Find-PAN Configuration
-Find-PAN uses `find-pan.json` as its configuration file. This file is found in the `config` directory.  Copy it to one of the pre-defined directories.  Find-PAN will attempt to load this file from the following locations:
+Find-PAN uses `find-pan-regex.json` as its configuration file. This file is found in the `config` directory.  Copy it to one of the pre-defined directories.  Find-PAN will attempt to load this file from the following locations:
   <pre>
   $XDG_CONFIG_HOME/find-pan
   $HOME/.config/find-pan
@@ -65,24 +65,27 @@ Find-PAN uses `find-pan.json` as its configuration file. This file is found in t
   /usr/local/find-pan </pre>
 
 ## Modules and Libraries
-These are the commands necessary to install `pip, libmagic` and the modules specified by `requirements.txt.`
+Install the operating-system `libmagic` dependency, then use [uv](https://docs.astral.sh/uv/) to create the project environment and install all runtime and test dependencies declared in `pyproject.toml`.
 <pre>
 $ sudo apt update
 $ sudo app upgrade -y
-$ sudo apt install -y libmagic python3-pip 
-$ pip install -r requirements.txt
+$ sudo apt install -y libmagic python3-full
+$ uv sync
 </pre>
 
-These are the commands to install all necessary bits, including support for a virtual environment.
+`uv sync` creates or updates `.venv` and installs the `pytest` development dependency by default. Run commands inside the managed environment with `uv run`:
 <pre>
-$ sudo apt update
-$ sudo app upgrade -y
-$ sudo apt install -y libmagic python3-full python3-venv python3-pip
-$ pip install -r requirements.txt
+$ uv run python bin/find-pan.py --version
+$ uv run python bin/run-pytest-regression.py
 </pre>
 
-### Virtual Python Environment
-While it is not required to use a Python Virtual Environment, it does reduce the complexities assocatied with maintaining a usable Python solution for the system and a solution that works for your everyday tasks.
+To install only runtime dependencies, omit the development group:
+<pre>
+$ uv sync --no-dev
+</pre>
+
+### pip Alternative
+For environments that do not use uv, install the dependencies listed in `requirements.txt` into a virtual environment.
 
 For complete instructions, see here: [Python Virtual Environment](https://docs.python.org/3/library/venv.html)
 
@@ -140,6 +143,29 @@ The script uses predefined regular expressions to identify PAN and TRACK 1 & 2 d
 - Discover
 - Diners Club International
 - JCB
+- UnionPay
+
+### Regular-expression construction
+
+The PAN expressions are maintained in [`config/find-pan-regex.json`](config/find-pan-regex.json). They are intentionally specific: a match is a candidate PAN, not proof that a card account is active or that a particular issuer owns the account.
+
+- **Issuer ranges and total lengths:** Each expression encodes its card brand's published IIN/BIN range and accepted total PAN length. The patterns use explicit alternatives when a brand supports disjoint lengths, such as VISA's 13-, 16-, and 19-digit PANs, rather than accepting every length in a broad range.
+- **Numeric boundaries:** `(?<![0-9])` and `(?![0-9])` prevent a valid-length PAN from being reported when it is only a substring of a longer numeric value.
+- **Range precision:** Nested alternatives represent non-contiguous ranges. For example, Discover's `622126`–`622925` range is encoded without accepting adjacent `622` values outside that range. Mastercard includes both its `51`–`55` and `2221`–`2720` series.
+- **Overlapping ranges:** More-specific patterns must win over broad patterns. The generic VISA expression excludes the configured VISA Electron prefixes so those matches are identified as VISA Electron instead.
+- **Validation after matching:** The scanner removes non-digits from a candidate PAN and requires it to pass the Luhn check before logging an event. The expressions reduce false positives; the Luhn check is an additional checksum validation, not an issuer lookup.
+- **Anti-PAN values:** The timestamp anti-pattern constrains `YYYYMMDDHHMMSS` components to valid numeric ranges. The scanner then validates the complete calendar date and time before treating it as an anti-PAN, preventing impossible dates such as February 30 from being ignored.
+
+#### Range and length sources
+
+The current ranges and length rules were reviewed against the following published references:
+
+- [ISO/IEC 7812-1](https://www.iso.org/standard/70484.html), which defines the identification-card numbering system and IIN framework.
+- [Mastercard 2-Series BIN Implementation for Merchants](https://www.mastercard.us/content/dam/mccom/en-us/documents/merchant-2-series-BIN-impact-checklist-aug-2016.pdf), for the `222100`–`272099` Mastercard series.
+- [Discover Network IPP/VAR Compliance Update](https://www.discovernetwork.com/downloads/IPP_VAR_Compliance.pdf), for Discover, Diners Club, JCB, and UnionPay co-brand ranges and 19-digit PAN support.
+- The [Payment card number issuer table](https://en.wikipedia.org/wiki/Payment_card_number), used as a public cross-reference for the configured issuer ranges and PAN lengths.
+
+Issuer ranges can change, and the ISO specification does not publish every allocated range. Before changing a pattern, confirm the current range and length with the relevant payment brand's official account-range or network-rules documentation, add representative boundary tests, and preserve the numeric-boundary and Luhn-validation behavior.
 
 
 ## Anti-PAN (Suspect) Patterns
@@ -166,6 +192,22 @@ Specify a log directory:
 <pre>
 $ find-pan.py --path /path/to/directory --log-dir /path/to/logs
 </pre>
+
+## Generate Synthetic PAN Test Data
+
+`bin/generate-pan.py` creates synthetic PANs from the configured `PAN Pattern` entries. It generates at least one Luhn-valid PAN for every regular expression defined for the selected pattern. The output is suitable for scanner testing only; it is not an account-status or issuer-ownership check.
+
+List the available patterns:
+<pre>
+$ python bin/generate-pan.py --list-pan-patterns
+</pre>
+
+Generate values for a selected pattern:
+<pre>
+$ python bin/generate-pan.py --pan-pattern "VISA Electron"
+</pre>
+
+Omit `--pan-pattern` in an interactive terminal to choose from a numbered menu. Use `--seed NUMBER` when reproducible synthetic values are required, or `--patterns PATH` to use an alternate pattern configuration.
 
 # Example Usage for a File System Scan
 <pre>

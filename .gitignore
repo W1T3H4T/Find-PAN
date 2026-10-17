@@ -121,12 +121,15 @@ celerybeat.pid
 
 # Environments
 .env
-.venv
+.venv/
 env/
 venv/
 ENV/
 env.bak/
 venv.bak/
+
+# uv keeps its lockfile in source control for reproducible environments.
+!uv.lock
 
 # Spyder project settings
 .spyderproject
@@ -157,14 +160,19 @@ cython_debug/
 #  be found at https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore
 #  and can be added to the global gitignore or merged into this file.  For a more nuclear
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
-#.idea/
 .DS_Store
-docs/**
 
 # Visual Studio
 .vs/*
-.vscode/*
+!.vs/tasks.vs.json
+.vscode/
 *.code-workspace
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.rsuser
+TestResults/
 
 # Autoconf
 Makefile
@@ -178,7 +186,5 @@ install-sh
 missing
 
 # Other
-test/
-data/
 logs/
 pylinter-logs/
