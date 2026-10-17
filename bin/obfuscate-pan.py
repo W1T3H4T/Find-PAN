@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run python
 ##  ===========================================================================
 ##  File    :   obfuscate-pan.py
 ##  Function:   Apply PCI PAN obfuscation rules to text files.

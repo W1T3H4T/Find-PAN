@@ -1,0 +1,88 @@
+"""Tests for Luhn-failure reporting (--debug / --mask) in find-pan.py."""
+
+import logging
+
+import pytest
+
+VALID_PAN = "4556737586899855"
+BAD_PAN = "4556737586899856"   # VALID_PAN with the check digit changed
+
+
+@pytest.fixture
+def scan_file(scanner, compiled_patterns, tmp_path):
+    """Scan one file with the given text; return the file path."""
+
+    def scan(text: str):
+        target = tmp_path / "sample.txt"
+        target.write_text(text, encoding="utf-8")
+        scanner.process_file(str(target), compiled_patterns)
+        return target
+
+    return scan
+
+
+def luhn_messages(caplog):
+    return [r.getMessage() for r in caplog.records if "Luhn failure" in r.getMessage()]
+
+
+def test_luhn_failure_counted_and_logged_in_debug(scanner, scan_file, caplog):
+    with caplog.at_level(logging.DEBUG, logger=scanner._TraceLogObj.name):
+        scan_file(f"Card: {BAD_PAN}\n")
+
+    assert scanner._MatchCount["BAD-LUHN"] >= 1
+    assert scanner._MatchCount["PAN"] == 0
+    messages = luhn_messages(caplog)
+    assert messages
+    assert "sample.txt" in messages[0]
+    assert "line=1" in messages[0]
+    assert "offset=6" in messages[0]
+    assert BAD_PAN in messages[0]
+
+
+def test_luhn_failure_not_logged_without_debug(scanner, scan_file, caplog):
+    with caplog.at_level(logging.INFO, logger=scanner._TraceLogObj.name):
+        scan_file(f"Card: {BAD_PAN}\n")
+
+    assert scanner._MatchCount["BAD-LUHN"] >= 1
+    assert not luhn_messages(caplog)
+
+
+def test_bad_luhn_does_not_hide_valid_pan_on_same_line(scanner, scan_file):
+    scan_file(f"first {BAD_PAN} second {VALID_PAN}\n")
+
+    assert scanner._MatchCount["BAD-LUHN"] >= 1
+    assert scanner._MatchCount["PAN"] == 1
+
+
+def test_mask_off_by_default_logs_full_pan(scanner, scan_file, caplog):
+    with caplog.at_level(logging.DEBUG, logger=scanner._TraceLogObj.name):
+        scan_file(f"Card: {BAD_PAN}\n")
+
+    assert BAD_PAN in luhn_messages(caplog)[0]
+
+
+def test_mask_hides_middle_digits(scanner, scan_file, caplog):
+    scanner._Args.mask = True
+    with caplog.at_level(logging.DEBUG, logger=scanner._TraceLogObj.name):
+        scan_file(f"Card: {BAD_PAN}\n")
+
+    message = luhn_messages(caplog)[0]
+    assert BAD_PAN not in message
+    assert "455673******9856" in message
+
+
+def test_anti_pan_not_luhn_checked_or_reported(scanner, scan_file, caplog):
+    with caplog.at_level(logging.INFO, logger=scanner._DefaultLogObj.name):
+        scan_file("Sequential: 123456789012345678\n")
+
+    assert scanner._MatchCount["BAD-LUHN"] == 0
+    assert scanner._MatchCount["PAN"] == 0
+    assert scanner._MatchCount["ANTI-PAN"] == 1
+    assert not [r for r in caplog.records if "ANTI-PAN" in r.getMessage()]
+
+
+def test_mask_pan_helpers(find_pan):
+    assert find_pan.mask_pan("4556737586899856") == "455673******9856"
+    assert find_pan.mask_pan("123456789") == "*********"
+    assert find_pan.mask_matched_data("4556 7375 8689 9856", "4556737586899856") == "4556 73** **** 9856"
+    assert find_pan.mask_matched_data(";4556737586899856=2512", "4556737586899856") == ";****************=****"

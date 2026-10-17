@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run python
 ##  ===========================================================================
 ##  File    :   Find-PAN.py
 ##  Who     :   David Means <w1t3h4t@gmail.com>
@@ -21,6 +21,7 @@ import sys
 import tempfile
 import time
 import traceback
+import csv
 from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
@@ -70,6 +71,10 @@ _EnableVSArgParams = False
 # - Loggers for Trace log and std Log file
 _TraceLogObj = None
 _DefaultLogObj = None
+
+# - CSV output handle and writer (opened lazily when --csv is requested)
+_CsvFileObj = None
+_CsvWriter = None
 
 
 # ===========================================================================
@@ -132,7 +137,9 @@ def generate_logfile_name(basename: str) -> str:
 # ===========================================================================
 # Create our log file names
 # ===========================================================================
-def set_log_directory_and_filenames() -> tuple:
+def set_log_directory_and_filenames() -> tuple[str, str]:
+    pan_logfile = ""
+    trace_logfile = ""
     try:
         if not os.path.exists(_Args.log_dir):
             os.makedirs(_Args.log_dir)
@@ -199,14 +206,12 @@ def setup_custom_loggers() -> Dict[str, logging.Logger]:
     pan_logger.addHandler(log_file_handler)
 
     # Console Handler (for stdout)
-    pan_console_handler = logging.StreamHandler(sys.stdout)
-    pan_console_handler.setLevel(logging.DEBUG)
-    pan_console_handler.setFormatter(log_formatter)
-
     if _Args.verbose:
+        pan_console_handler = logging.StreamHandler(sys.stdout)
+        pan_console_handler.setLevel(logging.DEBUG)
+        pan_console_handler.setFormatter(log_formatter)
         pan_logger.addHandler(pan_console_handler)
 
-    pan_logger.addHandler(log_file_handler)
     return {"Trace": trace_logger, "Log": pan_logger}
 
 
@@ -320,6 +325,21 @@ def is_binary(file_path: str) -> bool:
 
 
 # ===========================================================================
+# Sanitize a value for safe ASCII CSV / log output
+# ===========================================================================
+def sanitize_for_ascii(value: str) -> str:
+    """Return an ASCII-only representation of *value* suitable for logs/CSV.
+
+    Non-printable bytes are replaced with '?' so binary data cannot be emitted
+    in match output.
+    """
+    return "".join(
+        char if 32 <= ord(char) <= 126 else "?"
+        for char in value
+    )
+
+
+# ===========================================================================
 # Luhn algorithm check
 # ===========================================================================
 def luhn_check(num: str) -> bool:
@@ -329,6 +349,31 @@ def luhn_check(num: str) -> bool:
         n = d if i % 2 == 0 else 2 * d
         checksum += n if n < 10 else n - 9
     return checksum % 10 == 0
+
+
+# ===========================================================================
+# Mask PAN digits for logging: keep the first 6 (BIN) and last 4 digits
+# ===========================================================================
+def mask_pan(pan: str) -> str:
+    if len(pan) <= 10:
+        return "*" * len(pan)
+    return pan[:6] + "*" * (len(pan) - 10) + pan[-4:]
+
+
+def mask_matched_data(matched: str, pan: str) -> str:
+    #   Plain PAN (digits possibly separated): mask in place.  Anything else
+    #   (e.g. track data) carries more sensitive fields, so mask every digit.
+    if re.sub(r"\D", "", matched) != pan:
+        return re.sub(r"\d", "*", matched)
+    masked, seen = [], 0
+    for char in matched:
+        if char.isdigit():
+            keep = seen < 6 or seen >= len(pan) - 4
+            masked.append(char if keep and len(pan) > 10 else "*")
+            seen += 1
+        else:
+            masked.append(char)
+    return "".join(masked)
 
 
 # ===========================================================================
@@ -542,16 +587,27 @@ def process_file(file_path: str, compiled_patterns: list) -> None:
                         data_type = "PAN" if category == "PAN Pattern" else "TRACK"
 
                     if data_type:
-                        DataReporter(
-                            file_path,
-                            line_number,
-                            match.group(0),
-                            line,
-                            pattern_name,
-                            compiled_pattern.pattern,
-                            data_type
-                        )
-                        break
+                        #   A candidate that fails the Luhn check must not
+                        #   hide a valid PAN later on the line (or matched by a
+                        #   later pattern), so keep looking until one is accepted.
+                        accepted = False
+                        for candidate in compiled_pattern.finditer(line):
+                            reporter = DataReporter(
+                                file_path,
+                                line_number,
+                                candidate.start(),
+                                candidate.group(0),
+                                line,
+                                pattern_name,
+                                compiled_pattern.pattern,
+                                data_type
+                            )
+                            if reporter.accepted:
+                                accepted = True
+                                break
+                        if accepted:
+                            break
+                        continue
 
                     # - We shouldn't get here
                     message = "Unexpected match: " +\
@@ -571,23 +627,51 @@ def process_file(file_path: str, compiled_patterns: list) -> None:
 # Class to report PAN and TRACK data
 # ===========================================================================
 class DataReporter:  # pylint: disable=too-many-instance-attributes
-    def __init__(self, file_path: str, line_number: int, matched_data: str,
+    def __init__(self, file_path: str, line_number: int, offset: int, matched_data: str,
                  line: str, pattern_name: str, search: str, data_type: str):
         self.file_path = file_path
         self.line_number = line_number
+        self.offset = offset
         self.matched_data = matched_data
         self.line = line
         self.pattern_name = pattern_name
         self.search = search
         self.data_type = data_type
 
-        self.pan = self.extract_pan_from_match()
-        if not luhn_check(self.pan):
-            _MatchCount["BAD-LUHN"] += 1
+        self.accepted = False
+
+        #   Anti-PANs are known false positives: count them, never Luhn-check
+        #   or report them as findings.
+        if self.data_type == "ANTI-PAN":
+            self.accepted = True    # suppresses further patterns on this line
+            self.update_match_count()
             return
 
+        self.pan = self.extract_pan_from_match()
+        if not self.pan or not luhn_check(self.pan):
+            _MatchCount["BAD-LUHN"] += 1
+            extracted, matched = self.pan, self.matched_data
+            if getattr(_Args, "mask", False):
+                extracted = mask_pan(self.pan)
+                matched = mask_matched_data(self.matched_data, self.pan)
+            _TraceLogObj.debug(
+                "Luhn failure: file=%s line=%s offset=%s pattern=%s "
+                "extracted=%s matched=%s",
+                self.file_path,
+                self.line_number,
+                self.offset,
+                self.pattern_name,
+                extracted,
+                matched,
+            )
+            return
+
+        self.accepted = True
         self.update_match_count()
         self.print_info()
+        self.write_csv_row()
+        if _CsvFileObj is not None:
+            _CsvFileObj.flush()
 
     def extract_pan_from_match(self) -> str:
         # Assuming Track 1 & 2 Data
@@ -607,8 +691,20 @@ class DataReporter:  # pylint: disable=too-many-instance-attributes
 
     def print_info(self) -> None:
         _DefaultLogObj.info(
-            "%s:%s->%s (%s), %s: %s", self.file_path, self.line_number, self.pattern_name, self.data_type, self.search, self.line
+            "%s:%s:%s->%s (%s), %s: %s", self.file_path, self.line_number, self.offset, self.pattern_name, self.data_type, self.search, self.line
         )
+
+    def write_csv_row(self) -> None:
+        if _CsvWriter is None:
+            return
+        _CsvWriter.writerow({
+            "filename": sanitize_for_ascii(os.path.basename(self.file_path)),
+            "line_number": self.line_number,
+            "offset": self.offset,
+            "pattern_name": sanitize_for_ascii(self.pattern_name),
+            "data_type": sanitize_for_ascii(self.data_type),
+            "matched_data": sanitize_for_ascii(self.matched_data),
+        })
 
 
 # ===========================================================================
@@ -682,9 +778,6 @@ def process_cmdline_arguments() -> argparse.ArgumentParser:
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
 
-    # -- Set the JSON file path
-    _JSONRegexPatternPath = find_json_regex_config()
-
     #
     #   Mutable processing (change our runtime/detection behavior)
     #
@@ -702,40 +795,66 @@ def process_cmdline_arguments() -> argparse.ArgumentParser:
     )
     parser.add_argument( "--log-dir", help="Directory for log files.", default=log_dir)
     parser.add_argument( "--rgx-patterns", help="JSON file containing PAN and TRACK regular expressions.",
-                        type=str, default=f"{_JSONRegexPatternPath}",)
+                        type=str, default=None,)
     parser.add_argument( "--rgx-prefix", help=f"Apply prefixes ({_RegexPatternPrefix}) to regular expressions.",
                         default=False, action="store_true",)
     parser.add_argument( "--skip-binary", help="Skip binary files.", action="store_true", default=False)
     parser.add_argument( "--line-limit", help="Line scan limit per file.", type=int, default=0)
-    parser.add_argument( "--report-delta", type=int, default=500, 
+    parser.add_argument( "--report-delta", type=int, default=500,
                         help="Files to process before reporting progress.",)
+    parser.add_argument(
+        "--csv",
+        help="CSV file path for match output. Emits filename, line number, offset, pattern, and sanitized match data.",
+        type=str,
+        default=None,
+    )
     #
     #   Non-functional processing
     #
     parser.add_argument( "--verbose", default=False, action="store_true", help="Verbose output.")
     parser.add_argument( "--debug", default=False, action="store_true", help="Enable debug logging.")
+    parser.add_argument( "--mask", default=False, action="store_true",
+                        help="Mask PAN digits (keep first 6 and last 4) in Luhn-failure debug messages.")
     parser.add_argument( "--version", default=False, action="store_true", help="Print version information.",)
     parser.add_argument( "--exception-test", default=False, action="store_true", help="Test exception handler.",)
 
-    #  Visual Studio debug command line arguments
-    if _EnableVSArgParams:
-        # _Args = parser.parse_args(['--version'] )
-        # debugging configuration here
-        _Args = parser.parse_args(["--path", os.path.join(os.getcwd(), "test")])
-
-    if parser.parse_args().version:
-        print_version_info(parser)
-        parser.exit()
     return parser
 # autopep8: on
 
 
 # ===========================================================================
-# MAIN is here
+# Open the CSV output file (if requested) and write the header row.
+# ===========================================================================
+def open_csv_output(csv_path: str) -> None:
+    global _CsvFileObj, _CsvWriter
+    if _CsvFileObj is not None:
+        return
+    _CsvFileObj = open(csv_path, "w", newline="", encoding="utf-8")
+    _CsvWriter = csv.DictWriter(
+        _CsvFileObj,
+        fieldnames=["filename", "line_number", "offset", "pattern_name", "data_type", "matched_data"],
+    )
+    _CsvWriter.writeheader()
+
+
+# ===========================================================================
+# Close the CSV output file.
+# ===========================================================================
+def close_csv_output() -> None:
+    global _CsvFileObj, _CsvWriter
+    if _CsvFileObj is not None:
+        _CsvFileObj.close()
+        _CsvFileObj = None
+        _CsvWriter = None
+
+
 # ===========================================================================
 def main() -> None:
     global _TotalTime, _AverageTime
     _Compiled_Patterns = []
+
+    if _Args.csv:
+        open_csv_output(_Args.csv)
 
     # Load JSON data and compile prefix patterns
     try:
@@ -801,8 +920,19 @@ if __name__ == "__main__":
     _ArgParse = process_cmdline_arguments()
     _Args = _ArgParse.parse_args()
 
+    # -- Handle non-functional flags before touching external configuration.
+    #    --version and --help must work even if no JSON config exists.
+    if _Args.version:
+        print_version_info(_ArgParse)
+        _ArgParse.exit()
+
     # -- Set default values from command line arguments
     ProgramName = _ArgParse.prog
+
+    # - Resolve the JSON regex pattern path lazily so --version and --help work
+    #   even when no configuration file is present.
+    if _Args.rgx_patterns is None:
+        _Args.rgx_patterns = find_json_regex_config()
 
     # - Test our exception handler
     if _Args.exception_test:
@@ -825,3 +955,5 @@ if __name__ == "__main__":
 
     except KeyboardInterrupt:
         _TraceLogObj.error("KeyboardInterrupt caught in '__main__'")
+    finally:
+        close_csv_output()

@@ -40,8 +40,10 @@ DEFAULT_ARGUMENTS = {
     "skip_binary": False,
     "line_limit": 0,
     "report_delta": 500,
+    "csv": None,
     "verbose": False,
     "debug": False,
+    "mask": False,
     "version": False,
     "exception_test": False,
 }

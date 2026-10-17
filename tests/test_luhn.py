@@ -98,7 +98,7 @@ def test_luhn_accepts_every_generated_pan(scanner, pan_generator, configuration_
     rng = random.Random(0)
 
     for pattern_name, pattern_data in patterns.items():
-        generated_pans = pan_generator.generate_pans(pattern_name, pattern_data, rng)
+        generated_pans = pan_generator.generate_pans(pattern_name, pattern_data, 1, rng)
         for generated_pan in generated_pans:
             assert scanner.luhn_check(generated_pan.pan), (
                 f"Scanner rejected generated PAN {generated_pan.pan} "

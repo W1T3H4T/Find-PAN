@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run python
 ##  ===========================================================================
 ##  File    :   purge-log-files.py
 ##  Function:   Remove log files of a certain age

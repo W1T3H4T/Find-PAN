@@ -35,7 +35,7 @@ def test_pan_regex_configuration_is_processed(pan_generator):
 
     assert patterns
     for pattern_name, pattern_data in patterns.items():
-        generated_pans = pan_generator.generate_pans(pattern_name, pattern_data, random_source)
+        generated_pans = pan_generator.generate_pans(pattern_name, pattern_data, 1, random_source)
 
         assert len(generated_pans) == len(pattern_data["regex"])
         for generated_pan in generated_pans:

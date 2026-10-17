@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run python
 """Generate synthetic, Luhn-valid PANs from configured PAN regular expressions."""
 
 import argparse
@@ -140,8 +140,10 @@ def select_pattern_interactively(patterns: dict[str, dict]) -> str:
     return resolve_pattern_name(patterns, selection)
 
 
-def generate_pans(pattern_name: str, pattern_data: dict, rng: random.Random) -> list[GeneratedPan]:
-    """Generate one Luhn-valid PAN for every regex in a selected PAN pattern."""
+def generate_pans(
+    pattern_name: str, pattern_data: dict, count: int, rng: random.Random
+) -> list[GeneratedPan]:
+    """Generate *count* Luhn-valid PANs for every regex in a selected PAN pattern."""
     regexes = pattern_data.get("regex")
     if not isinstance(regexes, list) or not regexes:
         raise ValueError(f"PAN pattern '{pattern_name}' does not define any regexes.")
@@ -150,10 +152,21 @@ def generate_pans(pattern_name: str, pattern_data: dict, rng: random.Random) -> 
     for index, regex in enumerate(regexes, 1):
         if not isinstance(regex, str):
             raise ValueError(f"PAN pattern '{pattern_name}' contains a non-string regex.")
-        generated_pans.append(
-            GeneratedPan(pattern_name, index, regex, generate_matching_luhn_pan(regex, rng))
-        )
+        for _ in range(count):
+            generated_pans.append(
+                GeneratedPan(pattern_name, index, regex, generate_matching_luhn_pan(regex, rng))
+            )
     return generated_pans
+
+
+def default_output_path(pattern_name: str) -> Path:
+    """Return the default output file path for *pattern_name*.
+
+    Spaces in the pattern name are replaced with hyphens so the resulting
+    filename is easy to use on the command line.
+    """
+    safe_name = pattern_name.replace(" ", "-")
+    return Path.cwd() / f"{safe_name}.txt"
 
 
 def parse_arguments(arguments: list[str] | None = None) -> argparse.Namespace:
@@ -173,6 +186,11 @@ def parse_arguments(arguments: list[str] | None = None) -> argparse.Namespace:
         help="PAN pattern name to generate. Prompts for a selection when omitted in a terminal.",
     )
     parser.add_argument(
+        "--all",
+        action="store_true",
+        help="Generate PANs for every configured PAN pattern.",
+    )
+    parser.add_argument(
         "--list-pan-patterns",
         action="store_true",
         help="List available PAN pattern names and exit.",
@@ -182,6 +200,22 @@ def parse_arguments(arguments: list[str] | None = None) -> argparse.Namespace:
         type=int,
         help="Optional random seed for reproducible synthetic values.",
     )
+    parser.add_argument(
+        "--count",
+        type=int,
+        default=1,
+        help="Number of PANs to generate for each regex in the selected pattern.",
+    )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        help="Output file path. Defaults to a file named after the pattern.",
+    )
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Include regex patterns in the output alongside each generated PAN.",
+    )
     return parser.parse_args(arguments)
 
 
@@ -189,28 +223,70 @@ def main(arguments: list[str] | None = None) -> int:
     """Run the PAN generator application."""
     args = parse_arguments(arguments)
 
+    if args.all and args.pan_pattern:
+        print("Error: --all cannot be used with --pan-pattern.", file=sys.stderr)
+        return 2
+
     try:
         patterns = load_pan_patterns(args.patterns)
         if args.list_pan_patterns:
             print("\n".join(patterns))
             return 0
 
-        if args.pan_pattern:
+        if args.all:
+            pattern_names = list(patterns)
+        elif args.pan_pattern:
             pattern_name = resolve_pattern_name(patterns, args.pan_pattern)
+            pattern_names = [pattern_name]
         elif sys.stdin.isatty():
-            pattern_name = select_pattern_interactively(patterns)
+            pattern_names = [select_pattern_interactively(patterns)]
         else:
-            raise ValueError("Specify --pan-pattern when standard input is not interactive.")
+            raise ValueError("Specify --pan-pattern or --all when standard input is not interactive.")
 
-        generated_pans = generate_pans(pattern_name, patterns[pattern_name], random.Random(args.seed))
+        rng = random.Random(args.seed)
+        generated_by_pattern: dict[str, list[GeneratedPan]] = {}
+        for pattern_name in pattern_names:
+            generated_by_pattern[pattern_name] = generate_pans(
+                pattern_name, patterns[pattern_name], args.count, rng
+            )
     except (OSError, ValueError, json.JSONDecodeError, re.error) as error:
         print(f"Error: {error}", file=sys.stderr)
         return 1
 
-    print(f"Synthetic PANs for {pattern_name}:")
-    for generated_pan in generated_pans:
-        print(f"Regex {generated_pan.regex_index}: {generated_pan.regex}")
-        print(f"PAN: {generated_pan.pan}")
+    def _format_pan_lines(generated_pan: GeneratedPan) -> list[str]:
+        if args.verbose:
+            return [
+                f"Regex {generated_pan.regex_index}: {generated_pan.regex}",
+                f"PAN: {generated_pan.pan}",
+            ]
+        return [generated_pan.pan]
+
+    if args.all and not args.output:
+        total_written = 0
+        for pattern_name, generated_pans in generated_by_pattern.items():
+            output_path = default_output_path(pattern_name)
+            output_lines = [f"Synthetic PANs for {pattern_name}:"]
+            for generated_pan in generated_pans:
+                output_lines.extend(_format_pan_lines(generated_pan))
+
+            output_text = "\n".join(output_lines) + "\n"
+            output_path.write_text(output_text, encoding="utf-8")
+            total_written += len(generated_pans)
+        print(f"Wrote {total_written} PAN(s) across {len(generated_by_pattern)} pattern file(s).", file=sys.stderr)
+        return 0
+
+    # Single output destination: either --output or the default for the one selected pattern.
+    output_path = args.output or default_output_path(pattern_names[0])
+    output_lines = []
+    for pattern_name, generated_pans in generated_by_pattern.items():
+        output_lines.append(f"Synthetic PANs for {pattern_name}:")
+        for generated_pan in generated_pans:
+            output_lines.extend(_format_pan_lines(generated_pan))
+
+    output_text = "\n".join(output_lines) + "\n"
+    output_path.write_text(output_text, encoding="utf-8")
+    print(output_text, end="")
+    print(f"Wrote {sum(len(pans) for pans in generated_by_pattern.values())} PAN(s) to {output_path}", file=sys.stderr)
     return 0
 
 

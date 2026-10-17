@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run python
 ##  ===========================================================================
 ##  File    :   pan_config.py
 ##  Who     :   David Means <w1t3h4t@gmail.com>
