@@ -113,11 +113,27 @@ source $HOME/.pyenv/bin/activate
 </pre>
 
 
+# Project Layout
+
+`bin/find-pan.py` is a thin launcher; the implementation is the `find_pan` package in `src/find_pan/`:
+
+|Module|Responsibility|
+|---|---|
+|`cli.py`|Argument parsing, wiring, signals, exit codes.|
+|`settings.py`, `version.py`, `errors.py`|Immutable run settings, the version, and the error types.|
+|`config.py`|Regex and archive-extractor configuration.|
+|`detectors.py`|Luhn check and per-line detection (pure functions).|
+|`scanner.py`, `filetypes.py`, `archives.py`|Directory and archive walking, binary/executable detection, external extractors.|
+|`models.py`, `redact.py`, `reporting.py`|Match records and counters, redaction (`--mask`), and the sinks (PAN log, CSV, trace log, anti-PAN log).|
+|`logging_setup.py`|Builds the loggers from the settings.|
+
+Every match is redacted once by `redact.py` before any sink sees it, so output rules such as `--mask` apply to all outputs. Run the tests with `uv run pytest`.
+
 # Usage
 
 <pre>
 find-pan.py [--path PATH] [--tar TAR] [--temp TEMP] [--log-dir LOG_DIR]
-            [--skip-binary]  [--verbose] [--debug] [--mask]
+            [--skip-binary]  [--verbose] [--debug] [--mask] [--log-anti-pan]
 </pre>
 
 ## Command-line Arguments:
@@ -135,14 +151,16 @@ find-pan.py [--path PATH] [--tar TAR] [--temp TEMP] [--log-dir LOG_DIR]
 |**--verbose**      |Route log file messages also to stdout.|
 |**--debug**        |Route 'debug' messages to stdout and the 'trace' log, including a message for each candidate that fails the Luhn check.|
 |**--mask**         |Mask PAN digits (keep the first 6 and last 4) in the log, CSV and Luhn-failure debug output. Track data is fully masked. Default off: full numbers are written.|
+|**--log-anti-pan** |Write anti-PAN hits to a separate log, `Find-PAN-anti-pan-<date>.log`, and show its path and entry count in the summary. Default off. Output is masked when `--mask` is set; anti-PAN hits never appear in the PAN log or the CSV.|
 |**--version**      |Report the app and python versions.|
 
 
 ## Log Files
-The script generates two log files:
+The script generates two log files (three with `--log-anti-pan`):
 
 1. **Find-PAN-trace.log:** Logs limited details of the runtime execution.
 2. **Find-PAN.log:** Logs detailed information of identified PANs.
+3. **Find-PAN-anti-pan-<date>.log:** Written only with `--log-anti-pan`; lists the anti-PAN (suspect) hits.
 
 Log files are generated in the specified log directory or the current working directory if no log directory is provided.
 
@@ -259,6 +277,7 @@ Parameters and Defaults
  --verbose=False
  --debug=False
  --mask=False
+ --log-anti-pan=False
  --version=False
 
 2024-09-15 20:04:44,333 [INFO]: Scanning test ...
