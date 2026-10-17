@@ -1,0 +1,26 @@
+name: file-VISA
+description: single fixture VISA.txt
+created: '2026-10-17T23:07:05Z'
+find_pan:
+  version: 3.1.0
+  command:
+  - --file
+  - RegressionTests/VISA.txt
+python: 3.14.5
+platform: win32
+requires_tools: []
+inputs:
+- path: RegressionTests/VISA.txt
+  size: 464
+  sha256: 922a733f36449f2a623683a737dc23070d10ab82f9a6bd40904fc133964050cf
+  eol_normalized: true
+summary:
+  anti_pans: 0
+  archives_expanded: 0
+  archives_skipped: 0
+  bad_luhn: 0
+  exit_status: 0
+  files_scanned: 1
+  pans: 25
+  skipped: []
+  tracks: 0

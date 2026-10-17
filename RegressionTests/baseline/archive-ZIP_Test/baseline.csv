@@ -1,0 +1,350 @@
+filename,line_number,offset,pattern_name,data_type,matched_data
+American-Express.txt,2,0,American Express,PAN,373923321468813
+American-Express.txt,3,0,American Express,PAN,376993563272956
+American-Express.txt,4,0,American Express,PAN,345604806358175
+American-Express.txt,5,0,American Express,PAN,340523279282016
+American-Express.txt,6,0,American Express,PAN,346161249065288
+American-Express.txt,7,0,American Express,PAN,343748625702923
+American-Express.txt,8,0,American Express,PAN,371124226238573
+American-Express.txt,9,0,American Express,PAN,375218409053662
+American-Express.txt,10,0,American Express,PAN,376581205673432
+American-Express.txt,11,0,American Express,PAN,343364717641845
+American-Express.txt,12,0,American Express,PAN,374646924699737
+American-Express.txt,13,0,American Express,PAN,375054324636566
+American-Express.txt,14,0,American Express,PAN,340842873467884
+American-Express.txt,15,0,American Express,PAN,370141900645890
+American-Express.txt,16,0,American Express,PAN,371662475227664
+American-Express.txt,17,0,American Express,PAN,344347962797213
+American-Express.txt,18,0,American Express,PAN,348015715098405
+American-Express.txt,19,0,American Express,PAN,374229060058388
+American-Express.txt,20,0,American Express,PAN,340633172445188
+American-Express.txt,21,0,American Express,PAN,348112228108621
+American-Express.txt,22,0,American Express,PAN,345056342127806
+American-Express.txt,23,0,American Express,PAN,373979122754595
+American-Express.txt,24,0,American Express,PAN,374220484417615
+American-Express.txt,25,0,American Express,PAN,379555064938208
+American-Express.txt,26,0,American Express,PAN,378328603342915
+Diners-Club-Carte-Blanche.txt,2,0,Diners Club Carte Blanche,PAN,30032240429628
+Diners-Club-Carte-Blanche.txt,3,0,Diners Club Carte Blanche,PAN,30586712935628
+Diners-Club-Carte-Blanche.txt,4,0,Diners Club Carte Blanche,PAN,30458239731692
+Diners-Club-Carte-Blanche.txt,5,0,Diners Club Carte Blanche,PAN,30173242888138
+Diners-Club-Carte-Blanche.txt,6,0,Diners Club Carte Blanche,PAN,30466881345950
+Diners-Club-Carte-Blanche.txt,7,0,Diners Club Carte Blanche,PAN,30100605304247
+Diners-Club-Carte-Blanche.txt,8,0,Diners Club Carte Blanche,PAN,30035125624841
+Diners-Club-Carte-Blanche.txt,9,0,Diners Club Carte Blanche,PAN,30305329160557
+Diners-Club-Carte-Blanche.txt,10,0,Diners Club Carte Blanche,PAN,30110023359418
+Diners-Club-Carte-Blanche.txt,11,0,Diners Club Carte Blanche,PAN,30361576868459
+Diners-Club-Carte-Blanche.txt,12,0,Diners Club Carte Blanche,PAN,30083103459145
+Diners-Club-Carte-Blanche.txt,13,0,Diners Club Carte Blanche,PAN,30437780941611
+Diners-Club-Carte-Blanche.txt,14,0,Diners Club Carte Blanche,PAN,30276583981469
+Diners-Club-Carte-Blanche.txt,15,0,Diners Club Carte Blanche,PAN,30077591009123
+Diners-Club-Carte-Blanche.txt,16,0,Diners Club Carte Blanche,PAN,30199001533102
+Diners-Club-Carte-Blanche.txt,17,0,Diners Club Carte Blanche,PAN,30224261426613
+Diners-Club-Carte-Blanche.txt,18,0,Diners Club Carte Blanche,PAN,30242410914768
+Diners-Club-Carte-Blanche.txt,19,0,Diners Club Carte Blanche,PAN,30238474842747
+Diners-Club-Carte-Blanche.txt,20,0,Diners Club Carte Blanche,PAN,30182839598133
+Diners-Club-Carte-Blanche.txt,21,0,Diners Club Carte Blanche,PAN,30390569106163
+Diners-Club-Carte-Blanche.txt,22,0,Diners Club Carte Blanche,PAN,30003134312444
+Diners-Club-Carte-Blanche.txt,23,0,Diners Club Carte Blanche,PAN,30419150346589
+Diners-Club-Carte-Blanche.txt,24,0,Diners Club Carte Blanche,PAN,30378953520586
+Diners-Club-Carte-Blanche.txt,25,0,Diners Club Carte Blanche,PAN,30172958288400
+Diners-Club-Carte-Blanche.txt,26,0,Diners Club Carte Blanche,PAN,30422601858459
+Diners-Club-International.txt,2,0,Diners Club International,PAN,3818405632021766889
+Diners-Club-International.txt,3,0,Diners Club International,PAN,386413521410565930
+Diners-Club-International.txt,4,0,Diners Club International,PAN,304462224088842367
+Diners-Club-International.txt,5,0,Diners Club International,PAN,3646615073717430
+Diners-Club-International.txt,6,0,Diners Club International,PAN,307158258010301
+Diners-Club-International.txt,7,0,Diners Club International,PAN,3687703093262287499
+Diners-Club-International.txt,8,0,Diners Club International,PAN,3000396572495204
+Diners-Club-International.txt,9,0,Diners Club International,PAN,383642847166494706
+Diners-Club-International.txt,10,0,Diners Club International,PAN,36432028344565
+Diners-Club-International.txt,11,0,Diners Club International,PAN,394520287747522
+Diners-Club-International.txt,12,0,Diners Club International,PAN,3690868927381656859
+Diners-Club-International.txt,13,0,Diners Club International,PAN,3611336236351200171
+Diners-Club-International.txt,14,0,Diners Club International,PAN,3647580286965429275
+Diners-Club-International.txt,15,0,Diners Club International,PAN,3827772787994879717
+Diners-Club-International.txt,16,0,Diners Club International,PAN,3073157066503218683
+Diners-Club-International.txt,17,0,Diners Club International,PAN,309323405003033
+Diners-Club-International.txt,18,0,Diners Club International,PAN,368027475555347
+Diners-Club-International.txt,19,0,Diners Club International,PAN,39290364552754
+Diners-Club-International.txt,20,0,Diners Club International,PAN,3970704891510650254
+Diners-Club-International.txt,21,0,Diners Club International,PAN,385454629348117112
+Diners-Club-International.txt,22,0,Diners Club International,PAN,3065330284862056
+Diners-Club-International.txt,23,0,Diners Club International,PAN,36472290020457206
+Diners-Club-International.txt,24,0,Diners Club International,PAN,3859435303461918202
+Diners-Club-International.txt,25,0,Diners Club International,PAN,3676529336874636
+Diners-Club-International.txt,26,0,Diners Club International,PAN,3680357318020349
+Diners-Club-US-and-Canada.txt,2,0,Diners Club US and Canada,PAN,5511203111110459
+Diners-Club-US-and-Canada.txt,3,0,Diners Club US and Canada,PAN,5576906273875154
+Diners-Club-US-and-Canada.txt,4,0,Diners Club US and Canada,PAN,5549033088539711
+Diners-Club-US-and-Canada.txt,5,0,Diners Club US and Canada,PAN,5531027123226193
+Diners-Club-US-and-Canada.txt,6,0,Diners Club US and Canada,PAN,5533880979794948
+Diners-Club-US-and-Canada.txt,7,0,Diners Club US and Canada,PAN,5528785738912110
+Diners-Club-US-and-Canada.txt,8,0,Diners Club US and Canada,PAN,5582896404625903
+Diners-Club-US-and-Canada.txt,9,0,Diners Club US and Canada,PAN,5584522759725530
+Diners-Club-US-and-Canada.txt,10,0,Diners Club US and Canada,PAN,5543989179274474
+Diners-Club-US-and-Canada.txt,11,0,Diners Club US and Canada,PAN,5594087405062983
+Diners-Club-US-and-Canada.txt,12,0,Diners Club US and Canada,PAN,5526899285320817
+Diners-Club-US-and-Canada.txt,13,0,Diners Club US and Canada,PAN,5596486987091790
+Diners-Club-US-and-Canada.txt,14,0,Diners Club US and Canada,PAN,5535510123493398
+Diners-Club-US-and-Canada.txt,15,0,Diners Club US and Canada,PAN,5543674023911626
+Diners-Club-US-and-Canada.txt,16,0,Diners Club US and Canada,PAN,5592396411157238
+Diners-Club-US-and-Canada.txt,17,0,Diners Club US and Canada,PAN,5516384738596992
+Diners-Club-US-and-Canada.txt,18,0,Diners Club US and Canada,PAN,5572326774565192
+Diners-Club-US-and-Canada.txt,19,0,Diners Club US and Canada,PAN,5537880768031797
+Diners-Club-US-and-Canada.txt,20,0,Diners Club US and Canada,PAN,5503313862235650
+Diners-Club-US-and-Canada.txt,21,0,Diners Club US and Canada,PAN,5503686205853457
+Diners-Club-US-and-Canada.txt,22,0,Diners Club US and Canada,PAN,5574759620198081
+Diners-Club-US-and-Canada.txt,23,0,Diners Club US and Canada,PAN,5570072246503492
+Diners-Club-US-and-Canada.txt,24,0,Diners Club US and Canada,PAN,5503917823275173
+Diners-Club-US-and-Canada.txt,25,0,Diners Club US and Canada,PAN,5579920826334228
+Diners-Club-US-and-Canada.txt,26,0,Diners Club US and Canada,PAN,5545736794187054
+Discover-Card.txt,2,0,Discover Card,PAN,6460268058665319
+Discover-Card.txt,3,0,Discover Card,PAN,64810856054421301
+Discover-Card.txt,4,0,Discover Card,PAN,6011968148173224
+Discover-Card.txt,5,0,Discover Card,PAN,601184613972589470
+Discover-Card.txt,6,0,Discover Card,PAN,60119013587839676
+Discover-Card.txt,7,0,Discover Card,PAN,647471090564344124
+Discover-Card.txt,8,0,Discover Card,PAN,6011595932362307
+Discover-Card.txt,9,0,Discover Card,PAN,6011506745383638
+Discover-Card.txt,10,0,Discover Card,PAN,65150011990623892
+Discover-Card.txt,11,0,Discover Card,PAN,6469624637467457996
+Discover-Card.txt,12,0,Discover Card,PAN,6498253986478444536
+Discover-Card.txt,13,0,Discover Card,PAN,6464046937162617
+Discover-Card.txt,14,0,Discover Card,PAN,6221309893010578393
+Discover-Card.txt,15,0,Discover Card,PAN,649596111723830286
+Discover-Card.txt,16,0,Discover Card,PAN,649242055411385467
+Discover-Card.txt,17,0,Discover Card,PAN,656481961590781522
+Discover-Card.txt,18,0,Discover Card,PAN,6229112776579639740
+Discover-Card.txt,19,0,Discover Card,PAN,60117427861094000
+Discover-Card.txt,20,0,Discover Card,PAN,6011664956182718
+Discover-Card.txt,21,0,Discover Card,PAN,6221927040106209
+Discover-Card.txt,22,0,Discover Card,PAN,601133584918400522
+Discover-Card.txt,23,0,Discover Card,PAN,6011798271106421765
+Discover-Card.txt,24,0,Discover Card,PAN,650243960098189594
+Discover-Card.txt,25,0,Discover Card,PAN,6011254425112643
+Discover-Card.txt,26,0,Discover Card,PAN,6468028264506828667
+InstaPayment.txt,2,0,InstaPayment,PAN,6372468689135602
+InstaPayment.txt,3,0,InstaPayment,PAN,6383969978608842
+InstaPayment.txt,4,0,InstaPayment,PAN,6391208505346372
+InstaPayment.txt,5,0,InstaPayment,PAN,6376137536586327
+InstaPayment.txt,6,0,InstaPayment,PAN,6377419340836315
+InstaPayment.txt,7,0,InstaPayment,PAN,6372138716395574
+InstaPayment.txt,8,0,InstaPayment,PAN,6375507753637667
+InstaPayment.txt,9,0,InstaPayment,PAN,6382119255950514
+InstaPayment.txt,10,0,InstaPayment,PAN,6393004796267932
+InstaPayment.txt,11,0,InstaPayment,PAN,6391013779950663
+InstaPayment.txt,12,0,InstaPayment,PAN,6380673465024595
+InstaPayment.txt,13,0,InstaPayment,PAN,6383671567285574
+InstaPayment.txt,14,0,InstaPayment,PAN,6392095361415410
+InstaPayment.txt,15,0,InstaPayment,PAN,6384947179943688
+InstaPayment.txt,16,0,InstaPayment,PAN,6375721307082946
+InstaPayment.txt,17,0,InstaPayment,PAN,6371558234291479
+InstaPayment.txt,18,0,InstaPayment,PAN,6393808215031608
+InstaPayment.txt,19,0,InstaPayment,PAN,6376071410717338
+InstaPayment.txt,20,0,InstaPayment,PAN,6378048327978011
+InstaPayment.txt,21,0,InstaPayment,PAN,6383566310851526
+InstaPayment.txt,22,0,InstaPayment,PAN,6384990230395381
+InstaPayment.txt,23,0,InstaPayment,PAN,6393674854746785
+InstaPayment.txt,24,0,InstaPayment,PAN,6399334960746708
+InstaPayment.txt,25,0,InstaPayment,PAN,6386837845664529
+InstaPayment.txt,26,0,InstaPayment,PAN,6378798271287419
+JCB.txt,2,0,JCB,PAN,3529878971924198258
+JCB.txt,3,0,JCB,PAN,35402639557982910
+JCB.txt,5,0,JCB,PAN,3541282166121712788
+JCB.txt,6,0,JCB,PAN,3588656312789138937
+JCB.txt,7,0,JCB,PAN,356238775043161261
+JCB.txt,8,0,JCB,PAN,3529840837122189321
+JCB.txt,9,0,JCB,PAN,358907845727292496
+JCB.txt,10,0,JCB,PAN,3529237488483961
+JCB.txt,11,0,JCB,PAN,3583830001736973
+JCB.txt,12,0,JCB,PAN,3528179984474568
+JCB.txt,13,0,JCB,PAN,3589740008469179896
+JCB.txt,14,0,JCB,PAN,3528368199555713
+JCB.txt,15,0,JCB,PAN,3528519965845890
+JCB.txt,16,0,JCB,PAN,3580421220608146711
+JCB.txt,17,0,JCB,PAN,3528953531855426290
+JCB.txt,18,0,JCB,PAN,3529361054340312
+JCB.txt,19,0,JCB,PAN,35360129980701152
+JCB.txt,20,0,JCB,PAN,3529962430105921
+JCB.txt,21,0,JCB,PAN,35665372170042951
+JCB.txt,22,0,JCB,PAN,352886925834103782
+JCB.txt,23,0,JCB,PAN,3528924791494204
+JCB.txt,24,0,JCB,PAN,3572373409420468529
+JCB.txt,25,0,JCB,PAN,35297931576730729
+JCB.txt,26,0,JCB,PAN,35293678300934812
+Laser.txt,2,0,Laser,PAN,6709081851818461954
+Laser.txt,3,0,Laser,PAN,630487544160832997
+Laser.txt,4,0,Laser,PAN,6304086008962051
+Laser.txt,5,0,Laser,PAN,6709006433155210880
+Laser.txt,6,0,Laser,PAN,670686278239895991
+Laser.txt,7,0,Laser,PAN,670980737610800733
+Laser.txt,8,0,Laser,PAN,6771891432253561
+Laser.txt,9,0,Laser,PAN,677153785407766522
+Laser.txt,10,0,Laser,PAN,670995069655644971
+Laser.txt,11,0,Laser,PAN,6709013309667669
+Laser.txt,12,0,Laser,PAN,677128773209622988
+Laser.txt,13,0,Laser,PAN,670969000599376398
+Laser.txt,14,0,Laser,PAN,6771518116296441156
+Laser.txt,15,0,Laser,PAN,63044266979286914
+Laser.txt,16,0,Laser,PAN,67094907770350686
+Laser.txt,17,0,Laser,PAN,67098579843212114
+Laser.txt,18,0,Laser,PAN,630496925119828450
+Laser.txt,19,0,Laser,PAN,670971640827404086
+Laser.txt,20,0,Laser,PAN,630442750806209037
+Laser.txt,21,0,Laser,PAN,67711451421988522
+Laser.txt,22,0,Laser,PAN,6709418839592966946
+Laser.txt,23,0,Laser,PAN,67091955910068299
+Laser.txt,24,0,Laser,PAN,67710406870585675
+Laser.txt,25,0,Laser,PAN,677162711900772493
+Laser.txt,26,0,Laser,PAN,6304333098575736
+Maestro.txt,2,0,Maestro,PAN,676345738638712766
+Maestro.txt,3,0,Maestro,PAN,5018347386036002
+Maestro.txt,4,0,Maestro,PAN,502066867547063
+Maestro.txt,5,0,Maestro,PAN,5893028590593036636
+Maestro.txt,6,0,Laser,PAN,6304204311275497
+Maestro.txt,7,0,Maestro,PAN,5018168111304683
+Maestro.txt,8,0,Maestro,PAN,5020417871194
+Maestro.txt,9,0,Maestro,PAN,503845918989054
+Maestro.txt,10,0,Maestro,PAN,589350776540
+Maestro.txt,11,0,Maestro,PAN,6762299486455
+Maestro.txt,12,0,Maestro,PAN,6761792272859
+Maestro.txt,13,0,Maestro,PAN,50188314669757
+Maestro.txt,14,0,Maestro,PAN,5018262739227094375
+Maestro.txt,15,0,Maestro,PAN,6759369819839
+Maestro.txt,16,0,Maestro,PAN,58933205254421
+Maestro.txt,17,0,Maestro,PAN,5893659367419035
+Maestro.txt,18,0,Maestro,PAN,675905858544715135
+Maestro.txt,19,0,Maestro,PAN,6761499597344852
+Maestro.txt,20,0,Laser,PAN,63047359644414735
+Maestro.txt,21,0,Maestro,PAN,5018597364427093378
+Maestro.txt,22,0,Laser,PAN,630450869251462278
+Maestro.txt,23,0,Maestro,PAN,675980711054
+Maestro.txt,24,0,Laser,PAN,6304647379716016487
+Maestro.txt,25,0,Maestro,PAN,589327064030453264
+Maestro.txt,26,0,Maestro,PAN,630474183385
+Mastercard.txt,2,0,Mastercard,PAN,2720242520298855
+Mastercard.txt,3,0,Mastercard,PAN,2720408192668101
+Mastercard.txt,4,0,Mastercard,PAN,2720823740855549
+Mastercard.txt,5,0,Mastercard,PAN,2653304508583772
+Mastercard.txt,6,0,Mastercard,PAN,2293951927777272
+Mastercard.txt,7,0,Mastercard,PAN,2720856209039981
+Mastercard.txt,8,0,Mastercard,PAN,2259179797250285
+Mastercard.txt,9,0,Mastercard,PAN,2492544309287488
+Mastercard.txt,10,0,Mastercard,PAN,2720828600165053
+Mastercard.txt,11,0,Mastercard,PAN,2720239972714645
+Mastercard.txt,12,0,Mastercard,PAN,2631578009146034
+Mastercard.txt,13,0,Mastercard,PAN,2221711108136558
+Mastercard.txt,14,0,Mastercard,PAN,2244893567003223
+Mastercard.txt,15,0,Mastercard,PAN,2278868374370642
+Mastercard.txt,16,0,Mastercard,PAN,5307244691808946
+Mastercard.txt,17,0,Mastercard,PAN,2319774736127293
+Mastercard.txt,18,0,Mastercard,PAN,2720092368731057
+Mastercard.txt,19,0,Mastercard,PAN,2720132465594725
+Mastercard.txt,20,0,Mastercard,PAN,2342290650685365
+Mastercard.txt,21,0,Mastercard,PAN,2262002279361237
+Mastercard.txt,22,0,Mastercard,PAN,2223238725837192
+Mastercard.txt,23,0,Mastercard,PAN,2718334521384448
+Mastercard.txt,24,0,Mastercard,PAN,2456729730623427
+Mastercard.txt,25,0,Mastercard,PAN,2720314417992773
+Mastercard.txt,26,0,Mastercard,PAN,2222428639787846
+UnionPay.txt,2,0,UnionPay,PAN,6285342806404462
+UnionPay.txt,3,0,UnionPay,PAN,62758056579902145
+UnionPay.txt,4,0,UnionPay,PAN,620897058313923269
+UnionPay.txt,5,0,UnionPay,PAN,62915772266224938
+UnionPay.txt,6,0,UnionPay,PAN,625761103924631588
+UnionPay.txt,7,0,UnionPay,PAN,623076410518339063
+UnionPay.txt,8,0,UnionPay,PAN,6220294875794489
+UnionPay.txt,9,0,UnionPay,PAN,6243784434715845437
+UnionPay.txt,10,0,UnionPay,PAN,6202221482339756
+UnionPay.txt,11,0,UnionPay,PAN,62606409650559165
+UnionPay.txt,12,0,UnionPay,PAN,6285206634636373
+UnionPay.txt,13,0,UnionPay,PAN,6210090788514697
+UnionPay.txt,14,0,UnionPay,PAN,6253201516427391157
+UnionPay.txt,15,0,UnionPay,PAN,626126245977926254
+UnionPay.txt,16,0,UnionPay,PAN,6218892387362860847
+UnionPay.txt,17,0,UnionPay,PAN,62157399499342274
+UnionPay.txt,18,0,UnionPay,PAN,62643438041078424
+UnionPay.txt,19,0,UnionPay,PAN,62048146819030961
+UnionPay.txt,20,0,UnionPay,PAN,62699961432105590
+UnionPay.txt,21,0,UnionPay,PAN,62507589019805589
+UnionPay.txt,22,0,UnionPay,PAN,6237090213494995055
+UnionPay.txt,23,0,UnionPay,PAN,6219899743594722
+UnionPay.txt,24,0,Discover Card,PAN,6229250061226460093
+UnionPay.txt,25,0,Discover Card,PAN,62221706484503367
+UnionPay.txt,26,0,UnionPay,PAN,623155310560457322
+VISA-Electron.txt,2,0,VISA Electron,PAN,4913221244149621
+VISA-Electron.txt,3,0,VISA Electron,PAN,4508168201725599
+VISA-Electron.txt,4,0,VISA Electron,PAN,4508596486414051
+VISA-Electron.txt,5,0,VISA Electron,PAN,4844835834516503
+VISA-Electron.txt,6,0,VISA Electron,PAN,4844183059453072
+VISA-Electron.txt,7,0,VISA Electron,PAN,4913686498140429
+VISA-Electron.txt,8,0,VISA Electron,PAN,4917232466361758
+VISA-Electron.txt,9,0,VISA Electron,PAN,4913243458878307
+VISA-Electron.txt,10,0,VISA Electron,PAN,4508409350200145
+VISA-Electron.txt,11,0,VISA Electron,PAN,4913537270852113
+VISA-Electron.txt,12,0,VISA Electron,PAN,4844593212152777
+VISA-Electron.txt,13,0,VISA Electron,PAN,4844271983579409
+VISA-Electron.txt,14,0,VISA Electron,PAN,4508366201539297
+VISA-Electron.txt,15,0,VISA Electron,PAN,4508236941097726
+VISA-Electron.txt,16,0,VISA Electron,PAN,4508811157411686
+VISA-Electron.txt,17,0,VISA Electron,PAN,4913241905522221
+VISA-Electron.txt,18,0,VISA Electron,PAN,4026819081535358
+VISA-Electron.txt,19,0,VISA Electron,PAN,4026627191783846
+VISA-Electron.txt,20,0,VISA Electron,PAN,4508536320029046
+VISA-Electron.txt,21,0,VISA Electron,PAN,4026408428819897
+VISA-Electron.txt,22,0,VISA Electron,PAN,4844426998908957
+VISA-Electron.txt,23,0,VISA Electron,PAN,4913875265174535
+VISA-Electron.txt,24,0,VISA Electron,PAN,4508832304530780
+VISA-Electron.txt,25,0,VISA Electron,PAN,4508875329847697
+VISA-Electron.txt,26,0,VISA Electron,PAN,4917455229482278
+VISA-Electron.txt,27,0,VISA Electron,PAN,4175002136356570
+VISA-Electron.txt,28,0,VISA Electron,PAN,4175005103336145
+VISA-Electron.txt,29,0,VISA Electron,PAN,4175002436253196
+VISA-Electron.txt,30,0,VISA Electron,PAN,4175001881515885
+VISA-Electron.txt,31,0,VISA Electron,PAN,4175004135919838
+VISA-Electron.txt,32,0,VISA Electron,PAN,4175005667539605
+VISA-Electron.txt,33,0,VISA Electron,PAN,4175001752538735
+VISA-Electron.txt,34,0,VISA Electron,PAN,4175001585834061
+VISA-Electron.txt,35,0,VISA Electron,PAN,4175005562575423
+VISA-Electron.txt,36,0,VISA Electron,PAN,4175005872501358
+VISA-Electron.txt,37,0,VISA Electron,PAN,4175008999346814
+VISA-Electron.txt,38,0,VISA Electron,PAN,4175009718145685
+VISA-Electron.txt,39,0,VISA Electron,PAN,4175005154257588
+VISA-Electron.txt,40,0,VISA Electron,PAN,4175009080245311
+VISA-Electron.txt,41,0,VISA Electron,PAN,4175002299374386
+VISA-Electron.txt,42,0,VISA Electron,PAN,4175002540558514
+VISA-Electron.txt,43,0,VISA Electron,PAN,4175002925058015
+VISA-Electron.txt,44,0,VISA Electron,PAN,4175004285777556
+VISA-Electron.txt,45,0,VISA Electron,PAN,4175007488616943
+VISA-Electron.txt,46,0,VISA Electron,PAN,4175000196024419
+VISA-Electron.txt,47,0,VISA Electron,PAN,4175002765546442
+VISA-Electron.txt,48,0,VISA Electron,PAN,4175001743688136
+VISA-Electron.txt,49,0,VISA Electron,PAN,4175004191400285
+VISA-Electron.txt,50,0,VISA Electron,PAN,4175006443538069
+VISA-Electron.txt,51,0,VISA Electron,PAN,4175006966332528
+VISA.txt,2,0,VISA,PAN,4692486245114679
+VISA.txt,3,0,VISA,PAN,4302307956231
+VISA.txt,4,0,VISA,PAN,4037515024550
+VISA.txt,5,0,VISA,PAN,4161859567273079
+VISA.txt,6,0,VISA,PAN,4487475755326337649
+VISA.txt,7,0,VISA,PAN,4642015141398
+VISA.txt,8,0,VISA,PAN,4300236116158
+VISA.txt,9,0,VISA,PAN,4133650204347672
+VISA.txt,10,0,VISA,PAN,4769277352494453894
+VISA.txt,11,0,VISA,PAN,4149044357398330
+VISA.txt,12,0,VISA,PAN,4658340233627
+VISA.txt,13,0,VISA,PAN,4242488354935576
+VISA.txt,14,0,VISA,PAN,4141663521691531546
+VISA.txt,15,0,VISA,PAN,4256892720438
+VISA.txt,16,0,VISA,PAN,4923903234188646071
+VISA.txt,17,0,VISA,PAN,4047143231597053285
+VISA.txt,18,0,VISA,PAN,4213145285537
+VISA.txt,19,0,VISA,PAN,4201263415551558
+VISA.txt,20,0,VISA,PAN,4264013324700
+VISA.txt,21,0,VISA,PAN,4385385128898
+VISA.txt,22,0,VISA,PAN,4725584560685678
+VISA.txt,23,0,VISA,PAN,4042744125035573850
+VISA.txt,24,0,VISA,PAN,4149022867973
+VISA.txt,25,0,VISA,PAN,4294493034887844171
+VISA.txt,26,0,VISA,PAN,4930778336812

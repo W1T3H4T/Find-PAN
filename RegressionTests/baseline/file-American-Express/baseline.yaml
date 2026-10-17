@@ -1,0 +1,26 @@
+name: file-American-Express
+description: single fixture American-Express.txt
+created: '2026-10-17T23:06:59Z'
+find_pan:
+  version: 3.1.0
+  command:
+  - --file
+  - RegressionTests/American-Express.txt
+python: 3.14.5
+platform: win32
+requires_tools: []
+inputs:
+- path: RegressionTests/American-Express.txt
+  size: 463
+  sha256: 4c6d35f64ce804812f8547a96cf0283ee0abd5f158d5b993ca047e902bf5f67d
+  eol_normalized: true
+summary:
+  anti_pans: 0
+  archives_expanded: 0
+  archives_skipped: 0
+  bad_luhn: 0
+  exit_status: 0
+  files_scanned: 1
+  pans: 25
+  skipped: []
+  tracks: 0

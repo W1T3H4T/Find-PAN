@@ -1,0 +1,27 @@
+name: archive-ZIP_Test
+description: single fixture ZIP_Test.zip
+created: '2026-10-17T23:07:06Z'
+find_pan:
+  version: 3.1.0
+  command:
+  - --file
+  - RegressionTests/ZIP_Test.zip
+python: 3.14.5
+platform: win32
+requires_tools:
+- unzip
+inputs:
+- path: RegressionTests/ZIP_Test.zip
+  size: 6085
+  sha256: af4b82ef74ac997e019800ae6460c508ab4947d3efae8e1178f9af8795866c32
+  eol_normalized: false
+summary:
+  anti_pans: 1
+  archives_expanded: 1
+  archives_skipped: 0
+  bad_luhn: 0
+  exit_status: 0
+  files_scanned: 13
+  pans: 349
+  skipped: []
+  tracks: 0

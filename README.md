@@ -366,8 +366,12 @@ files, and, separately, the input files that changed beyond line endings (text f
 (environment)`; `--strict` makes that a failure.
 
 Exit status: 0 everything matches, 1 a difference, 2 a usage or environment error. Baselines made on Windows validate
-on Linux and the reverse. The shipped baselines are `plain-text`, `masked` (the same files with `--mask`) and
-`archives` (zip, tar and 7z copies of the plain fixtures; needs `unzip`, `tar` and `7z`).
+on Linux and the reverse. The shipped baselines are the groups `plain-text`, `masked` (the same files with `--mask`) and `archives`
+(zip, tar and 7z copies of the plain fixtures; needs `unzip`, `tar` and `7z`), plus one baseline for **every file in
+`RegressionTests/`**: `file-<name>` for each text fixture and `archive-<name>` for each compressed one. The pytest
+`tests/test_shipped_baselines.py` validates all of them, fails when a fixture has no baseline of its own, and so
+confirms that none of the fixtures, or what find-pan reports for them, has changed. To add a fixture, create its
+baseline with `--create file-<name> --file RegressionTests/<name>`.
 
 # Notes
 - Ensure the necessary platform-specific tools (shred, sdelete/sdelete64) are available for secure file deletion.

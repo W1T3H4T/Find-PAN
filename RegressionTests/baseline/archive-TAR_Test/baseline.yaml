@@ -1,0 +1,27 @@
+name: archive-TAR_Test
+description: single fixture TAR_Test.tar
+created: '2026-10-17T23:07:04Z'
+find_pan:
+  version: 3.1.0
+  command:
+  - --file
+  - RegressionTests/TAR_Test.tar
+python: 3.14.5
+platform: win32
+requires_tools:
+- tar
+inputs:
+- path: RegressionTests/TAR_Test.tar
+  size: 16896
+  sha256: c5ef87eb8b5f379b3354d89ec498e385f5bc766cb369fc56485efefdf21cb4f9
+  eol_normalized: false
+summary:
+  anti_pans: 1
+  archives_expanded: 1
+  archives_skipped: 0
+  bad_luhn: 0
+  exit_status: 0
+  files_scanned: 13
+  pans: 349
+  skipped: []
+  tracks: 0

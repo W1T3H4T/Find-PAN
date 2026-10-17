@@ -1,0 +1,26 @@
+name: file-VISA-Electron
+description: single fixture VISA-Electron.txt
+created: '2026-10-17T23:07:05Z'
+find_pan:
+  version: 3.1.0
+  command:
+  - --file
+  - RegressionTests/VISA-Electron.txt
+python: 3.14.5
+platform: win32
+requires_tools: []
+inputs:
+- path: RegressionTests/VISA-Electron.txt
+  size: 935
+  sha256: f818cd3e4d665e717bdc19e61844511c8477857facc9c9387488c6f30dbf7fcc
+  eol_normalized: true
+summary:
+  anti_pans: 0
+  archives_expanded: 0
+  archives_skipped: 0
+  bad_luhn: 0
+  exit_status: 0
+  files_scanned: 1
+  pans: 50
+  skipped: []
+  tracks: 0

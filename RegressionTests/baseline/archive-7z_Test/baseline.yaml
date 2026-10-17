@@ -1,0 +1,27 @@
+name: archive-7z_Test
+description: single fixture 7z_Test.7z
+created: '2026-10-17T23:06:58Z'
+find_pan:
+  version: 3.1.0
+  command:
+  - --file
+  - RegressionTests/7z_Test.7z
+python: 3.14.5
+platform: win32
+requires_tools:
+- 7z
+inputs:
+- path: RegressionTests/7z_Test.7z
+  size: 3331
+  sha256: 6ed47f0ba165fdb4341adbc05d18d426cce29bcaa6490a00fab1f3b20818417c
+  eol_normalized: false
+summary:
+  anti_pans: 1
+  archives_expanded: 1
+  archives_skipped: 0
+  bad_luhn: 0
+  exit_status: 0
+  files_scanned: 13
+  pans: 349
+  skipped: []
+  tracks: 0

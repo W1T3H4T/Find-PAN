@@ -1,0 +1,26 @@
+name: file-InstaPayment
+description: single fixture InstaPayment.txt
+created: '2026-10-17T23:07:01Z'
+find_pan:
+  version: 3.1.0
+  command:
+  - --file
+  - RegressionTests/InstaPayment.txt
+python: 3.14.5
+platform: win32
+requires_tools: []
+inputs:
+- path: RegressionTests/InstaPayment.txt
+  size: 484
+  sha256: b64daee0bddb5f4be75fbc5e04b78084b5d5376e44e12df86d3b5695a4b5a63c
+  eol_normalized: true
+summary:
+  anti_pans: 0
+  archives_expanded: 0
+  archives_skipped: 0
+  bad_luhn: 0
+  exit_status: 0
+  files_scanned: 1
+  pans: 25
+  skipped: []
+  tracks: 0

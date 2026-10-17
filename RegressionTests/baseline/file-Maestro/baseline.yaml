@@ -1,0 +1,26 @@
+name: file-Maestro
+description: single fixture Maestro.txt
+created: '2026-10-17T23:07:02Z'
+find_pan:
+  version: 3.1.0
+  command:
+  - --file
+  - RegressionTests/Maestro.txt
+python: 3.14.5
+platform: win32
+requires_tools: []
+inputs:
+- path: RegressionTests/Maestro.txt
+  size: 470
+  sha256: fd91393004dce20a148c13954fc606839d2650b6fc4a9306388d38a3a817416d
+  eol_normalized: true
+summary:
+  anti_pans: 0
+  archives_expanded: 0
+  archives_skipped: 0
+  bad_luhn: 0
+  exit_status: 0
+  files_scanned: 1
+  pans: 25
+  skipped: []
+  tracks: 0

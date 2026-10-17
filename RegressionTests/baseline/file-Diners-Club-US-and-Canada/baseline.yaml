@@ -1,0 +1,26 @@
+name: file-Diners-Club-US-and-Canada
+description: single fixture Diners-Club-US-and-Canada.txt
+created: '2026-10-17T23:07:00Z'
+find_pan:
+  version: 3.1.0
+  command:
+  - --file
+  - RegressionTests/Diners-Club-US-and-Canada.txt
+python: 3.14.5
+platform: win32
+requires_tools: []
+inputs:
+- path: RegressionTests/Diners-Club-US-and-Canada.txt
+  size: 497
+  sha256: c97fa20ebe1a4b7a1637cbc4ae152c52b1796a0687ff27a97c1030875ca62c76
+  eol_normalized: true
+summary:
+  anti_pans: 0
+  archives_expanded: 0
+  archives_skipped: 0
+  bad_luhn: 0
+  exit_status: 0
+  files_scanned: 1
+  pans: 25
+  skipped: []
+  tracks: 0

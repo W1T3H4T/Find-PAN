@@ -1,0 +1,26 @@
+name: file-Diners-Club-Carte-Blanche
+description: single fixture Diners-Club-Carte-Blanche.txt
+created: '2026-10-17T23:06:59Z'
+find_pan:
+  version: 3.1.0
+  command:
+  - --file
+  - RegressionTests/Diners-Club-Carte-Blanche.txt
+python: 3.14.5
+platform: win32
+requires_tools: []
+inputs:
+- path: RegressionTests/Diners-Club-Carte-Blanche.txt
+  size: 447
+  sha256: 744b26c90eaa75df7c1093318ccf90619c9d1a6c1044f353bd2ca143c8cede30
+  eol_normalized: true
+summary:
+  anti_pans: 0
+  archives_expanded: 0
+  archives_skipped: 0
+  bad_luhn: 0
+  exit_status: 0
+  files_scanned: 1
+  pans: 25
+  skipped: []
+  tracks: 0
