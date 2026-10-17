@@ -85,3 +85,11 @@ def test_apply_masks_other_tracks_in_source_line():
 
 def test_mask_text_masks_track_digits_of_any_length():
     assert redact.mask_text(";4012888888881881=2512?") == ";****************=****?"
+
+
+def test_mask_text_masks_separator_formatted_cards():
+    """Deferred minor 2: cards written with spaces or dashes are masked in logged lines."""
+    assert redact.mask_text("a 5500-0000-0000-0004 b") == "a 5500-00**-****-0004 b"
+    assert redact.mask_text("a 4556 7375 8689 9855 b") == "a 4556 73** **** 9855 b"
+    assert redact.mask_text("amex 3782 822463 10005") == "amex 3782 82**** *0005"
+    assert redact.mask_text("date 2024-01-15 and 1234 5678") == "date 2024-01-15 and 1234 5678"

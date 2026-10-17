@@ -28,6 +28,8 @@ class Scanner:
         self.reporter = reporter
         self.loggers = loggers
         self.extractor_config = extractor_config or {}
+        #   Messages for archives that could not be extracted; the caller reports them.
+        self.extraction_errors: list[str] = []
 
     def scan_path(self, path: str) -> None:
         """Scan a directory tree."""
@@ -81,3 +83,4 @@ class Scanner:
                 self.scan_directory(directory)
         except ExtractorError as error:
             self.loggers.pan.error("%s", error)
+            self.extraction_errors.append(str(error))

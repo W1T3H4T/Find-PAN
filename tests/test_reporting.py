@@ -199,3 +199,26 @@ def test_close_closes_all_sinks_even_if_one_fails():
     with pytest.raises(OSError):
         reporter.close()
     assert good.closed
+
+
+def test_unreadable_files_have_own_counter_and_summary_line():
+    """Deferred minor 4: unreadable files are not folded into 'Skipped N Files'."""
+    reporter = make_reporter([])
+    reporter.skip("/x", SkipReason.UNREADABLE)
+    reporter.skip("/y", SkipReason.BINARY)
+    text = "\n".join(reporter.summary_lines("/logs"))
+    assert "Skipped 1 Files." in text            # binary only
+    assert "Skipped 1 Binary Files." in text
+    assert "Unreadable 1 Files." in text
+
+
+def test_no_unreadable_line_when_none_unreadable():
+    assert "Unreadable" not in "\n".join(make_reporter([]).summary_lines("/logs"))
+
+
+def test_close_is_idempotent():
+    sink = FakeSink(set())
+    reporter = make_reporter([sink])
+    reporter.close()
+    reporter.close()
+    assert sink.closed

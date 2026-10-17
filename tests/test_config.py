@@ -356,3 +356,22 @@ def test_dump_patterns_round_trips_json():
 def test_application_root_is_repository_root():
     root = Path(find_pan_config._application_root())
     assert (root / "config" / "find-pan-regex.json").exists()
+
+
+def test_invalid_regex_raises_config_error():
+    from find_pan.errors import ConfigError
+
+    data = {"PAN Pattern": {"X": {"regex": ["(unclosed"], "length": "16"}}}
+    with pytest.raises(ConfigError):
+        find_pan_config.compile_regex_patterns(data)
+    with pytest.raises(ConfigError):
+        find_pan_config.compile_regex_patterns_with_prefix(data)
+
+
+def test_malformed_extractor_yaml_raises_config_error(tmp_path):
+    from find_pan.errors import ConfigError
+
+    bad = tmp_path / "conf.yaml"
+    bad.write_text("extractors: [unclosed", encoding="utf-8")
+    with pytest.raises(ConfigError):
+        find_pan_config.load_extractor_config(str(bad))

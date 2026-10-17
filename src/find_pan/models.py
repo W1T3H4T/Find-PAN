@@ -46,6 +46,7 @@ class ScanStats:
         self.skipped_files = 0
         self.binary = 0
         self.executable = 0
+        self.unreadable = 0
         self._started = 0.0
         self._stopped = 0.0
 
@@ -59,6 +60,15 @@ class ScanStats:
         self.files += 1
 
     def skipped(self, reason: SkipReason) -> None:
+        """Record a file that was not (fully) scanned.
+
+        Binary and executable files count as skipped.  Unreadable files are
+        counted separately: one that fails to open was never scanned, and one
+        that fails mid-read stays counted as scanned.
+        """
+        if reason is SkipReason.UNREADABLE:
+            self.unreadable += 1
+            return
         self.skipped_files += 1
         if reason is SkipReason.BINARY:
             self.binary += 1

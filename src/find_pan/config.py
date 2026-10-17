@@ -14,6 +14,8 @@ from typing import Dict, List
 
 import yaml
 
+from find_pan.errors import ConfigError
+
 # - Default extractor configuration filename
 _EXTRACTOR_CONFIG_FILENAME = "find-pan-conf.yaml"
 EXTRACTOR_CONFIG_FILENAME = _EXTRACTOR_CONFIG_FILENAME
@@ -187,9 +189,17 @@ def build_extractor_config(config_path: str) -> None:
 
 
 def load_extractor_config(config_path: str) -> Dict[str, Dict]:
-    """Load the extractor YAML configuration."""
+    """Load the extractor YAML configuration.
+
+    Raises ``ConfigError`` when the file is not valid YAML or not a mapping.
+    """
     with open(config_path, "r", encoding="utf-8", errors="replace") as config_file:
-        data = yaml.safe_load(config_file)
+        try:
+            data = yaml.safe_load(config_file)
+        except yaml.YAMLError as error:
+            raise ConfigError(f"Invalid extractor configuration {config_path}: {error}") from error
+    if not isinstance(data, dict):
+        raise ConfigError(f"Invalid extractor configuration {config_path}: expected a mapping")
     return data.get("extractors", {})
 
 
@@ -236,6 +246,13 @@ def find_json_regex_config() -> str:
 # ===========================================================================
 # Compile the regex patterns with a prefix
 # ===========================================================================
+def _compile(pattern: str, category: str, pattern_name: str) -> re.Pattern:
+    try:
+        return re.compile(pattern)
+    except re.error as error:
+        raise ConfigError(f"Invalid regex in {category} / {pattern_name}: {error}") from error
+
+
 def compile_regex_patterns_with_prefix(json_data: dict) -> list:
     """Compile configured regexes, each prefixed with a boundary character class."""
     compiled_patterns = []
@@ -247,7 +264,7 @@ def compile_regex_patterns_with_prefix(json_data: dict) -> list:
                     for pattern in details["regex"]:
                         prefix_pattern = f"{_REGEX_PATTERN_PREFIX}{pattern}"
                         compiled_patterns.append(
-                            (category, pattern_name, re.compile(prefix_pattern))
+                            (category, pattern_name, _compile(prefix_pattern, category, pattern_name))
                         )
     return compiled_patterns
 
@@ -265,7 +282,7 @@ def compile_regex_patterns(json_data: dict) -> list:
                 if "regex" in details:
                     for pattern in details["regex"]:
                         compiled_patterns.append(
-                            (category, pattern_name, re.compile(pattern))
+                            (category, pattern_name, _compile(pattern, category, pattern_name))
                         )
 
     return compiled_patterns

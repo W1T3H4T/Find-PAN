@@ -13,6 +13,10 @@ from find_pan.models import Match, MatchKind
 _KEEP_FIRST = 6
 _KEEP_LAST = 4
 _LONG_DIGIT_RUN = re.compile(r"(?<!\d)\d{12,19}(?!\d)")
+#   Cards written with single spaces or dashes: 4-4-4-4(-3) and the Amex 4-6-5 layout.
+_SEPARATED_CARD = re.compile(
+    r"(?<![\d-])(?:\d{4}([ -])\d{4}\1\d{4}\1\d{4}(?:\1\d{1,3})?|\d{4}([ -])\d{6}\2\d{5})(?![\d-])"
+)
 #   Track 1 (%B<pan>^<name>^<data>?) and Track 2 (;<pan>=<data>?) shapes.
 _TRACK_SHAPE = re.compile(r"%[BM]\d{12,19}\^[^^\n]*\^\d*\??|;\d{12,19}=\d*\??")
 
@@ -52,6 +56,9 @@ def mask_text(text: str) -> str:
     because expiry, service code and discretionary data are sensitive too.
     """
     text = _TRACK_SHAPE.sub(lambda found: re.sub(r"\d", "*", found.group(0)), text)
+    text = _SEPARATED_CARD.sub(
+        lambda found: mask_matched_data(found.group(0), re.sub(r"\D", "", found.group(0))), text
+    )
     return _LONG_DIGIT_RUN.sub(lambda found: mask_pan(found.group(0)), text)
 
 

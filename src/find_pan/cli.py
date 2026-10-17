@@ -136,7 +136,7 @@ def _describe(namespace: argparse.Namespace) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _print_version_header(namespace: argparse.Namespace, argv: Sequence[str] | None) -> None:
+def _print_version_header(namespace: argparse.Namespace, argv: Sequence[str]) -> None:
     print(f"{format_version(PROGRAM_NAME)}\nPython {sys.version}")
     if argv and not namespace.version:
         print("Command-line arguments: ", list(argv))
@@ -158,10 +158,21 @@ def _error(message: object) -> int:
     return 1
 
 
+def _make_streams_tolerant() -> None:
+    """Never let an unencodable character (e.g. U+FFFD) break console logging."""
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(errors="replace")
+        except (AttributeError, ValueError, OSError):
+            pass
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """Run Find-PAN; return the process exit status."""
     parser = build_parser()
     namespace = parser.parse_args(argv)
+    argv = list(argv) if argv is not None else sys.argv[1:]
+    _make_streams_tolerant()
 
     #   --version works before any configuration is looked up.
     if namespace.version:
@@ -178,50 +189,62 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.print_help()
         return 1
 
-    reporter = None
     try:
-        if settings.rgx_patterns is None:
-            settings = replace(settings, rgx_patterns=find_json_regex_config())
-        extractor_config = None
-        if settings.archive and not settings.path:
-            extractor_config = load_extractor_config(find_extractor_config_path())
-
-        loggers = build_loggers(settings)
-        patterns = _load_patterns(settings, loggers)
-
-        _print_version_header(namespace, argv)
-        loggers.trace.info("%s", _describe(namespace))
-
-        sinks = [LogSink(loggers.pan), TraceSink(loggers.trace)]
-        if settings.log_anti_pan:
-            sinks.append(AntiPanSink(loggers.anti_pan, loggers.anti_pan_path))
-        if settings.csv:
-            sinks.append(CsvSink(settings.csv))
-        stats = ScanStats()
-        reporter = Reporter(Redactor(settings.mask), sinks, stats, loggers.trace, settings.report_delta)
-        scanner = Scanner(settings, patterns, reporter, loggers, extractor_config)
-
-        status = 0
-        stats.start()
-        try:
-            if settings.path:
-                scanner.scan_path(settings.path)
-            else:
-                scanner.scan_archive(settings.archive)
-        except KeyboardInterrupt:
-            loggers.trace.error("KeyboardInterrupt caught. Exiting.")
-            status = 1
-        finally:
-            stats.stop()
-            reporter.close()
-        for line in reporter.summary_lines(settings.log_dir):
-            loggers.trace.info("%s", line)
-        return status
-
+        return _run(namespace, settings, argv)
+    except KeyboardInterrupt:
+        print("Interrupted.", file=sys.stderr)
+        return 1
     except (FindPanError, FileNotFoundError, ValueError) as error:
-        if reporter is not None:
-            reporter.close()
         return _error(error)
     except Exception as error:  # pylint: disable=broad-exception-caught
         print_exception_info(error)
         return 1
+
+
+def _run(namespace: argparse.Namespace, settings: Settings, argv: Sequence[str]) -> int:
+    """Load configuration, build the reporting pipeline and scan."""
+    if settings.rgx_patterns is None:
+        settings = replace(settings, rgx_patterns=find_json_regex_config())
+    extractor_config = None
+    if settings.archive and not settings.path:
+        extractor_config = load_extractor_config(find_extractor_config_path())
+
+    loggers = build_loggers(settings)
+    patterns = _load_patterns(settings, loggers)
+
+    _print_version_header(namespace, argv)
+    loggers.trace.info("%s", _describe(namespace))
+
+    sinks = [LogSink(loggers.pan), TraceSink(loggers.trace)]
+    if settings.log_anti_pan:
+        sinks.append(AntiPanSink(loggers.anti_pan, loggers.anti_pan_path))
+    if settings.csv:
+        sinks.append(CsvSink(settings.csv))
+    stats = ScanStats()
+    reporter = Reporter(Redactor(settings.mask), sinks, stats, loggers.trace, settings.report_delta)
+    scanner = Scanner(settings, patterns, reporter, loggers, extractor_config)
+
+    status = 0
+    stats.start()
+    try:
+        if settings.path:
+            scanner.scan_path(settings.path)
+        else:
+            scanner.scan_archive(settings.archive)
+    except KeyboardInterrupt:
+        loggers.trace.error("KeyboardInterrupt caught. Exiting.")
+        status = 1
+    finally:
+        stats.stop()
+        try:
+            reporter.close()
+        except Exception as error:  # pylint: disable=broad-exception-caught
+            #   Report, but never replace an exception already in flight.
+            print(f"Error: closing outputs failed: {error}", file=sys.stderr)
+            status = 1
+    for message in scanner.extraction_errors:
+        print(f"Error: {message}", file=sys.stderr)
+        status = 1
+    for line in reporter.summary_lines(settings.log_dir):
+        loggers.trace.info("%s", line)
+    return status

@@ -141,6 +141,7 @@ class Reporter:
         self.stats = stats
         self._trace = trace_logger
         self._report_delta = report_delta
+        self._closed = False
 
     def report(self, match) -> None:
         """Count *match*, redact it once, and emit it to the sinks that accept it."""
@@ -194,6 +195,10 @@ class Reporter:
             f"Skipped {stats.skipped_files} Files.",
             f"Skipped {stats.executable} Executable Files.",
             f"Skipped {stats.binary} Binary Files.",
+        ]
+        if stats.unreadable:
+            lines.append(f"Unreadable {stats.unreadable} Files.")
+        lines += [
             "",
             "Scan complete.",
             "",
@@ -203,6 +208,9 @@ class Reporter:
 
     def close(self) -> None:
         """Close every sink; re-raise the first failure after all were attempted."""
+        if self._closed:
+            return
+        self._closed = True
         first_error = None
         for sink in self.sinks:
             try:

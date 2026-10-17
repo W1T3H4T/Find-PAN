@@ -107,7 +107,7 @@ def test_unreadable_file_is_skipped_and_scan_continues(build, tmp_path, monkeypa
     scanner, reporter, sink = build()
     scanner.scan_directory(str(tmp_path))
     assert [view.pan for view in kinds(sink, MatchKind.PAN)] == [SECOND_PAN]
-    assert reporter.stats.skipped_files == 1
+    assert reporter.stats.unreadable == 1
 
 
 def test_scan_directory_walks_nested_directories(build, tmp_path):
@@ -152,3 +152,33 @@ def test_scan_archive_extractor_error_is_logged_not_raised(build, tmp_path, monk
         scanner.scan_archive(str(tmp_path / "a.tar"))
     assert "Extractor failed for x" in caplog.text
     assert sink.views == []
+
+
+def test_extraction_error_is_recorded_for_the_caller(build, tmp_path, monkeypatch):
+    @contextmanager
+    def failing_extract(*args, **kwargs):
+        raise ExtractorError("Extractor failed for x")
+        yield  # pragma: no cover
+
+    monkeypatch.setattr(scanner_module, "extract_archive", failing_extract)
+    scanner, _, _ = build()
+    scanner.scan_archive(str(tmp_path / "a.tar"))
+    assert scanner.extraction_errors == ["Extractor failed for x"]
+
+
+def test_unreadable_file_counted_as_unreadable_not_skipped(build, tmp_path, monkeypatch):
+    target = tmp_path / "bad.txt"
+    target.write_text(f"card {VALID_PAN}\n", encoding="utf-8")
+    real_open = builtins.open
+
+    def deny(path, *args, **kwargs):
+        if str(path).endswith("bad.txt"):
+            raise PermissionError("denied")
+        return real_open(path, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "open", deny)
+    scanner, reporter, _ = build()
+    scanner.scan_file(str(target))
+    assert reporter.stats.unreadable == 1
+    assert reporter.stats.skipped_files == 0
+    assert reporter.stats.files == 0

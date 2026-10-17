@@ -109,3 +109,12 @@ def test_missing_command_raises_extractor_error(tmp_path, monkeypatch):
         with archives.extract_archive(str(tmp_path / "a.tar"), tar_config(command="not-installed"),
                                       str(tmp_path / "tmp"), LOGGER, runner=runner):
             pass
+
+
+def test_copy_failure_raises_extractor_error(tmp_path):
+    config = {"gzip": {"command": "gzip", "args": ["-d", "{archive}"], "copy_archive_to_tempdir": True}}
+    with pytest.raises(ExtractorError, match="Cannot copy"):
+        with archives.extract_archive(str(tmp_path / "missing.gz"), config, str(tmp_path / "tmp"), LOGGER,
+                                      runner=Runner()):
+            pass
+    assert not list((tmp_path / "tmp").glob("find-pan-*"))

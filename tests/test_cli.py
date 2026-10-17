@@ -197,3 +197,78 @@ def test_launcher_version_subprocess():
     )
     assert result.returncode == 0
     assert "find-pan.py v2.3.1" in result.stdout
+
+
+def test_command_line_arguments_line_printed_for_real_argv(tmp_path, monkeypatch, capsys):
+    """Deferred minor 1: the launcher passes argv=None, so sys.argv must be used."""
+    args = scan_args(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["find-pan.py", *args])
+    assert cli.main() == 0
+    assert "Command-line arguments:" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("stage", ["find_json_regex_config", "load_json_data", "compile_regex_patterns"])
+def test_keyboard_interrupt_anywhere_returns_1_without_traceback(tmp_path, monkeypatch, capsys, stage):
+    """Deferred minor 3: Ctrl-C before the scan loop must not traceback."""
+    def interrupt(*args, **kwargs):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(cli, stage, interrupt)
+    status = cli.main(scan_args(tmp_path, "--csv", str(tmp_path / "o.csv")))
+    captured = capsys.readouterr()
+    assert status == 1
+    assert "Traceback" not in captured.err
+    assert "Interrupted" in captured.err
+
+
+def test_invalid_regex_returns_1_with_one_line_error(tmp_path, capsys):
+    """Deferred minor 5: a bad regex is a configuration error, not an exception dump."""
+    bad = tmp_path / "bad.json"
+    bad.write_text('{"PAN Pattern": {"X": {"regex": ["(unclosed"], "length": "16"}}}', encoding="utf-8")
+    status = cli.main(scan_args(tmp_path, "--rgx-patterns", str(bad)))
+    captured = capsys.readouterr()
+    assert status == 1
+    assert "Error:" in captured.err and "Exception Information" not in captured.out
+
+
+def test_failed_extraction_is_reported_on_stderr_with_status_1(tmp_path, monkeypatch, capsys):
+    """Deferred minor 5: an archive that could not be extracted must be visible."""
+    monkeypatch.setattr(cli, "find_extractor_config_path", lambda: "unused")
+    monkeypatch.setattr(cli, "load_extractor_config", lambda path: {})
+    status = cli.main(["--tar", str(tmp_path / "nope.zip"), "--log-dir", str(tmp_path / "logs"),
+                       "--tar-tmp", str(tmp_path / "tar")])
+    captured = capsys.readouterr()
+    assert status == 1
+    assert "No extractor configured" in captured.err
+
+
+def test_close_failure_does_not_mask_scan_error(tmp_path, monkeypatch, capsys):
+    """Deferred minor 6: a failing sink close() must not replace the scan error."""
+    def boom(self, path):
+        raise ValueError("scan exploded")
+
+    def bad_close(self):
+        raise OSError("close exploded")
+
+    monkeypatch.setattr(cli.Scanner, "scan_path", boom)
+    monkeypatch.setattr(cli.Reporter, "close", bad_close)
+    status = cli.main(scan_args(tmp_path))
+    err = capsys.readouterr().err
+    assert status == 1
+    assert "scan exploded" in err
+
+
+def test_console_encoding_never_drops_findings(tmp_path, monkeypatch, capsys):
+    """Deferred minor 7: a cp1252 console must not turn U+FFFD into a logging error."""
+    import io
+
+    scan_dir = tmp_path / "scan"
+    scan_dir.mkdir()
+    (scan_dir / "a.txt").write_bytes(b"caf\xe9 " + PAN.encode() + b"\n")
+    raw = io.BytesIO()
+    console = io.TextIOWrapper(raw, encoding="cp1252", write_through=True)
+    monkeypatch.setattr(sys, "stdout", console)
+    status = cli.main(scan_args(tmp_path, "--verbose"))
+    assert status == 0
+    assert "Logging error" not in capsys.readouterr().err
+    assert PAN in raw.getvalue().decode("cp1252")

@@ -59,7 +59,10 @@ def extract_archive(
             #   gzip and similar in-place decompressors need the archive inside
             #   the temp directory so the result lands there as well.
             archive_for_extractor = os.path.join(temp_dir, os.path.basename(archive_path))
-            shutil.copy2(archive_path, archive_for_extractor)
+            try:
+                shutil.copy2(archive_path, archive_for_extractor)
+            except OSError as error:
+                raise ExtractorError(f"Cannot copy {archive_path} for extraction: {error}") from error
         else:
             archive_for_extractor = archive_path
 
