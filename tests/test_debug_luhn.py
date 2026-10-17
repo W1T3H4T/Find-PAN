@@ -86,3 +86,32 @@ def test_mask_pan_helpers(find_pan):
     assert find_pan.mask_pan("123456789") == "*********"
     assert find_pan.mask_matched_data("4556 7375 8689 9856", "4556737586899856") == "4556 73** **** 9856"
     assert find_pan.mask_matched_data(";4556737586899856=2512", "4556737586899856") == ";****************=****"
+
+
+def test_trace_file_failure_reports_original_error(scanner, tmp_path, monkeypatch, capsys):
+    """An unopenable trace log reports the real error, not a NameError."""
+    trace_log = tmp_path / "trace.log"
+    monkeypatch.setattr(
+        scanner, "set_log_directory_and_filenames",
+        lambda: (str(tmp_path / "pan.log"), str(trace_log)),
+    )
+    real_handler = logging.FileHandler
+
+    def failing_handler(filename, *args, **kwargs):
+        if str(filename) == str(trace_log):
+            raise PermissionError("denied")
+        return real_handler(filename, *args, **kwargs)
+
+    monkeypatch.setattr(scanner.logging, "FileHandler", failing_handler)
+    loggers = [logging.getLogger("_TraceLogObj"), logging.getLogger("_DefaultLogObj")]
+    try:
+        with pytest.raises(SystemExit):
+            scanner.setup_custom_loggers()
+        output = capsys.readouterr().out
+        assert "PermissionError" in output
+        assert "denied" in output
+    finally:
+        for logger in loggers:
+            for handler in list(logger.handlers):
+                handler.close()
+                logger.removeHandler(handler)

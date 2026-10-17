@@ -176,14 +176,6 @@ def setup_custom_loggers() -> Dict[str, logging.Logger]:
     # Trace Console Handler (for stdout)
     trace_console_handler = logging.StreamHandler(sys.stdout)
 
-    try:
-        trace_file_handler = logging.FileHandler(trace_logfile)
-        trace_file_handler.setLevel(trace_level)
-    except FileNotFoundError:
-        print_exception_info(None)
-    except Exception as e:
-        print_exception_info(e)
-
     trace_formatter = logging.Formatter("%(asctime)s [%(levelname)s]: %(message)s")
 
     if trace_console_handler:
@@ -191,8 +183,17 @@ def setup_custom_loggers() -> Dict[str, logging.Logger]:
         trace_console_handler.setFormatter(trace_formatter)
         trace_logger.addHandler(trace_console_handler)
 
-    trace_file_handler.setFormatter(trace_formatter)
-    trace_logger.addHandler(trace_file_handler)
+    #   The file handler is only used inside the try block, so correctness no
+    #   longer depends on print_exception_info() terminating the process.
+    try:
+        trace_file_handler = logging.FileHandler(trace_logfile)
+        trace_file_handler.setLevel(trace_level)
+        trace_file_handler.setFormatter(trace_formatter)
+        trace_logger.addHandler(trace_file_handler)
+    except FileNotFoundError:
+        print_exception_info(None)
+    except Exception as e:
+        print_exception_info(e)
 
     # PAN Logger
     pan_logger = logging.getLogger("_DefaultLogObj")
