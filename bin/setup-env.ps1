@@ -1,4 +1,3 @@
-<#
 .SYNOPSIS
     One-time setup for the Find-PAN project environment on Windows (PowerShell).
 
@@ -13,17 +12,32 @@
     directory. Sharing a checkout between Windows and WSL/Linux then works
     without either side corrupting the other's environment.
 
+    python-magic needs the libmagic-1.dll native library on Windows.  If the
+    -FileWindows switch is used, the file-windows package is installed before
+    uv sync so the DLL is available in the virtual environment.  If you prefer to
+    manage the DLL yourself, place libmagic-1.dll (and its magic1.mgc database)
+    on PATH or in the bin directory.
+
     Run once, then open a NEW shell (so the variable is picked up) and use
     plain uv commands:
 
         uv run python bin/run-pytest-regression.py
 
+.PARAMETER FileWindows
+    Install the file-windows package into the project environment to provide the
+    libmagic-1.dll dependency on Windows.
+
 .EXAMPLE
     PS> .\bin\setup-env.ps1
+
+.EXAMPLE
+    PS> .\bin\setup-env.ps1 -FileWindows
 #>
 
 [CmdletBinding()]
-param()
+param(
+    [switch]$FileWindows
+)
 
 $ErrorActionPreference = 'Stop'
 
@@ -54,6 +68,10 @@ Write-Host "Every uv project keeps its own $EnvironmentName directory."
 # -- 3. Create and verify the project environment
 Push-Location $ProjectRoot
 try {
+    if ($FileWindows) {
+        Write-Host 'Adding file-windows to provide libmagic-1.dll on Windows.'
+        uv add file-windows
+    }
     uv sync
     uv run python -c 'import pytest; print("pytest", pytest.__version__, "is available.")'
 }

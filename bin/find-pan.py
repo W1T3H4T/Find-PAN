@@ -2,7 +2,7 @@
 ##  ===========================================================================
 ##  File    :   Find-PAN.py
 ##  Who     :   David Means <w1t3h4t@gmail.com>
-##  What    :   This script scans a file system or tar file for Primary Account 
+##  What    :   This script scans a file system or archive file for Primary Account
 ##              Number (PAN) and Track Data patterns using regular expressions.
 ##              It supports logging, process time tracking, and secure file 
 ##              deletion.
@@ -11,7 +11,6 @@
 ##  ===========================================================================
 
 import argparse
-import json
 import logging
 import os
 import re
@@ -19,14 +18,24 @@ import shutil
 import signal
 import subprocess
 import sys
-import tarfile
+import tempfile
 import time
 import traceback
 from collections import defaultdict
 from datetime import datetime
+from pathlib import Path
 from typing import Dict, List
 
-import magic
+from pan_config import (
+    EXTRACTOR_CONFIG_FILENAME,
+    compile_regex_patterns,
+    compile_regex_patterns_with_prefix,
+    detect_archive_type,
+    find_extractor_config_path,
+    find_json_regex_config,
+    load_extractor_config,
+    load_json_data,
+)
 
 # ===========================================================================
 # Disable some pylint warnings
@@ -52,9 +61,6 @@ _FindPANVersion = "2 3 1"  # Major, Minor, Patch
 # - Item Count Array
 _MatchCount = defaultdict(int)
 
-#   Location of JSON file for REGEX Patterns
-_JSONRegexPatternPath = None
-
 #   Regex Pattern Prefix
 _RegexPatternPrefix = r"[ '\"{]"
 
@@ -69,34 +75,32 @@ _DefaultLogObj = None
 # ===========================================================================
 # Print consolidated exception info
 # ===========================================================================
-def print_exception_info(e: Exception) -> None:
+def print_exception_info(e: object) -> None:
     exc_type, exc_value, exc_traceback = sys.exc_info()
     tb_stack = traceback.extract_tb(exc_traceback)
 
-    # Traverse the traceback to find the first call outside the current module
-    for frame in reversed(tb_stack):
-        if f"{ProgramName}" in frame.filename:
-            file_name = frame.filename
-            line_number = frame.lineno
-            func_name = frame.name
-            break
-    else:
-        # Fallback to the last frame (this shouldn't happen)
+    if tb_stack:
+        # The innermost frame is where the exception was actually raised.
         frame = tb_stack[-1]
         file_name = frame.filename
         line_number = frame.lineno
         func_name = frame.name
+    else:
+        file_name = "<unknown>"
+        line_number = 0
+        func_name = "<unknown>"
 
-    exception_message = str(exc_value)
+    exception_message = str(exc_value) if exc_value is not None else ""
+    extra_info = str(e) if e is not None else ""
 
     print("\nException Information:")
     print("-----------------------------------------------------------------")
     print(f"Function: '{func_name}', on line {line_number}")
     print(f"File    : {file_name}")
-    print(f"Type    : {exc_type.__name__}")
+    print(f"Type    : {exc_type.__name__ if exc_type else 'Unknown'}")
     print(f"Message : {exception_message}")
-    if str(e).lower() != str(exception_message).lower():
-        print(f"Info    : {e}")
+    if extra_info and extra_info.lower() != exception_message.lower():
+        print(f"Info    : {extra_info}")
     print("-----------------------------------------------------------------")
     sys.exit(1)
 
@@ -228,6 +232,21 @@ def stop_time_tracking(files_processed: int) -> tuple:
 # Check if file is binary
 # ===========================================================================
 def is_executable(file_path: str) -> bool:
+    #   Import python-magic lazily.  On Windows the import requires the
+    #   `libmagic-1.dll` native dependency; if it is missing the interpreter
+    #   may segfault.  On Linux/macOS `libmagic` must be installed through the
+    #   system package manager.  When either is missing, the --skip-binary flag
+    #   falls back to the simple null-byte heuristic in is_binary().
+    try:
+        import magic
+    except ImportError:
+        _TraceLogObj.warning(
+            "python-magic is not available; install the platform libmagic "
+            "dependency to enable MIME-based binary skipping for %s",
+            file_path,
+        )
+        return False
+
     try:
         if os.path.isfile(file_path):
             mime = magic.Magic(mime=True)
@@ -258,7 +277,12 @@ def is_executable(file_path: str) -> bool:
         _TraceLogObj.warning("Skipping file due to PermissionError: %s", file_path)
 
     except Exception as e:
-        print_exception_info(f"Skipping file due to error: {file_path}, {e}")
+        #   libmagic failures are not fatal; fall back to the simple heuristic.
+        _TraceLogObj.warning(
+            "python-magic failed for %s (%s); using fallback binary detection.",
+            file_path,
+            e,
+        )
     return False
 
 
@@ -336,92 +360,114 @@ def calculate_delta() -> bool:
 
 
 # ===========================================================================
-# Scan a TAR file for PAN and TRACK data
+# Extract and scan an archive using an external program
 # ===========================================================================
-def process_tar_file(_Args: argparse.Namespace, json_data: dict) -> None:
-    _TraceLogObj.info("TAR File Scan")
-    secure_del_app = find_secure_delete_program()
-    _TraceLogObj.info("Scanning %s using %s ...", _Args.tar, _Args.tar_tmp)
+def process_archive_file(
+    archive_path: str,
+    compiled_patterns: list,
+    extractor_config: Dict[str, Dict],
+) -> None:
+    """Extract *archive_path* to a temp directory and scan its contents.
 
-    with tarfile.open(_Args.tar, "r:*") as tar:
-        for tarinfo in tar:
-            if tarinfo.isreg():
-                # Define the temp path where the file will be extracted
-                temp_path = os.path.join(_Args.tar_tmp, tarinfo.name)
+    The temp directory and all extracted contents are removed after scanning,
+    regardless of success or failure.  External extraction programs are used
+    for all supported archive formats, avoiding the tar path-traversal bugs
+    inherent in the previous built-in extraction path.
+    """
+    archive_type = detect_archive_type(archive_path)
+    if archive_type is None:
+        _DefaultLogObj.error("Unsupported archive type: %s", archive_path)
+        return
 
-                tar.extract(tarinfo, path=_Args.tar_tmp, filter=custom_tar_filter)
-
-                # Process the extracted file
-                process_file(temp_path, json_data)
-
-                # Securely delete the file after processing
-                secure_delete(secure_del_app, temp_path)
-
-
-# ===========================================================================
-# Tar file filter for safety
-# ===========================================================================
-def custom_tar_filter(tarinfo: tarfile.TarInfo, path: str) -> tarfile.TarInfo | None:
-    # Ensure that tarinfo has a safe path (no absolute paths or path traversal)
-    if ".." in tarinfo.name or tarinfo.name.startswith("/"):
-        _TraceLogObj.warning(
-            "Skipping potentially dangerous file: %s in %s", tarinfo.name, path
+    extractor = extractor_config.get(archive_type)
+    if not extractor:
+        _DefaultLogObj.error(
+            "No extractor configured for archive type '%s' (%s). "
+            "Run the setup script to build %s.",
+            archive_type,
+            archive_path,
+            EXTRACTOR_CONFIG_FILENAME,
         )
-        return None  # Skip this file
+        return
 
-    # Modify tarinfo (e.g., change file permissions)
-    tarinfo.mode &= 0o755  # Ensure no world-writable permissions
-    return tarinfo  # Return tarinfo to proceed with extraction
+    command = extractor.get("command")
+    args_template = extractor.get("args", [])
+    copy_archive_to_tempdir = extractor.get("copy_archive_to_tempdir", False)
+    if not command or not args_template:
+        _DefaultLogObj.error(
+            "Incomplete extractor configuration for '%s': missing command or args.",
+            archive_type,
+        )
+        return
 
+    command_path = shutil.which(command) or command
+    tar_tmp = _Args.tar_tmp
+    if tar_tmp:
+        os.makedirs(tar_tmp, exist_ok=True)
+    temp_dir = tempfile.mkdtemp(prefix="find-pan-", dir=tar_tmp)
 
-# ===========================================================================
-# Find the secure delete app for the OS
-# ===========================================================================
-def find_secure_delete_program() -> list | None:
-    nt = ["sdelete64.exe", "sdelete.exe"]
-    posix = ["shred", "gshred"]
-
-    if os.name == "posix":
-        for tool in posix:
-            tool_path = shutil.which(tool)
-            if tool_path:
-                _TraceLogObj.info("Using %s %s for secure delete", os.name, tool_path)
-                return [tool_path, "-u"]
-
-    if os.name == "nt":
-        for tool in nt:
-            tool_path = shutil.which(tool)
-            if tool_path:
-                _TraceLogObj.info("Using %s %s for secure delete", os.name, tool_path)
-                return [tool_path]
-
-    _TraceLogObj.warning("No Secure delete app found for %s", os.name)
-    return None  # Unsupported operating system
-
-
-# ===========================================================================
-# Securely delete a file
-# ===========================================================================
-def secure_delete(secure_del_app: list | None, file_path: str) -> None:
     try:
-        if secure_del_app is None:
-            os.remove(file_path)
+        _TraceLogObj.info(
+            "Archive Scan: extracting %s as %s into %s ...",
+            archive_path,
+            archive_type,
+            temp_dir,
+        )
+
+        if copy_archive_to_tempdir:
+            #   gzip and similar in-place decompressors need the archive inside
+            #   the temp directory so the result lands there as well.
+            archive_name = os.path.basename(archive_path)
+            archive_in_temp = os.path.join(temp_dir, archive_name)
+            shutil.copy2(archive_path, archive_in_temp)
+            archive_for_extractor = archive_in_temp
+        else:
+            archive_for_extractor = archive_path
+
+        formatted_args = [
+            arg.format(archive=archive_for_extractor, tempdir=temp_dir)
+            for arg in args_template
+        ]
+        cmd = [command_path, *formatted_args]
+
+        if _Args.verbose:
+            _TraceLogObj.info("Extractor command: %s", " ".join(cmd))
+
+        try:
+            subprocess.run(cmd, check=True, capture_output=True, text=True)
+        except subprocess.CalledProcessError as e:
+            _DefaultLogObj.error(
+                "Extractor failed for %s: %s (stderr: %s)",
+                archive_path,
+                e,
+                e.stderr,
+            )
+            return
+        except FileNotFoundError:
+            _DefaultLogObj.error(
+                "Extractor command not found: %s. "
+                "Update %s with the correct path.",
+                command,
+                EXTRACTOR_CONFIG_FILENAME,
+            )
             return
 
-        cmd = secure_del_app.copy()
-        cmd.append(file_path)
-        if _Args.verbose:
-            _TraceLogObj.info("Secure delete: %s", file_path)
-        subprocess.run(cmd, check=True)
+        scan_directory(temp_dir, compiled_patterns)
 
-    except subprocess.CalledProcessError as e:
-        _TraceLogObj.error("Error securely deleting file: %s, Error: %s", file_path, e)
+    finally:
+        try:
+            shutil.rmtree(temp_dir)
+            _TraceLogObj.info("Cleaned up temporary extraction directory: %s", temp_dir)
+        except OSError as e:
+            _TraceLogObj.warning(
+                "Could not remove temporary extraction directory %s: %s", temp_dir, e
+            )
 
 
 # ===========================================================================
 # Scan a filesystem / pathname for PAN data
 # ===========================================================================
-def process_filesystem(json_data: dict) -> None:
+def process_filesystem(json_data: list) -> None:
     _TraceLogObj.info("Filesystem Scan")
     scan_directory(_Args.path, json_data)
 
@@ -429,7 +475,7 @@ def process_filesystem(json_data: dict) -> None:
 # ===========================================================================
 # Scan a directory for files
 # ===========================================================================
-def scan_directory(dir_name: str, json_data: dict) -> None:
+def scan_directory(dir_name: str, compiled_patterns: list) -> None:
     _TraceLogObj.info("Scanning directory '%s' ...", dir_name)
     for root, _, files in os.walk(dir_name):
         _DefaultLogObj.info("Scanning directory '%s' ...", root)
@@ -437,7 +483,7 @@ def scan_directory(dir_name: str, json_data: dict) -> None:
             file_path = os.path.join(root, file)
             if not os.path.isfile(file_path):
                 continue
-            process_file(file_path, json_data)
+            process_file(file_path, compiled_patterns)
 
 
 # ===========================================================================
@@ -566,59 +612,6 @@ class DataReporter:  # pylint: disable=too-many-instance-attributes
 
 
 # ===========================================================================
-# Compile the regex patterns with a prefix
-# ===========================================================================
-def compile_regex_patterns_with_prefix(json_data: dict) -> list:
-    compiled_patterns = []
-
-    for category, patterns in json_data.items():
-        if isinstance(patterns, dict):
-            for pattern_name, details in patterns.items():
-                if "regex" in details:
-                    for pattern in details["regex"]:
-                        prefix_pattern = f"{_RegexPatternPrefix}{pattern}"
-                        compiled_patterns.append(
-                            (category, pattern_name, re.compile(prefix_pattern))
-                        )
-    return compiled_patterns
-
-
-# ===========================================================================
-# Compile the regex patterns
-# ===========================================================================
-def compile_regex_patterns(json_data: dict) -> list:
-    compiled_patterns = []
-
-    for category, patterns in json_data.items():
-        # print(f"category: {category}")
-        if isinstance(patterns, dict):
-            for pattern_name, details in patterns.items():
-                if "regex" in details:
-                    for pattern in details["regex"]:
-                        compiled_patterns.append(
-                            (category, pattern_name, re.compile(pattern))
-                        )
-
-    return compiled_patterns
-
-
-# ===========================================================================
-# Load JSON File
-# ===========================================================================
-def load_json_data(filename: str) -> dict | None:
-    try:
-        with open(filename, "r", encoding="utf-8", errors="replace") as file:
-            data = json.load(file)
-            return data
-
-    except FileNotFoundError:
-        print_exception_info(f"Error: File '{filename}' not found.")
-    except Exception as e:
-        print_exception_info(e)
-    return None
-
-
-# ===========================================================================
 # Enumerate command line arguments
 # ===========================================================================
 def enumerate_command_line_arguments(arg_parse: argparse.ArgumentParser) -> List[str | None]:
@@ -678,31 +671,6 @@ def print_scan_summary() -> None:
 
 
 # ===========================================================================
-# Find the JSON pattern file
-# ===========================================================================
-def find_json_regex_config() -> str:
-    # Potential config paths
-    config_paths = [
-        os.environ.get("XDG_CONFIG_HOME"),
-        os.path.join(os.path.expanduser("~"), ".config"),
-        os.path.join(os.path.expanduser("~"), ".local"),
-        os.path.join(os.path.expanduser("~"), ".local/share"),
-        "/usr/local"
-    ]
-
-    # Find the first valid config path
-    for config_path in config_paths:
-        find_pan_dir = os.path.join(config_path, "find-pan")
-        json_file_path = os.path.join(find_pan_dir, "find-pan-regex.json")
-
-        if os.path.exists(json_file_path):
-            return json_file_path
-
-    # Raise error if none of the paths exist
-    raise FileNotFoundError("JSON configuration file not found")
-
-
-# ===========================================================================
 # Configure our command line options
 # autopep8: off
 # ===========================================================================
@@ -721,8 +689,17 @@ def process_cmdline_arguments() -> argparse.ArgumentParser:
     #   Mutable processing (change our runtime/detection behavior)
     #
     parser.add_argument( "--path", help="Filesystem pathname to scan.", type=str, default=None)
-    parser.add_argument( "--tar", help="TAR file path.", type=str, default=None)
-    parser.add_argument( "--tar-tmp", help="Temporary directory for tar file extraction.", default=tar_dir,)
+    parser.add_argument(
+        "--tar",
+        help="Archive file path (tar, tar.gz, zip, 7z, gz).",
+        type=str,
+        default=None,
+    )
+    parser.add_argument(
+        "--tar-tmp",
+        help="Parent directory for temporary archive extraction directories.",
+        default=tar_dir,
+    )
     parser.add_argument( "--log-dir", help="Directory for log files.", default=log_dir)
     parser.add_argument( "--rgx-patterns", help="JSON file containing PAN and TRACK regular expressions.",
                         type=str, default=f"{_JSONRegexPatternPath}",)
@@ -761,8 +738,13 @@ def main() -> None:
     _Compiled_Patterns = []
 
     # Load JSON data and compile prefix patterns
-    json_data = load_json_data(_Args.rgx_patterns)
-    if json_data and _TraceLogObj.debug:
+    try:
+        json_data = load_json_data(_Args.rgx_patterns)
+    except (FileNotFoundError, ValueError) as e:
+        _DefaultLogObj.error("Failed to load regex patterns: %s", e)
+        return
+
+    if json_data and _Args.debug:
         formatted_pan_patterns = json.dumps(json_data, indent=4)
         _TraceLogObj.debug(formatted_pan_patterns)
 
@@ -778,10 +760,16 @@ def main() -> None:
         _TotalTime, _AverageTime = stop_time_tracking(_MatchCount["FILES"])
         return
 
-    # Scan a tar file
+    # Scan an archive file
     if _Args.tar and _Args.tar_tmp:
         initialize_time_tracking()
-        process_tar_file(_Args, _Compiled_Patterns)
+        try:
+            extractor_config_path = find_extractor_config_path()
+            extractor_config = load_extractor_config(extractor_config_path)
+        except FileNotFoundError as e:
+            _DefaultLogObj.error("Failed to load extractor configuration: %s", e)
+            return
+        process_archive_file(_Args.tar, _Compiled_Patterns, extractor_config)
         _TotalTime, _AverageTime = stop_time_tracking(_MatchCount["FILES"])
         return
 

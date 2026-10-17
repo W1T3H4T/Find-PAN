@@ -7,6 +7,7 @@ requires-python = ">=3.10"
 dependencies = [
 	"names>=0.3.0",
 	"python-magic>=0.4.27",
+	"pyyaml>=6.0.1",
 	"random-address>=1.1.1",
 ]
 
