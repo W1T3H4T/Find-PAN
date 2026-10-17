@@ -7,6 +7,10 @@
 #  Configures uv so that plain `uv` commands (`uv sync`, `uv run`, `uv add`)
 #  automatically use a POSIX-specific project environment (`.venv-linux`).
 #
+#  python-magic requires the system libmagic library.  On Debian/Ubuntu this
+#  package is libmagic1; on macOS with Homebrew it is libmagic.  The script
+#  checks for the library and warns if it is missing, but it will not abort.
+#
 #  uv has no pyproject.toml setting for the environment path, but it honors
 #  the UV_PROJECT_ENVIRONMENT variable, and a *relative* value is resolved
 #  against each project's root.  This script exports the variable for the
@@ -49,6 +53,36 @@ if [ -z "$uv_bin" ]; then
     exit 1
 fi
 
+# -- 1b. Warn if libmagic is not present, but allow the environment to be set up
+#         because the scanner still works without --skip-binary.
+magic_present=false
+case "$(uname -s)" in
+    Linux)
+        if ldconfig -p 2>/dev/null | grep -q libmagic || [ -f /usr/lib/file/magic.mgc ] || [ -f /usr/share/misc/magic.mgc ]; then
+            magic_present=true
+        fi
+        ;;
+    Darwin)
+        if command -v brew >/dev/null 2>&1 && [ -f "$(brew --prefix libmagic 2>/dev/null)/lib/libmagic.dylib" ]; then
+            magic_present=true
+        elif [ -f /usr/local/lib/libmagic.dylib ] || [ -f /opt/homebrew/lib/libmagic.dylib ]; then
+            magic_present=true
+        fi
+        ;;
+    *)
+        if ldconfig -p 2>/dev/null | grep -q libmagic; then
+            magic_present=true
+        fi
+        ;;
+esac
+
+if [ "$magic_present" != true ]; then
+    echo "WARNING: libmagic does not appear to be installed." >&2
+    echo "         python-magic needs it for the --skip-binary option." >&2
+    echo "         Debian/Ubuntu: sudo apt install libmagic1" >&2
+    echo "         macOS/Homebrew: brew install libmagic" >&2
+fi
+
 # -- 2. Persist the per-platform environment name for this shell
 configure_line="export UV_PROJECT_ENVIRONMENT=\"${environment_name}\""
 if [ -f "$rc_file" ] && grep -Fq "UV_PROJECT_ENVIRONMENT" "$rc_file"; then
@@ -75,6 +109,7 @@ echo "Note: non-interactive shells (scripts, CI) must export the variable themse
 # -- 3. Create and verify the project environment
 cd -- "$project_root"
 "$uv_bin" sync
+#   Verify pytest is available; also exercise python-magic if libmagic is installed.
 "$uv_bin" run python -c 'import pytest; print("pytest", pytest.__version__, "is available.")'
 
 # -- 4. Clean up a legacy shared .venv, if any (superseded by the

@@ -1,0 +1,94 @@
+# Find-PAN archive extractor configuration.
+#
+# This file tells find-pan.py which external programs to use when extracting
+# supported archive formats.  On first run, the application can build this
+# configuration by searching PATH for the commands listed below.  You may
+# edit the paths to point to specific installations (for example, the 7-Zip
+# directory on Windows).
+#
+# Supported archive types:
+#   tar   - .tar, .tar.gz, .tgz, .tar.bz2, .tbz2, .tar.xz, .txz
+#   zip   - .zip, .jar, .war, .ear
+#   7z    - .7z
+#   gzip  - .gz (single compressed file)
+#
+# ---------------------------------------------------------------------------
+# Extractor configuration options
+# ---------------------------------------------------------------------------
+#
+# command:
+#   The executable name or absolute path used to extract this archive type.
+#   A bare name (e.g. "tar", "7z") is resolved against the user's PATH at
+#   runtime.  Use an absolute path for tools installed outside PATH.
+#
+# args:
+#   A list of command-line arguments passed to the extractor.  Two template
+#   placeholders are substituted at runtime:
+#     {archive}  - the original archive file path
+#     {tempdir}  - the temporary directory created for extracted contents
+#
+# copy_archive_to_tempdir:
+#   When true, the original archive is copied into the temporary extraction
+#   directory before the extractor runs.  This is required for in-place
+#   decompressors such as gzip, which write the decompressed file next to
+#   the archive.  For normal extractors (tar, unzip, 7z) this should be false.
+#
+# compression:
+#   A list of compression algorithms this extractor can handle.  This is
+#   informational metadata only; the external program is responsible for the
+#   actual decompression.  It is used to document capability and may be used
+#   by future features to select an extractor based on the archive's internal
+#   compression method.
+#
+# ---------------------------------------------------------------------------
+
+extractors:
+  tar:
+    command: tar
+    args:
+      - -xf
+      - "{archive}"
+      - -C
+      - "{tempdir}"
+    copy_archive_to_tempdir: false
+    compression:
+      - store
+
+  zip:
+    command: unzip
+    args:
+      - "{archive}"
+      - -d
+      - "{tempdir}"
+    copy_archive_to_tempdir: false
+    compression:
+      - store
+      - deflate
+      - bzip2
+      - lzma
+
+  7z:
+    command: 7z
+    args:
+      - x
+      - "{archive}"
+      - -o{tempdir}
+      - -y
+    copy_archive_to_tempdir: false
+    compression:
+      - store
+      - lzma
+      - lzma2
+      - bzip2
+      - deflate
+      - ppmd
+      - bcj2
+
+  gzip:
+    command: gzip
+    args:
+      - -d
+      - "{archive}"
+    copy_archive_to_tempdir: true
+    compression:
+      - deflate

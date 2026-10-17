@@ -69,17 +69,12 @@ def test_luhn_rejects_transposed_digits(scanner, network, pan):
     assert not scanner.luhn_check(transposed)
 
 
-def test_luhn_accepts_zero_sum_strings(scanner):
-    """Pins current behavior: strings with a zero checksum pass.
-
-    An empty or all-zero digit string sums to zero and passes the ``% 10``
-    check.  The detection regexes guarantee at least 12 digits, so this
-    cannot occur in the scanner, but callers embedding ``luhn_check``
-    elsewhere should know about the edge case.
-    """
-    assert scanner.luhn_check("")
-    assert scanner.luhn_check("0")
-    assert scanner.luhn_check("00")
+def test_luhn_rejects_empty_and_all_zero_strings(scanner):
+    """An empty or all-zero string has a zero checksum but is never a PAN."""
+    assert not scanner.luhn_check("")
+    assert not scanner.luhn_check("0")
+    assert not scanner.luhn_check("00")
+    assert not scanner.luhn_check("0000000000000000")
 
 
 def test_luhn_raises_on_non_numeric_input(scanner):
@@ -98,7 +93,7 @@ def test_luhn_accepts_every_generated_pan(scanner, pan_generator, configuration_
     rng = random.Random(0)
 
     for pattern_name, pattern_data in patterns.items():
-        generated_pans = pan_generator.generate_pans(pattern_name, pattern_data, rng)
+        generated_pans = pan_generator.generate_pans(pattern_name, pattern_data, 1, rng)
         for generated_pan in generated_pans:
             assert scanner.luhn_check(generated_pan.pan), (
                 f"Scanner rejected generated PAN {generated_pan.pan} "

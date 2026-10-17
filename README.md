@@ -65,21 +65,26 @@ Find-PAN uses `find-pan-regex.json` as its configuration file. This file is foun
   /usr/local/find-pan </pre>
 
 ## Modules and Libraries
-Install the operating-system `libmagic` dependency, install [uv](https://docs.astral.sh/uv/), then run the one-time setup script for your platform. The setup configures `uv` so plain `uv` commands (`uv sync`, `uv run`, `uv add`) automatically use a per-platform project environment (`.venv-windows` or `.venv-linux`). This lets a checkout be shared between Windows and WSL/Linux without either side corrupting the other's environment.
+Install the operating-system dependency for MIME detection, install [uv](https://docs.astral.sh/uv/), then run the one-time setup script for your platform. The setup configures `uv` so plain `uv` commands (`uv sync`, `uv run`, `uv add`) automatically use a per-platform project environment (`.venv-windows` or `.venv-linux`). This lets a checkout be shared between Windows and WSL/Linux without either side corrupting the other's environment.
 
-Windows (PowerShell):
+**Windows (PowerShell)** — `python-magic` needs the `libmagic-1.dll` native library. The easiest way to satisfy this is to install the [file-windows](https://pypi.org/project/file-windows/) package, which bundles the DLL, then run the project setup:
 <pre>
-PS> .\bin\setup-env.ps1
+PS> .\bin\setup-env.ps1 -FileWindows
 </pre>
 
-WSL / Linux / macOS (Debian/Ubuntu shown for the `libmagic` prerequisite):
+If you prefer to manage the DLL yourself, place `libmagic-1.dll` (and its
+`magic1.mgc` database) on `PATH` or in the same directory as `find-pan.py`.
+
+**WSL / Linux / macOS** — install the system `libmagic` package. Debian/Ubuntu example shown:
 <pre>
 $ sudo apt update
-$ sudo apt install -y libmagic python3-full
+$ sudo apt install -y libmagic1 python3-full
 $ ./bin/setup-env.sh
 </pre>
 
-Both scripts persist `UV_PROJECT_ENVIRONMENT` for your user (`.venv-windows` on Windows, `.venv-linux` on POSIX systems). uv resolves the relative value against each project's root, so every `uv` project keeps its own platform-named environment. Open a new shell after setup, then run commands with plain `uv`:
+On macOS with Homebrew: `brew install libmagic`.
+
+Both setup scripts persist `UV_PROJECT_ENVIRONMENT` for your user (`.venv-windows` on Windows, `.venv-linux` on POSIX systems). uv resolves the relative value against each project's root, so every `uv` project keeps its own platform-named environment. Open a new shell after setup, then run commands with plain `uv`:
 <pre>
 $ uv run python bin/find-pan.py --version
 $ uv run python bin/run-pytest-regression.py
@@ -112,7 +117,7 @@ source $HOME/.pyenv/bin/activate
 
 <pre>
 find-pan.py [--path PATH] [--tar TAR] [--temp TEMP] [--log-dir LOG_DIR]
-            [--skip-binary]  [--verbose] [--debug]
+            [--skip-binary]  [--verbose] [--debug] [--mask]
 </pre>
 
 ## Command-line Arguments:
@@ -120,15 +125,16 @@ find-pan.py [--path PATH] [--tar TAR] [--temp TEMP] [--log-dir LOG_DIR]
 |-------------------|:-------------------------------------------------------|
 |**-h,--help**      |Show this information and exit.|
 |**--path**         |The filesystem path to scan for PAN and TRACK data (required when no --tar). |
-|**--tar**          |The tar file to scan for PAN and TRACK data (required when no --path).|
-|**--tar-tmp**      |The temporary directory for extracting files from the tar archive (required w/ --tar).|
+|**--tar**          |The archive file to scan: `.tar`, `.tar.gz`, `.tgz`, `.tar.bz2`, `.tbz2`, `.tar.xz`, `.txz`, `.zip`, `.jar`, `.war`, `.ear`, `.7z`, or `.gz` (required when no --path).|
+|**--tar-tmp**      |Parent directory for temporary archive extraction directories (required w/ --tar).|
 |**--log-dir**      |The directory for log files.|
 |**--skip-binary**  |Do not scan (skip) binary files.|
 |**--patterns**     |The JSON file containing PAN and TRACK regular expressions.|
 |**--line-limit**   |The number of lines to scan per file.  Zero means scan all files.|
 |**--report-delta** |The number of files to process before reporting progress.|
 |**--verbose**      |Route log file messages also to stdout.|
-|**--debug**        |Route 'debug' messages to stdout and the 'trace' log.|
+|**--debug**        |Route 'debug' messages to stdout and the 'trace' log, including a message for each candidate that fails the Luhn check.|
+|**--mask**         |Mask PAN digits (keep the first 6 and last 4) in the log, CSV and Luhn-failure debug output. Track data is fully masked. Default off: full numbers are written.|
 |**--version**      |Report the app and python versions.|
 
 
@@ -215,6 +221,24 @@ $ python bin/generate-pan.py --pan-pattern "VISA Electron"
 
 Omit `--pan-pattern` in an interactive terminal to choose from a numbered menu. Use `--seed NUMBER` when reproducible synthetic values are required, or `--patterns PATH` to use an alternate pattern configuration.
 
+### Random Text with Embedded PAN and Track Data
+
+`--random-text LINES` writes lorem-ipsum text (from the `lorem-text` package) with Luhn-valid PANs and Track 1 / Track 2 records embedded in it, several per line. It is intended for exercising the scanner against realistic, noisy input, including multiple hits on one line.
+
+<pre>
+$ python bin/generate-pan.py --random-text 100 --max-hits 4 --seed 42 --output sample.txt
+</pre>
+
+|Argument|Description|
+|---|---|
+|**--random-text LINES**|Number of lines of random text to generate. Must be at least 1.|
+|**--max-hits N**|Maximum PAN/track hits per line; each line gets 1 to N (default 3).|
+|**--pan-pattern NAME**|Restrict embedded PANs to one pattern. Without it, every configured PAN pattern is used.|
+|**--seed NUMBER**|Reproducible output.|
+|**--output PATH**|Output file. Defaults to `Random-Text.txt` in the current directory.|
+
+Embedded PANs are generated to avoid the configured anti-PAN patterns, and the lorem text contains no digits, so `find-pan.py` reports each embedded hit and nothing else.
+
 # Example Usage for a File System Scan
 <pre>
 $ bin/find-pan.py --path test --report-delta 100 --skip-binary 
@@ -234,6 +258,7 @@ Parameters and Defaults
  --report_delta=100
  --verbose=False
  --debug=False
+ --mask=False
  --version=False
 
 2024-09-15 20:04:44,333 [INFO]: Scanning test ...
@@ -249,30 +274,23 @@ Parameters and Defaults
 2024-09-15 20:04:44,333 [INFO]: Total matches: 80225
 </pre>
 
-# Example Usage for a TAR File Scan
+# Example Usage for an Archive Scan
+`--tar` accepts any supported archive format: `.tar`, `.tar.gz`, `.tgz`,
+`.tar.bz2`, `.tbz2`, `.tar.xz`, `.txz`, `.zip`, `.jar`, `.war`, `.ear`,
+`.7z`, and `.gz`.
+
+On first archive scan the application builds `find-pan-conf.yaml` in your
+config directory by discovering `tar`, `unzip`, `7z`, and `gzip` on `PATH`.
+Edit that file if tools are installed outside `PATH`.
 <pre>
-$ bin/find-pan.py --tar test-archive.tar.gz 
-find-pan.py v1.5.0
+$ uv run python bin/find-pan.py --tar test-archive.tar.gz
+find-pan.py v2.3.1
 Python 3.12.6 (main, Sep  6 2024, 19:03:47) [Clang 15.0.0 (clang-1500.3.9.4)]
 Command-line arguments: ['--tar', 'test-archive.tar.gz']
-2024-09-16 20:04:44,333 [INFO]: 
-Parameters and Defaults
- --path=None
- --tar=test-archive.tar.gz
- --tar_tmp=/Users/anyone/Find-PAN-Logs/tar-temp
- --log_dir=/Users/anyone/Find-PAN-Logs
- --skip_binary=False
- --patterns=/usr/local/Find-PAN/patterns/find-pan-patterns.json
- --line_limit=0
- --rgx_prefix=False
- --report_delta=100
- --verbose=False
- --debug=False
- --version=False
-
-2024-09-15 20:04:44,333 [INFO]: Scanning test-archive.tar.gz ...
+2024-09-16 20:04:44,333 [INFO]: Archive Scan: extracting test-archive.tar.gz as tar into C:\...\find-pan-abcd1234 ...
 2024-09-15 20:04:44,333 [INFO]: Scanned 100 files; matched 37060 PANs, 6260 TRACKs
 2024-09-15 20:04:44,333 [INFO]: Scanned 200 files; matched 62728 PANs, 15521 TRACKs
+2024-09-15 20:04:44,333 [INFO]: Cleaned up temporary extraction directory: C:\...\find-pan-abcd1234
 2024-09-15 20:04:44,333 [INFO]: 
 2024-09-15 20:04:44,333 [INFO]: -- Processing Summary --
 2024-09-15 20:04:44,333 [INFO]: Scanned 202 files.

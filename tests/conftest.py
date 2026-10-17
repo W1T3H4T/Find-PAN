@@ -24,6 +24,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 FIND_PAN_PATH = ROOT / "bin" / "find-pan.py"
+PAN_CONFIG_PATH = ROOT / "bin" / "pan_config.py"
 PAN_GENERATOR_PATH = ROOT / "bin" / "generate-pan.py"
 CONFIGURATION_PATH = ROOT / "config" / "find-pan-regex.json"
 
@@ -39,8 +40,10 @@ DEFAULT_ARGUMENTS = {
     "skip_binary": False,
     "line_limit": 0,
     "report_delta": 500,
+    "csv": None,
     "verbose": False,
     "debug": False,
+    "mask": False,
     "version": False,
     "exception_test": False,
 }
@@ -84,9 +87,19 @@ def pan_generator():
     return load_script_module("pan_generator", PAN_GENERATOR_PATH)
 
 
+@pytest.fixture(scope="session")
+def pan_config():
+    """Load the pan_config module without requiring a package installation."""
+    return load_script_module("pan_config", PAN_CONFIG_PATH)
+
+
 @pytest.fixture
-def find_pan():
-    """A freshly loaded find-pan.py module (magic stubbed, main not run)."""
+def find_pan(pan_config):
+    """A freshly loaded find-pan.py module (magic stubbed, main not run).
+
+    Depends on ``pan_config`` so the configuration helper module is already
+    present in ``sys.modules`` before find-pan.py tries to import it.
+    """
     sys.modules["magic"] = _MAGIC_STUB
     return load_script_module("find_pan", FIND_PAN_PATH)
 
@@ -122,6 +135,6 @@ def scanner(find_pan, tmp_path):
 
 
 @pytest.fixture
-def compiled_patterns(scanner, pattern_configuration) -> list:
+def compiled_patterns(pan_config, pattern_configuration) -> list:
     """Scanner patterns compiled from the real configuration (no prefix)."""
-    return scanner.compile_regex_patterns(pattern_configuration)
+    return pan_config.compile_regex_patterns(pattern_configuration)

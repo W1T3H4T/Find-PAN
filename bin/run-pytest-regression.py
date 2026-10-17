@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run python
 """Run all pytest regression tests from the repository root.
 
 Run inside the project environment managed by uv:

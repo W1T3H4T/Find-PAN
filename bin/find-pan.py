@@ -1,8 +1,8 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run python
 ##  ===========================================================================
 ##  File    :   Find-PAN.py
 ##  Who     :   David Means <w1t3h4t@gmail.com>
-##  What    :   This script scans a file system or tar file for Primary Account 
+##  What    :   This script scans a file system or archive file for Primary Account
 ##              Number (PAN) and Track Data patterns using regular expressions.
 ##              It supports logging, process time tracking, and secure file 
 ##              deletion.
@@ -11,7 +11,6 @@
 ##  ===========================================================================
 
 import argparse
-import json
 import logging
 import os
 import re
@@ -19,14 +18,25 @@ import shutil
 import signal
 import subprocess
 import sys
-import tarfile
+import tempfile
 import time
 import traceback
+import csv
 from collections import defaultdict
 from datetime import datetime
+from pathlib import Path
 from typing import Dict, List
 
-import magic
+from pan_config import (
+    EXTRACTOR_CONFIG_FILENAME,
+    compile_regex_patterns,
+    compile_regex_patterns_with_prefix,
+    detect_archive_type,
+    find_extractor_config_path,
+    find_json_regex_config,
+    load_extractor_config,
+    load_json_data,
+)
 
 # ===========================================================================
 # Disable some pylint warnings
@@ -52,9 +62,6 @@ _FindPANVersion = "2 3 1"  # Major, Minor, Patch
 # - Item Count Array
 _MatchCount = defaultdict(int)
 
-#   Location of JSON file for REGEX Patterns
-_JSONRegexPatternPath = None
-
 #   Regex Pattern Prefix
 _RegexPatternPrefix = r"[ '\"{]"
 
@@ -65,38 +72,40 @@ _EnableVSArgParams = False
 _TraceLogObj = None
 _DefaultLogObj = None
 
+# - CSV output handle and writer (opened lazily when --csv is requested)
+_CsvFileObj = None
+_CsvWriter = None
+
 
 # ===========================================================================
 # Print consolidated exception info
 # ===========================================================================
-def print_exception_info(e: Exception) -> None:
+def print_exception_info(e: object) -> None:
     exc_type, exc_value, exc_traceback = sys.exc_info()
     tb_stack = traceback.extract_tb(exc_traceback)
 
-    # Traverse the traceback to find the first call outside the current module
-    for frame in reversed(tb_stack):
-        if f"{ProgramName}" in frame.filename:
-            file_name = frame.filename
-            line_number = frame.lineno
-            func_name = frame.name
-            break
-    else:
-        # Fallback to the last frame (this shouldn't happen)
+    if tb_stack:
+        # The innermost frame is where the exception was actually raised.
         frame = tb_stack[-1]
         file_name = frame.filename
         line_number = frame.lineno
         func_name = frame.name
+    else:
+        file_name = "<unknown>"
+        line_number = 0
+        func_name = "<unknown>"
 
-    exception_message = str(exc_value)
+    exception_message = str(exc_value) if exc_value is not None else ""
+    extra_info = str(e) if e is not None else ""
 
     print("\nException Information:")
     print("-----------------------------------------------------------------")
     print(f"Function: '{func_name}', on line {line_number}")
     print(f"File    : {file_name}")
-    print(f"Type    : {exc_type.__name__}")
+    print(f"Type    : {exc_type.__name__ if exc_type else 'Unknown'}")
     print(f"Message : {exception_message}")
-    if str(e).lower() != str(exception_message).lower():
-        print(f"Info    : {e}")
+    if extra_info and extra_info.lower() != exception_message.lower():
+        print(f"Info    : {extra_info}")
     print("-----------------------------------------------------------------")
     sys.exit(1)
 
@@ -128,7 +137,9 @@ def generate_logfile_name(basename: str) -> str:
 # ===========================================================================
 # Create our log file names
 # ===========================================================================
-def set_log_directory_and_filenames() -> tuple:
+def set_log_directory_and_filenames() -> tuple[str, str]:
+    pan_logfile = ""
+    trace_logfile = ""
     try:
         if not os.path.exists(_Args.log_dir):
             os.makedirs(_Args.log_dir)
@@ -165,14 +176,6 @@ def setup_custom_loggers() -> Dict[str, logging.Logger]:
     # Trace Console Handler (for stdout)
     trace_console_handler = logging.StreamHandler(sys.stdout)
 
-    try:
-        trace_file_handler = logging.FileHandler(trace_logfile)
-        trace_file_handler.setLevel(trace_level)
-    except FileNotFoundError:
-        print_exception_info(None)
-    except Exception as e:
-        print_exception_info(e)
-
     trace_formatter = logging.Formatter("%(asctime)s [%(levelname)s]: %(message)s")
 
     if trace_console_handler:
@@ -180,8 +183,17 @@ def setup_custom_loggers() -> Dict[str, logging.Logger]:
         trace_console_handler.setFormatter(trace_formatter)
         trace_logger.addHandler(trace_console_handler)
 
-    trace_file_handler.setFormatter(trace_formatter)
-    trace_logger.addHandler(trace_file_handler)
+    #   The file handler is only used inside the try block, so correctness no
+    #   longer depends on print_exception_info() terminating the process.
+    try:
+        trace_file_handler = logging.FileHandler(trace_logfile)
+        trace_file_handler.setLevel(trace_level)
+        trace_file_handler.setFormatter(trace_formatter)
+        trace_logger.addHandler(trace_file_handler)
+    except FileNotFoundError:
+        print_exception_info(None)
+    except Exception as e:
+        print_exception_info(e)
 
     # PAN Logger
     pan_logger = logging.getLogger("_DefaultLogObj")
@@ -195,14 +207,12 @@ def setup_custom_loggers() -> Dict[str, logging.Logger]:
     pan_logger.addHandler(log_file_handler)
 
     # Console Handler (for stdout)
-    pan_console_handler = logging.StreamHandler(sys.stdout)
-    pan_console_handler.setLevel(logging.DEBUG)
-    pan_console_handler.setFormatter(log_formatter)
-
     if _Args.verbose:
+        pan_console_handler = logging.StreamHandler(sys.stdout)
+        pan_console_handler.setLevel(logging.DEBUG)
+        pan_console_handler.setFormatter(log_formatter)
         pan_logger.addHandler(pan_console_handler)
 
-    pan_logger.addHandler(log_file_handler)
     return {"Trace": trace_logger, "Log": pan_logger}
 
 
@@ -228,6 +238,21 @@ def stop_time_tracking(files_processed: int) -> tuple:
 # Check if file is binary
 # ===========================================================================
 def is_executable(file_path: str) -> bool:
+    #   Import python-magic lazily.  On Windows the import requires the
+    #   `libmagic-1.dll` native dependency; if it is missing the interpreter
+    #   may segfault.  On Linux/macOS `libmagic` must be installed through the
+    #   system package manager.  When either is missing, the --skip-binary flag
+    #   falls back to the simple null-byte heuristic in is_binary().
+    try:
+        import magic
+    except ImportError:
+        _TraceLogObj.warning(
+            "python-magic is not available; install the platform libmagic "
+            "dependency to enable MIME-based binary skipping for %s",
+            file_path,
+        )
+        return False
+
     try:
         if os.path.isfile(file_path):
             mime = magic.Magic(mime=True)
@@ -258,7 +283,12 @@ def is_executable(file_path: str) -> bool:
         _TraceLogObj.warning("Skipping file due to PermissionError: %s", file_path)
 
     except Exception as e:
-        print_exception_info(f"Skipping file due to error: {file_path}, {e}")
+        #   libmagic failures are not fatal; fall back to the simple heuristic.
+        _TraceLogObj.warning(
+            "python-magic failed for %s (%s); using fallback binary detection.",
+            file_path,
+            e,
+        )
     return False
 
 
@@ -296,15 +326,63 @@ def is_binary(file_path: str) -> bool:
 
 
 # ===========================================================================
+# Sanitize a value for safe ASCII CSV / log output
+# ===========================================================================
+def sanitize_for_ascii(value: str) -> str:
+    """Return an ASCII-only representation of *value* suitable for logs/CSV.
+
+    Non-printable bytes are replaced with '?' so binary data cannot be emitted
+    in match output.
+    """
+    return "".join(
+        char if 32 <= ord(char) <= 126 else "?"
+        for char in value
+    )
+
+
+# ===========================================================================
 # Luhn algorithm check
 # ===========================================================================
 def luhn_check(num: str) -> bool:
+    #   An empty or all-zero string has a zero checksum but is never a PAN.
+    if not str(num).strip("0"):
+        return False
     rev_digits = [int(x) for x in str(num)][::-1]
     checksum = 0
     for i, d in enumerate(rev_digits):
         n = d if i % 2 == 0 else 2 * d
         checksum += n if n < 10 else n - 9
     return checksum % 10 == 0
+
+
+# ===========================================================================
+# Mask PAN digits for logging: keep the first 6 (BIN) and last 4 digits
+# ===========================================================================
+def mask_pan(pan: str) -> str:
+    if len(pan) <= 10:
+        return "*" * len(pan)
+    return pan[:6] + "*" * (len(pan) - 10) + pan[-4:]
+
+
+def mask_matched_data(matched: str, pan: str) -> str:
+    #   Plain PAN (digits possibly separated): mask in place.  Anything else
+    #   (e.g. track data) carries more sensitive fields, so mask every digit.
+    if re.sub(r"\D", "", matched) != pan:
+        return re.sub(r"\d", "*", matched)
+    masked, seen = [], 0
+    for char in matched:
+        if char.isdigit():
+            keep = seen < 6 or seen >= len(pan) - 4
+            masked.append(char if keep and len(pan) > 10 else "*")
+            seen += 1
+        else:
+            masked.append(char)
+    return "".join(masked)
+
+
+def mask_text(text: str) -> str:
+    """Mask every PAN-length (12-19 digit) run in free text."""
+    return re.sub(r"(?<!\d)\d{12,19}(?!\d)", lambda m: mask_pan(m.group(0)), text)
 
 
 # ===========================================================================
@@ -336,92 +414,114 @@ def calculate_delta() -> bool:
 
 
 # ===========================================================================
-# Scan a TAR file for PAN and TRACK data
+# Extract and scan an archive using an external program
 # ===========================================================================
-def process_tar_file(_Args: argparse.Namespace, json_data: dict) -> None:
-    _TraceLogObj.info("TAR File Scan")
-    secure_del_app = find_secure_delete_program()
-    _TraceLogObj.info("Scanning %s using %s ...", _Args.tar, _Args.tar_tmp)
+def process_archive_file(
+    archive_path: str,
+    compiled_patterns: list,
+    extractor_config: Dict[str, Dict],
+) -> None:
+    """Extract *archive_path* to a temp directory and scan its contents.
 
-    with tarfile.open(_Args.tar, "r:*") as tar:
-        for tarinfo in tar:
-            if tarinfo.isreg():
-                # Define the temp path where the file will be extracted
-                temp_path = os.path.join(_Args.tar_tmp, tarinfo.name)
+    The temp directory and all extracted contents are removed after scanning,
+    regardless of success or failure.  External extraction programs are used
+    for all supported archive formats, avoiding the tar path-traversal bugs
+    inherent in the previous built-in extraction path.
+    """
+    archive_type = detect_archive_type(archive_path)
+    if archive_type is None:
+        _DefaultLogObj.error("Unsupported archive type: %s", archive_path)
+        return
 
-                tar.extract(tarinfo, path=_Args.tar_tmp, filter=custom_tar_filter)
-
-                # Process the extracted file
-                process_file(temp_path, json_data)
-
-                # Securely delete the file after processing
-                secure_delete(secure_del_app, temp_path)
-
-
-# ===========================================================================
-# Tar file filter for safety
-# ===========================================================================
-def custom_tar_filter(tarinfo: tarfile.TarInfo, path: str) -> tarfile.TarInfo | None:
-    # Ensure that tarinfo has a safe path (no absolute paths or path traversal)
-    if ".." in tarinfo.name or tarinfo.name.startswith("/"):
-        _TraceLogObj.warning(
-            "Skipping potentially dangerous file: %s in %s", tarinfo.name, path
+    extractor = extractor_config.get(archive_type)
+    if not extractor:
+        _DefaultLogObj.error(
+            "No extractor configured for archive type '%s' (%s). "
+            "Run the setup script to build %s.",
+            archive_type,
+            archive_path,
+            EXTRACTOR_CONFIG_FILENAME,
         )
-        return None  # Skip this file
+        return
 
-    # Modify tarinfo (e.g., change file permissions)
-    tarinfo.mode &= 0o755  # Ensure no world-writable permissions
-    return tarinfo  # Return tarinfo to proceed with extraction
+    command = extractor.get("command")
+    args_template = extractor.get("args", [])
+    copy_archive_to_tempdir = extractor.get("copy_archive_to_tempdir", False)
+    if not command or not args_template:
+        _DefaultLogObj.error(
+            "Incomplete extractor configuration for '%s': missing command or args.",
+            archive_type,
+        )
+        return
 
+    command_path = shutil.which(command) or command
+    tar_tmp = _Args.tar_tmp
+    if tar_tmp:
+        os.makedirs(tar_tmp, exist_ok=True)
+    temp_dir = tempfile.mkdtemp(prefix="find-pan-", dir=tar_tmp)
 
-# ===========================================================================
-# Find the secure delete app for the OS
-# ===========================================================================
-def find_secure_delete_program() -> list | None:
-    nt = ["sdelete64.exe", "sdelete.exe"]
-    posix = ["shred", "gshred"]
-
-    if os.name == "posix":
-        for tool in posix:
-            tool_path = shutil.which(tool)
-            if tool_path:
-                _TraceLogObj.info("Using %s %s for secure delete", os.name, tool_path)
-                return [tool_path, "-u"]
-
-    if os.name == "nt":
-        for tool in nt:
-            tool_path = shutil.which(tool)
-            if tool_path:
-                _TraceLogObj.info("Using %s %s for secure delete", os.name, tool_path)
-                return [tool_path]
-
-    _TraceLogObj.warning("No Secure delete app found for %s", os.name)
-    return None  # Unsupported operating system
-
-
-# ===========================================================================
-# Securely delete a file
-# ===========================================================================
-def secure_delete(secure_del_app: list | None, file_path: str) -> None:
     try:
-        if secure_del_app is None:
-            os.remove(file_path)
+        _TraceLogObj.info(
+            "Archive Scan: extracting %s as %s into %s ...",
+            archive_path,
+            archive_type,
+            temp_dir,
+        )
+
+        if copy_archive_to_tempdir:
+            #   gzip and similar in-place decompressors need the archive inside
+            #   the temp directory so the result lands there as well.
+            archive_name = os.path.basename(archive_path)
+            archive_in_temp = os.path.join(temp_dir, archive_name)
+            shutil.copy2(archive_path, archive_in_temp)
+            archive_for_extractor = archive_in_temp
+        else:
+            archive_for_extractor = archive_path
+
+        formatted_args = [
+            arg.format(archive=archive_for_extractor, tempdir=temp_dir)
+            for arg in args_template
+        ]
+        cmd = [command_path, *formatted_args]
+
+        if _Args.verbose:
+            _TraceLogObj.info("Extractor command: %s", " ".join(cmd))
+
+        try:
+            subprocess.run(cmd, check=True, capture_output=True, text=True)
+        except subprocess.CalledProcessError as e:
+            _DefaultLogObj.error(
+                "Extractor failed for %s: %s (stderr: %s)",
+                archive_path,
+                e,
+                e.stderr,
+            )
+            return
+        except FileNotFoundError:
+            _DefaultLogObj.error(
+                "Extractor command not found: %s. "
+                "Update %s with the correct path.",
+                command,
+                EXTRACTOR_CONFIG_FILENAME,
+            )
             return
 
-        cmd = secure_del_app.copy()
-        cmd.append(file_path)
-        if _Args.verbose:
-            _TraceLogObj.info("Secure delete: %s", file_path)
-        subprocess.run(cmd, check=True)
+        scan_directory(temp_dir, compiled_patterns)
 
-    except subprocess.CalledProcessError as e:
-        _TraceLogObj.error("Error securely deleting file: %s, Error: %s", file_path, e)
+    finally:
+        try:
+            shutil.rmtree(temp_dir)
+            _TraceLogObj.info("Cleaned up temporary extraction directory: %s", temp_dir)
+        except OSError as e:
+            _TraceLogObj.warning(
+                "Could not remove temporary extraction directory %s: %s", temp_dir, e
+            )
 
 
 # ===========================================================================
 # Scan a filesystem / pathname for PAN data
 # ===========================================================================
-def process_filesystem(json_data: dict) -> None:
+def process_filesystem(json_data: list) -> None:
     _TraceLogObj.info("Filesystem Scan")
     scan_directory(_Args.path, json_data)
 
@@ -429,7 +529,7 @@ def process_filesystem(json_data: dict) -> None:
 # ===========================================================================
 # Scan a directory for files
 # ===========================================================================
-def scan_directory(dir_name: str, json_data: dict) -> None:
+def scan_directory(dir_name: str, compiled_patterns: list) -> None:
     _TraceLogObj.info("Scanning directory '%s' ...", dir_name)
     for root, _, files in os.walk(dir_name):
         _DefaultLogObj.info("Scanning directory '%s' ...", root)
@@ -437,7 +537,7 @@ def scan_directory(dir_name: str, json_data: dict) -> None:
             file_path = os.path.join(root, file)
             if not os.path.isfile(file_path):
                 continue
-            process_file(file_path, json_data)
+            process_file(file_path, compiled_patterns)
 
 
 # ===========================================================================
@@ -473,46 +573,10 @@ def process_file(file_path: str, compiled_patterns: list) -> None:
             line_count = 0
             for line_number, line in enumerate(f, 1):
                 line_count += 1
-                if _Args.line_limit > 0 and line_count >= _Args.line_limit:
+                if _Args.line_limit > 0 and line_count > _Args.line_limit:
                     break
 
-                # Run the PAN & TRACK Data Finder using Pre-Coimpiled Patterns
-                for category, pattern_name, compiled_pattern in compiled_patterns:
-                    match = compiled_pattern.search(line)
-                    if not match:
-                        continue
-
-                    if (
-                        category == "Anti-PAN Pattern"
-                        and pattern_name == "Timestamp"
-                        and not valid_timestamp(match.group(0))
-                    ):
-                        continue
-
-                    data_type = None
-                    if category == "Anti-PAN Pattern":
-                        data_type = "ANTI-PAN"
-                    elif category in ["PAN Pattern", "TRACK Pattern"]:
-                        data_type = "PAN" if category == "PAN Pattern" else "TRACK"
-
-                    if data_type:
-                        DataReporter(
-                            file_path,
-                            line_number,
-                            match.group(0),
-                            line,
-                            pattern_name,
-                            compiled_pattern.pattern,
-                            data_type
-                        )
-                        break
-
-                    # - We shouldn't get here
-                    message = "Unexpected match: " +\
-                        f"{file_path}:{line_number} " +\
-                        f"->{pattern_name}={compiled_pattern.pattern} " +\
-                        f"{line}"
-                    raise ValueError(message)
+                scan_line(file_path, line_number, line, compiled_patterns)
 
     except (PermissionError, FileNotFoundError, IOError) as e:
         _TraceLogObj.warning("Skipping file due to error: %s - %s", file_path, e)
@@ -522,26 +586,111 @@ def process_file(file_path: str, compiled_patterns: list) -> None:
 
 
 # ===========================================================================
+# Scan one line, reporting every anti-PAN, PAN and TRACK match on it
+# ===========================================================================
+def _overlaps(span: tuple, spans: list) -> bool:
+    return any(span[0] < other[1] and other[0] < span[1] for other in spans)
+
+
+def scan_line(file_path: str, line_number: int, line: str, compiled_patterns: list) -> None:
+    #   Anti-PAN matches only exclude their own span: other numbers on the same
+    #   line are still examined.  Candidates overlapping an anti-PAN or an
+    #   already accepted match are skipped; a Luhn failure only blocks other
+    #   patterns from being counted a second time, not from being validated.
+    excluded = []
+    failed = []
+
+    for category, pattern_name, compiled_pattern in compiled_patterns:
+        if category != "Anti-PAN Pattern":
+            continue
+        for match in compiled_pattern.finditer(line):
+            if pattern_name == "Timestamp" and not valid_timestamp(match.group(0)):
+                continue
+            span = match.span()
+            if _overlaps(span, excluded):
+                continue
+            excluded.append(span)
+            DataReporter(file_path, line_number, match.start(), match.group(0), line,
+                         pattern_name, compiled_pattern.pattern, "ANTI-PAN")
+
+    for category, pattern_name, compiled_pattern in compiled_patterns:
+        if category == "Anti-PAN Pattern":
+            continue
+        if category not in ["PAN Pattern", "TRACK Pattern"]:
+            # - We shouldn't get here
+            raise ValueError(
+                "Unexpected match: " +
+                f"{file_path}:{line_number} " +
+                f"->{pattern_name}={compiled_pattern.pattern} " +
+                f"{line}"
+            )
+        data_type = "PAN" if category == "PAN Pattern" else "TRACK"
+        for match in compiled_pattern.finditer(line):
+            span = match.span()
+            if _overlaps(span, excluded):
+                continue
+            reporter = DataReporter(
+                file_path, line_number, match.start(), match.group(0), line,
+                pattern_name, compiled_pattern.pattern, data_type,
+                count_failure=not _overlaps(span, failed),
+            )
+            if reporter.accepted:
+                excluded.append(span)
+            else:
+                failed.append(span)
+
+
+# ===========================================================================
 # Class to report PAN and TRACK data
 # ===========================================================================
 class DataReporter:  # pylint: disable=too-many-instance-attributes
-    def __init__(self, file_path: str, line_number: int, matched_data: str,
-                 line: str, pattern_name: str, search: str, data_type: str):
+    def __init__(self, file_path: str, line_number: int, offset: int, matched_data: str,
+                 line: str, pattern_name: str, search: str, data_type: str,
+                 count_failure: bool = True):
         self.file_path = file_path
         self.line_number = line_number
+        self.offset = offset
         self.matched_data = matched_data
         self.line = line
         self.pattern_name = pattern_name
         self.search = search
         self.data_type = data_type
 
-        self.pan = self.extract_pan_from_match()
-        if not luhn_check(self.pan):
-            _MatchCount["BAD-LUHN"] += 1
+        self.accepted = False
+
+        #   Anti-PANs are known false positives: count them, never Luhn-check
+        #   or report them as findings.
+        if self.data_type == "ANTI-PAN":
+            self.accepted = True    # suppresses further patterns on this line
+            self.update_match_count()
             return
 
+        self.pan = self.extract_pan_from_match()
+        if not self.pan or not luhn_check(self.pan):
+            if count_failure:
+                _MatchCount["BAD-LUHN"] += 1
+            extracted, matched = self.pan, self.matched_data
+            if getattr(_Args, "mask", False):
+                extracted = mask_pan(self.pan)
+                matched = mask_matched_data(self.matched_data, self.pan)
+            _TraceLogObj.debug(
+                "Luhn failure: file=%s line=%s offset=%s pattern=%s "
+                "extracted=%s matched=%s",
+                self.file_path,
+                self.line_number,
+                self.offset,
+                self.pattern_name,
+                extracted,
+                matched,
+            )
+            return
+
+        self.accepted = True
         self.update_match_count()
         self.print_info()
+        self.write_csv_row()
+        if _CsvFileObj is not None:
+            _CsvFileObj.flush()
 
     def extract_pan_from_match(self) -> str:
         # Assuming Track 1 & 2 Data
@@ -560,62 +709,28 @@ class DataReporter:  # pylint: disable=too-many-instance-attributes
         _MatchCount[self.data_type] += 1
 
     def print_info(self) -> None:
+        line = self.line
+        if getattr(_Args, "mask", False):
+            line = mask_text(mask_matched_data(self.matched_data, self.pan).join(
+                line.split(self.matched_data)))
         _DefaultLogObj.info(
-            "%s:%s->%s (%s), %s: %s", self.file_path, self.line_number, self.pattern_name, self.data_type, self.search, self.line
+            "%s:%s:%s->%s (%s), %s: %s", self.file_path, self.line_number, self.offset, self.pattern_name, self.data_type, self.search, line
         )
 
-
-# ===========================================================================
-# Compile the regex patterns with a prefix
-# ===========================================================================
-def compile_regex_patterns_with_prefix(json_data: dict) -> list:
-    compiled_patterns = []
-
-    for category, patterns in json_data.items():
-        if isinstance(patterns, dict):
-            for pattern_name, details in patterns.items():
-                if "regex" in details:
-                    for pattern in details["regex"]:
-                        prefix_pattern = f"{_RegexPatternPrefix}{pattern}"
-                        compiled_patterns.append(
-                            (category, pattern_name, re.compile(prefix_pattern))
-                        )
-    return compiled_patterns
-
-
-# ===========================================================================
-# Compile the regex patterns
-# ===========================================================================
-def compile_regex_patterns(json_data: dict) -> list:
-    compiled_patterns = []
-
-    for category, patterns in json_data.items():
-        # print(f"category: {category}")
-        if isinstance(patterns, dict):
-            for pattern_name, details in patterns.items():
-                if "regex" in details:
-                    for pattern in details["regex"]:
-                        compiled_patterns.append(
-                            (category, pattern_name, re.compile(pattern))
-                        )
-
-    return compiled_patterns
-
-
-# ===========================================================================
-# Load JSON File
-# ===========================================================================
-def load_json_data(filename: str) -> dict | None:
-    try:
-        with open(filename, "r", encoding="utf-8", errors="replace") as file:
-            data = json.load(file)
-            return data
-
-    except FileNotFoundError:
-        print_exception_info(f"Error: File '{filename}' not found.")
-    except Exception as e:
-        print_exception_info(e)
-    return None
+    def write_csv_row(self) -> None:
+        if _CsvWriter is None:
+            return
+        _CsvWriter.writerow({
+            "filename": sanitize_for_ascii(os.path.basename(self.file_path)),
+            "line_number": self.line_number,
+            "offset": self.offset,
+            "pattern_name": sanitize_for_ascii(self.pattern_name),
+            "data_type": sanitize_for_ascii(self.data_type),
+            "matched_data": sanitize_for_ascii(
+                mask_matched_data(self.matched_data, self.pan)
+                if getattr(_Args, "mask", False) else self.matched_data
+            ),
+        })
 
 
 # ===========================================================================
@@ -678,31 +793,6 @@ def print_scan_summary() -> None:
 
 
 # ===========================================================================
-# Find the JSON pattern file
-# ===========================================================================
-def find_json_regex_config() -> str:
-    # Potential config paths
-    config_paths = [
-        os.environ.get("XDG_CONFIG_HOME"),
-        os.path.join(os.path.expanduser("~"), ".config"),
-        os.path.join(os.path.expanduser("~"), ".local"),
-        os.path.join(os.path.expanduser("~"), ".local/share"),
-        "/usr/local"
-    ]
-
-    # Find the first valid config path
-    for config_path in config_paths:
-        find_pan_dir = os.path.join(config_path, "find-pan")
-        json_file_path = os.path.join(find_pan_dir, "find-pan-regex.json")
-
-        if os.path.exists(json_file_path):
-            return json_file_path
-
-    # Raise error if none of the paths exist
-    raise FileNotFoundError("JSON configuration file not found")
-
-
-# ===========================================================================
 # Configure our command line options
 # autopep8: off
 # ===========================================================================
@@ -714,55 +804,92 @@ def process_cmdline_arguments() -> argparse.ArgumentParser:
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
 
-    # -- Set the JSON file path
-    _JSONRegexPatternPath = find_json_regex_config()
-
     #
     #   Mutable processing (change our runtime/detection behavior)
     #
     parser.add_argument( "--path", help="Filesystem pathname to scan.", type=str, default=None)
-    parser.add_argument( "--tar", help="TAR file path.", type=str, default=None)
-    parser.add_argument( "--tar-tmp", help="Temporary directory for tar file extraction.", default=tar_dir,)
+    parser.add_argument(
+        "--tar",
+        help="Archive file path (tar, tar.gz, zip, 7z, gz).",
+        type=str,
+        default=None,
+    )
+    parser.add_argument(
+        "--tar-tmp",
+        help="Parent directory for temporary archive extraction directories.",
+        default=tar_dir,
+    )
     parser.add_argument( "--log-dir", help="Directory for log files.", default=log_dir)
     parser.add_argument( "--rgx-patterns", help="JSON file containing PAN and TRACK regular expressions.",
-                        type=str, default=f"{_JSONRegexPatternPath}",)
+                        type=str, default=None,)
     parser.add_argument( "--rgx-prefix", help=f"Apply prefixes ({_RegexPatternPrefix}) to regular expressions.",
                         default=False, action="store_true",)
     parser.add_argument( "--skip-binary", help="Skip binary files.", action="store_true", default=False)
     parser.add_argument( "--line-limit", help="Line scan limit per file.", type=int, default=0)
-    parser.add_argument( "--report-delta", type=int, default=500, 
+    parser.add_argument( "--report-delta", type=int, default=500,
                         help="Files to process before reporting progress.",)
+    parser.add_argument(
+        "--csv",
+        help="CSV file path for match output. Emits filename, line number, offset, pattern, and sanitized match data.",
+        type=str,
+        default=None,
+    )
     #
     #   Non-functional processing
     #
     parser.add_argument( "--verbose", default=False, action="store_true", help="Verbose output.")
     parser.add_argument( "--debug", default=False, action="store_true", help="Enable debug logging.")
+    parser.add_argument( "--mask", default=False, action="store_true",
+                        help="Mask PAN digits (keep first 6 and last 4) in the log, CSV and Luhn-failure debug output.")
     parser.add_argument( "--version", default=False, action="store_true", help="Print version information.",)
     parser.add_argument( "--exception-test", default=False, action="store_true", help="Test exception handler.",)
 
-    #  Visual Studio debug command line arguments
-    if _EnableVSArgParams:
-        # _Args = parser.parse_args(['--version'] )
-        # debugging configuration here
-        _Args = parser.parse_args(["--path", os.path.join(os.getcwd(), "test")])
-
-    if parser.parse_args().version:
-        print_version_info(parser)
-        parser.exit()
     return parser
 # autopep8: on
 
 
 # ===========================================================================
-# MAIN is here
+# Open the CSV output file (if requested) and write the header row.
+# ===========================================================================
+def open_csv_output(csv_path: str) -> None:
+    global _CsvFileObj, _CsvWriter
+    if _CsvFileObj is not None:
+        return
+    _CsvFileObj = open(csv_path, "w", newline="", encoding="utf-8")
+    _CsvWriter = csv.DictWriter(
+        _CsvFileObj,
+        fieldnames=["filename", "line_number", "offset", "pattern_name", "data_type", "matched_data"],
+    )
+    _CsvWriter.writeheader()
+
+
+# ===========================================================================
+# Close the CSV output file.
+# ===========================================================================
+def close_csv_output() -> None:
+    global _CsvFileObj, _CsvWriter
+    if _CsvFileObj is not None:
+        _CsvFileObj.close()
+        _CsvFileObj = None
+        _CsvWriter = None
+
+
 # ===========================================================================
 def main() -> None:
     global _TotalTime, _AverageTime
     _Compiled_Patterns = []
 
+    if _Args.csv:
+        open_csv_output(_Args.csv)
+
     # Load JSON data and compile prefix patterns
-    json_data = load_json_data(_Args.rgx_patterns)
-    if json_data and _TraceLogObj.debug:
+    try:
+        json_data = load_json_data(_Args.rgx_patterns)
+    except (FileNotFoundError, ValueError) as e:
+        _DefaultLogObj.error("Failed to load regex patterns: %s", e)
+        return
+
+    if json_data and _Args.debug:
         formatted_pan_patterns = json.dumps(json_data, indent=4)
         _TraceLogObj.debug(formatted_pan_patterns)
 
@@ -778,10 +905,16 @@ def main() -> None:
         _TotalTime, _AverageTime = stop_time_tracking(_MatchCount["FILES"])
         return
 
-    # Scan a tar file
+    # Scan an archive file
     if _Args.tar and _Args.tar_tmp:
         initialize_time_tracking()
-        process_tar_file(_Args, _Compiled_Patterns)
+        try:
+            extractor_config_path = find_extractor_config_path()
+            extractor_config = load_extractor_config(extractor_config_path)
+        except FileNotFoundError as e:
+            _DefaultLogObj.error("Failed to load extractor configuration: %s", e)
+            return
+        process_archive_file(_Args.tar, _Compiled_Patterns, extractor_config)
         _TotalTime, _AverageTime = stop_time_tracking(_MatchCount["FILES"])
         return
 
@@ -813,8 +946,19 @@ if __name__ == "__main__":
     _ArgParse = process_cmdline_arguments()
     _Args = _ArgParse.parse_args()
 
+    # -- Handle non-functional flags before touching external configuration.
+    #    --version and --help must work even if no JSON config exists.
+    if _Args.version:
+        print_version_info(_ArgParse)
+        _ArgParse.exit()
+
     # -- Set default values from command line arguments
     ProgramName = _ArgParse.prog
+
+    # - Resolve the JSON regex pattern path lazily so --version and --help work
+    #   even when no configuration file is present.
+    if _Args.rgx_patterns is None:
+        _Args.rgx_patterns = find_json_regex_config()
 
     # - Test our exception handler
     if _Args.exception_test:
@@ -837,3 +981,5 @@ if __name__ == "__main__":
 
     except KeyboardInterrupt:
         _TraceLogObj.error("KeyboardInterrupt caught in '__main__'")
+    finally:
+        close_csv_output()
