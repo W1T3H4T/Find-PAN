@@ -1,0 +1,350 @@
+filename,line_number,offset,pattern_name,data_type,matched_data
+American-Express.txt,2,0,American Express,PAN,373923*****8813
+American-Express.txt,3,0,American Express,PAN,376993*****2956
+American-Express.txt,4,0,American Express,PAN,345604*****8175
+American-Express.txt,5,0,American Express,PAN,340523*****2016
+American-Express.txt,6,0,American Express,PAN,346161*****5288
+American-Express.txt,7,0,American Express,PAN,343748*****2923
+American-Express.txt,8,0,American Express,PAN,371124*****8573
+American-Express.txt,9,0,American Express,PAN,375218*****3662
+American-Express.txt,10,0,American Express,PAN,376581*****3432
+American-Express.txt,11,0,American Express,PAN,343364*****1845
+American-Express.txt,12,0,American Express,PAN,374646*****9737
+American-Express.txt,13,0,American Express,PAN,375054*****6566
+American-Express.txt,14,0,American Express,PAN,340842*****7884
+American-Express.txt,15,0,American Express,PAN,370141*****5890
+American-Express.txt,16,0,American Express,PAN,371662*****7664
+American-Express.txt,17,0,American Express,PAN,344347*****7213
+American-Express.txt,18,0,American Express,PAN,348015*****8405
+American-Express.txt,19,0,American Express,PAN,374229*****8388
+American-Express.txt,20,0,American Express,PAN,340633*****5188
+American-Express.txt,21,0,American Express,PAN,348112*****8621
+American-Express.txt,22,0,American Express,PAN,345056*****7806
+American-Express.txt,23,0,American Express,PAN,373979*****4595
+American-Express.txt,24,0,American Express,PAN,374220*****7615
+American-Express.txt,25,0,American Express,PAN,379555*****8208
+American-Express.txt,26,0,American Express,PAN,378328*****2915
+Diners-Club-Carte-Blanche.txt,2,0,Diners Club Carte Blanche,PAN,300322****9628
+Diners-Club-Carte-Blanche.txt,3,0,Diners Club Carte Blanche,PAN,305867****5628
+Diners-Club-Carte-Blanche.txt,4,0,Diners Club Carte Blanche,PAN,304582****1692
+Diners-Club-Carte-Blanche.txt,5,0,Diners Club Carte Blanche,PAN,301732****8138
+Diners-Club-Carte-Blanche.txt,6,0,Diners Club Carte Blanche,PAN,304668****5950
+Diners-Club-Carte-Blanche.txt,7,0,Diners Club Carte Blanche,PAN,301006****4247
+Diners-Club-Carte-Blanche.txt,8,0,Diners Club Carte Blanche,PAN,300351****4841
+Diners-Club-Carte-Blanche.txt,9,0,Diners Club Carte Blanche,PAN,303053****0557
+Diners-Club-Carte-Blanche.txt,10,0,Diners Club Carte Blanche,PAN,301100****9418
+Diners-Club-Carte-Blanche.txt,11,0,Diners Club Carte Blanche,PAN,303615****8459
+Diners-Club-Carte-Blanche.txt,12,0,Diners Club Carte Blanche,PAN,300831****9145
+Diners-Club-Carte-Blanche.txt,13,0,Diners Club Carte Blanche,PAN,304377****1611
+Diners-Club-Carte-Blanche.txt,14,0,Diners Club Carte Blanche,PAN,302765****1469
+Diners-Club-Carte-Blanche.txt,15,0,Diners Club Carte Blanche,PAN,300775****9123
+Diners-Club-Carte-Blanche.txt,16,0,Diners Club Carte Blanche,PAN,301990****3102
+Diners-Club-Carte-Blanche.txt,17,0,Diners Club Carte Blanche,PAN,302242****6613
+Diners-Club-Carte-Blanche.txt,18,0,Diners Club Carte Blanche,PAN,302424****4768
+Diners-Club-Carte-Blanche.txt,19,0,Diners Club Carte Blanche,PAN,302384****2747
+Diners-Club-Carte-Blanche.txt,20,0,Diners Club Carte Blanche,PAN,301828****8133
+Diners-Club-Carte-Blanche.txt,21,0,Diners Club Carte Blanche,PAN,303905****6163
+Diners-Club-Carte-Blanche.txt,22,0,Diners Club Carte Blanche,PAN,300031****2444
+Diners-Club-Carte-Blanche.txt,23,0,Diners Club Carte Blanche,PAN,304191****6589
+Diners-Club-Carte-Blanche.txt,24,0,Diners Club Carte Blanche,PAN,303789****0586
+Diners-Club-Carte-Blanche.txt,25,0,Diners Club Carte Blanche,PAN,301729****8400
+Diners-Club-Carte-Blanche.txt,26,0,Diners Club Carte Blanche,PAN,304226****8459
+Diners-Club-International.txt,2,0,Diners Club International,PAN,381840*********6889
+Diners-Club-International.txt,3,0,Diners Club International,PAN,386413********5930
+Diners-Club-International.txt,4,0,Diners Club International,PAN,304462********2367
+Diners-Club-International.txt,5,0,Diners Club International,PAN,364661******7430
+Diners-Club-International.txt,6,0,Diners Club International,PAN,307158*****0301
+Diners-Club-International.txt,7,0,Diners Club International,PAN,368770*********7499
+Diners-Club-International.txt,8,0,Diners Club International,PAN,300039******5204
+Diners-Club-International.txt,9,0,Diners Club International,PAN,383642********4706
+Diners-Club-International.txt,10,0,Diners Club International,PAN,364320****4565
+Diners-Club-International.txt,11,0,Diners Club International,PAN,394520*****7522
+Diners-Club-International.txt,12,0,Diners Club International,PAN,369086*********6859
+Diners-Club-International.txt,13,0,Diners Club International,PAN,361133*********0171
+Diners-Club-International.txt,14,0,Diners Club International,PAN,364758*********9275
+Diners-Club-International.txt,15,0,Diners Club International,PAN,382777*********9717
+Diners-Club-International.txt,16,0,Diners Club International,PAN,307315*********8683
+Diners-Club-International.txt,17,0,Diners Club International,PAN,309323*****3033
+Diners-Club-International.txt,18,0,Diners Club International,PAN,368027*****5347
+Diners-Club-International.txt,19,0,Diners Club International,PAN,392903****2754
+Diners-Club-International.txt,20,0,Diners Club International,PAN,397070*********0254
+Diners-Club-International.txt,21,0,Diners Club International,PAN,385454********7112
+Diners-Club-International.txt,22,0,Diners Club International,PAN,306533******2056
+Diners-Club-International.txt,23,0,Diners Club International,PAN,364722*******7206
+Diners-Club-International.txt,24,0,Diners Club International,PAN,385943*********8202
+Diners-Club-International.txt,25,0,Diners Club International,PAN,367652******4636
+Diners-Club-International.txt,26,0,Diners Club International,PAN,368035******0349
+Diners-Club-US-and-Canada.txt,2,0,Diners Club US and Canada,PAN,551120******0459
+Diners-Club-US-and-Canada.txt,3,0,Diners Club US and Canada,PAN,557690******5154
+Diners-Club-US-and-Canada.txt,4,0,Diners Club US and Canada,PAN,554903******9711
+Diners-Club-US-and-Canada.txt,5,0,Diners Club US and Canada,PAN,553102******6193
+Diners-Club-US-and-Canada.txt,6,0,Diners Club US and Canada,PAN,553388******4948
+Diners-Club-US-and-Canada.txt,7,0,Diners Club US and Canada,PAN,552878******2110
+Diners-Club-US-and-Canada.txt,8,0,Diners Club US and Canada,PAN,558289******5903
+Diners-Club-US-and-Canada.txt,9,0,Diners Club US and Canada,PAN,558452******5530
+Diners-Club-US-and-Canada.txt,10,0,Diners Club US and Canada,PAN,554398******4474
+Diners-Club-US-and-Canada.txt,11,0,Diners Club US and Canada,PAN,559408******2983
+Diners-Club-US-and-Canada.txt,12,0,Diners Club US and Canada,PAN,552689******0817
+Diners-Club-US-and-Canada.txt,13,0,Diners Club US and Canada,PAN,559648******1790
+Diners-Club-US-and-Canada.txt,14,0,Diners Club US and Canada,PAN,553551******3398
+Diners-Club-US-and-Canada.txt,15,0,Diners Club US and Canada,PAN,554367******1626
+Diners-Club-US-and-Canada.txt,16,0,Diners Club US and Canada,PAN,559239******7238
+Diners-Club-US-and-Canada.txt,17,0,Diners Club US and Canada,PAN,551638******6992
+Diners-Club-US-and-Canada.txt,18,0,Diners Club US and Canada,PAN,557232******5192
+Diners-Club-US-and-Canada.txt,19,0,Diners Club US and Canada,PAN,553788******1797
+Diners-Club-US-and-Canada.txt,20,0,Diners Club US and Canada,PAN,550331******5650
+Diners-Club-US-and-Canada.txt,21,0,Diners Club US and Canada,PAN,550368******3457
+Diners-Club-US-and-Canada.txt,22,0,Diners Club US and Canada,PAN,557475******8081
+Diners-Club-US-and-Canada.txt,23,0,Diners Club US and Canada,PAN,557007******3492
+Diners-Club-US-and-Canada.txt,24,0,Diners Club US and Canada,PAN,550391******5173
+Diners-Club-US-and-Canada.txt,25,0,Diners Club US and Canada,PAN,557992******4228
+Diners-Club-US-and-Canada.txt,26,0,Diners Club US and Canada,PAN,554573******7054
+Discover-Card.txt,2,0,Discover Card,PAN,646026******5319
+Discover-Card.txt,3,0,Discover Card,PAN,648108*******1301
+Discover-Card.txt,4,0,Discover Card,PAN,601196******3224
+Discover-Card.txt,5,0,Discover Card,PAN,601184********9470
+Discover-Card.txt,6,0,Discover Card,PAN,601190*******9676
+Discover-Card.txt,7,0,Discover Card,PAN,647471********4124
+Discover-Card.txt,8,0,Discover Card,PAN,601159******2307
+Discover-Card.txt,9,0,Discover Card,PAN,601150******3638
+Discover-Card.txt,10,0,Discover Card,PAN,651500*******3892
+Discover-Card.txt,11,0,Discover Card,PAN,646962*********7996
+Discover-Card.txt,12,0,Discover Card,PAN,649825*********4536
+Discover-Card.txt,13,0,Discover Card,PAN,646404******2617
+Discover-Card.txt,14,0,Discover Card,PAN,622130*********8393
+Discover-Card.txt,15,0,Discover Card,PAN,649596********0286
+Discover-Card.txt,16,0,Discover Card,PAN,649242********5467
+Discover-Card.txt,17,0,Discover Card,PAN,656481********1522
+Discover-Card.txt,18,0,Discover Card,PAN,622911*********9740
+Discover-Card.txt,19,0,Discover Card,PAN,601174*******4000
+Discover-Card.txt,20,0,Discover Card,PAN,601166******2718
+Discover-Card.txt,21,0,Discover Card,PAN,622192******6209
+Discover-Card.txt,22,0,Discover Card,PAN,601133********0522
+Discover-Card.txt,23,0,Discover Card,PAN,601179*********1765
+Discover-Card.txt,24,0,Discover Card,PAN,650243********9594
+Discover-Card.txt,25,0,Discover Card,PAN,601125******2643
+Discover-Card.txt,26,0,Discover Card,PAN,646802*********8667
+InstaPayment.txt,2,0,InstaPayment,PAN,637246******5602
+InstaPayment.txt,3,0,InstaPayment,PAN,638396******8842
+InstaPayment.txt,4,0,InstaPayment,PAN,639120******6372
+InstaPayment.txt,5,0,InstaPayment,PAN,637613******6327
+InstaPayment.txt,6,0,InstaPayment,PAN,637741******6315
+InstaPayment.txt,7,0,InstaPayment,PAN,637213******5574
+InstaPayment.txt,8,0,InstaPayment,PAN,637550******7667
+InstaPayment.txt,9,0,InstaPayment,PAN,638211******0514
+InstaPayment.txt,10,0,InstaPayment,PAN,639300******7932
+InstaPayment.txt,11,0,InstaPayment,PAN,639101******0663
+InstaPayment.txt,12,0,InstaPayment,PAN,638067******4595
+InstaPayment.txt,13,0,InstaPayment,PAN,638367******5574
+InstaPayment.txt,14,0,InstaPayment,PAN,639209******5410
+InstaPayment.txt,15,0,InstaPayment,PAN,638494******3688
+InstaPayment.txt,16,0,InstaPayment,PAN,637572******2946
+InstaPayment.txt,17,0,InstaPayment,PAN,637155******1479
+InstaPayment.txt,18,0,InstaPayment,PAN,639380******1608
+InstaPayment.txt,19,0,InstaPayment,PAN,637607******7338
+InstaPayment.txt,20,0,InstaPayment,PAN,637804******8011
+InstaPayment.txt,21,0,InstaPayment,PAN,638356******1526
+InstaPayment.txt,22,0,InstaPayment,PAN,638499******5381
+InstaPayment.txt,23,0,InstaPayment,PAN,639367******6785
+InstaPayment.txt,24,0,InstaPayment,PAN,639933******6708
+InstaPayment.txt,25,0,InstaPayment,PAN,638683******4529
+InstaPayment.txt,26,0,InstaPayment,PAN,637879******7419
+JCB.txt,2,0,JCB,PAN,352987*********8258
+JCB.txt,3,0,JCB,PAN,354026*******2910
+JCB.txt,5,0,JCB,PAN,354128*********2788
+JCB.txt,6,0,JCB,PAN,358865*********8937
+JCB.txt,7,0,JCB,PAN,356238********1261
+JCB.txt,8,0,JCB,PAN,352984*********9321
+JCB.txt,9,0,JCB,PAN,358907********2496
+JCB.txt,10,0,JCB,PAN,352923******3961
+JCB.txt,11,0,JCB,PAN,358383******6973
+JCB.txt,12,0,JCB,PAN,352817******4568
+JCB.txt,13,0,JCB,PAN,358974*********9896
+JCB.txt,14,0,JCB,PAN,352836******5713
+JCB.txt,15,0,JCB,PAN,352851******5890
+JCB.txt,16,0,JCB,PAN,358042*********6711
+JCB.txt,17,0,JCB,PAN,352895*********6290
+JCB.txt,18,0,JCB,PAN,352936******0312
+JCB.txt,19,0,JCB,PAN,353601*******1152
+JCB.txt,20,0,JCB,PAN,352996******5921
+JCB.txt,21,0,JCB,PAN,356653*******2951
+JCB.txt,22,0,JCB,PAN,352886********3782
+JCB.txt,23,0,JCB,PAN,352892******4204
+JCB.txt,24,0,JCB,PAN,357237*********8529
+JCB.txt,25,0,JCB,PAN,352979*******0729
+JCB.txt,26,0,JCB,PAN,352936*******4812
+Laser.txt,2,0,Laser,PAN,670908*********1954
+Laser.txt,3,0,Laser,PAN,630487********2997
+Laser.txt,4,0,Laser,PAN,630408******2051
+Laser.txt,5,0,Laser,PAN,670900*********0880
+Laser.txt,6,0,Laser,PAN,670686********5991
+Laser.txt,7,0,Laser,PAN,670980********0733
+Laser.txt,8,0,Laser,PAN,677189******3561
+Laser.txt,9,0,Laser,PAN,677153********6522
+Laser.txt,10,0,Laser,PAN,670995********4971
+Laser.txt,11,0,Laser,PAN,670901******7669
+Laser.txt,12,0,Laser,PAN,677128********2988
+Laser.txt,13,0,Laser,PAN,670969********6398
+Laser.txt,14,0,Laser,PAN,677151*********1156
+Laser.txt,15,0,Laser,PAN,630442*******6914
+Laser.txt,16,0,Laser,PAN,670949*******0686
+Laser.txt,17,0,Laser,PAN,670985*******2114
+Laser.txt,18,0,Laser,PAN,630496********8450
+Laser.txt,19,0,Laser,PAN,670971********4086
+Laser.txt,20,0,Laser,PAN,630442********9037
+Laser.txt,21,0,Laser,PAN,677114*******8522
+Laser.txt,22,0,Laser,PAN,670941*********6946
+Laser.txt,23,0,Laser,PAN,670919*******8299
+Laser.txt,24,0,Laser,PAN,677104*******5675
+Laser.txt,25,0,Laser,PAN,677162********2493
+Laser.txt,26,0,Laser,PAN,630433******5736
+Maestro.txt,2,0,Maestro,PAN,676345********2766
+Maestro.txt,3,0,Maestro,PAN,501834******6002
+Maestro.txt,4,0,Maestro,PAN,502066*****7063
+Maestro.txt,5,0,Maestro,PAN,589302*********6636
+Maestro.txt,6,0,Laser,PAN,630420******5497
+Maestro.txt,7,0,Maestro,PAN,501816******4683
+Maestro.txt,8,0,Maestro,PAN,502041***1194
+Maestro.txt,9,0,Maestro,PAN,503845*****9054
+Maestro.txt,10,0,Maestro,PAN,589350**6540
+Maestro.txt,11,0,Maestro,PAN,676229***6455
+Maestro.txt,12,0,Maestro,PAN,676179***2859
+Maestro.txt,13,0,Maestro,PAN,501883****9757
+Maestro.txt,14,0,Maestro,PAN,501826*********4375
+Maestro.txt,15,0,Maestro,PAN,675936***9839
+Maestro.txt,16,0,Maestro,PAN,589332****4421
+Maestro.txt,17,0,Maestro,PAN,589365******9035
+Maestro.txt,18,0,Maestro,PAN,675905********5135
+Maestro.txt,19,0,Maestro,PAN,676149******4852
+Maestro.txt,20,0,Laser,PAN,630473*******4735
+Maestro.txt,21,0,Maestro,PAN,501859*********3378
+Maestro.txt,22,0,Laser,PAN,630450********2278
+Maestro.txt,23,0,Maestro,PAN,675980**1054
+Maestro.txt,24,0,Laser,PAN,630464*********6487
+Maestro.txt,25,0,Maestro,PAN,589327********3264
+Maestro.txt,26,0,Maestro,PAN,630474**3385
+Mastercard.txt,2,0,Mastercard,PAN,272024******8855
+Mastercard.txt,3,0,Mastercard,PAN,272040******8101
+Mastercard.txt,4,0,Mastercard,PAN,272082******5549
+Mastercard.txt,5,0,Mastercard,PAN,265330******3772
+Mastercard.txt,6,0,Mastercard,PAN,229395******7272
+Mastercard.txt,7,0,Mastercard,PAN,272085******9981
+Mastercard.txt,8,0,Mastercard,PAN,225917******0285
+Mastercard.txt,9,0,Mastercard,PAN,249254******7488
+Mastercard.txt,10,0,Mastercard,PAN,272082******5053
+Mastercard.txt,11,0,Mastercard,PAN,272023******4645
+Mastercard.txt,12,0,Mastercard,PAN,263157******6034
+Mastercard.txt,13,0,Mastercard,PAN,222171******6558
+Mastercard.txt,14,0,Mastercard,PAN,224489******3223
+Mastercard.txt,15,0,Mastercard,PAN,227886******0642
+Mastercard.txt,16,0,Mastercard,PAN,530724******8946
+Mastercard.txt,17,0,Mastercard,PAN,231977******7293
+Mastercard.txt,18,0,Mastercard,PAN,272009******1057
+Mastercard.txt,19,0,Mastercard,PAN,272013******4725
+Mastercard.txt,20,0,Mastercard,PAN,234229******5365
+Mastercard.txt,21,0,Mastercard,PAN,226200******1237
+Mastercard.txt,22,0,Mastercard,PAN,222323******7192
+Mastercard.txt,23,0,Mastercard,PAN,271833******4448
+Mastercard.txt,24,0,Mastercard,PAN,245672******3427
+Mastercard.txt,25,0,Mastercard,PAN,272031******2773
+Mastercard.txt,26,0,Mastercard,PAN,222242******7846
+UnionPay.txt,2,0,UnionPay,PAN,628534******4462
+UnionPay.txt,3,0,UnionPay,PAN,627580*******2145
+UnionPay.txt,4,0,UnionPay,PAN,620897********3269
+UnionPay.txt,5,0,UnionPay,PAN,629157*******4938
+UnionPay.txt,6,0,UnionPay,PAN,625761********1588
+UnionPay.txt,7,0,UnionPay,PAN,623076********9063
+UnionPay.txt,8,0,UnionPay,PAN,622029******4489
+UnionPay.txt,9,0,UnionPay,PAN,624378*********5437
+UnionPay.txt,10,0,UnionPay,PAN,620222******9756
+UnionPay.txt,11,0,UnionPay,PAN,626064*******9165
+UnionPay.txt,12,0,UnionPay,PAN,628520******6373
+UnionPay.txt,13,0,UnionPay,PAN,621009******4697
+UnionPay.txt,14,0,UnionPay,PAN,625320*********1157
+UnionPay.txt,15,0,UnionPay,PAN,626126********6254
+UnionPay.txt,16,0,UnionPay,PAN,621889*********0847
+UnionPay.txt,17,0,UnionPay,PAN,621573*******2274
+UnionPay.txt,18,0,UnionPay,PAN,626434*******8424
+UnionPay.txt,19,0,UnionPay,PAN,620481*******0961
+UnionPay.txt,20,0,UnionPay,PAN,626999*******5590
+UnionPay.txt,21,0,UnionPay,PAN,625075*******5589
+UnionPay.txt,22,0,UnionPay,PAN,623709*********5055
+UnionPay.txt,23,0,UnionPay,PAN,621989******4722
+UnionPay.txt,24,0,Discover Card,PAN,622925*********0093
+UnionPay.txt,25,0,Discover Card,PAN,622217*******3367
+UnionPay.txt,26,0,UnionPay,PAN,623155********7322
+VISA-Electron.txt,2,0,VISA Electron,PAN,491322******9621
+VISA-Electron.txt,3,0,VISA Electron,PAN,450816******5599
+VISA-Electron.txt,4,0,VISA Electron,PAN,450859******4051
+VISA-Electron.txt,5,0,VISA Electron,PAN,484483******6503
+VISA-Electron.txt,6,0,VISA Electron,PAN,484418******3072
+VISA-Electron.txt,7,0,VISA Electron,PAN,491368******0429
+VISA-Electron.txt,8,0,VISA Electron,PAN,491723******1758
+VISA-Electron.txt,9,0,VISA Electron,PAN,491324******8307
+VISA-Electron.txt,10,0,VISA Electron,PAN,450840******0145
+VISA-Electron.txt,11,0,VISA Electron,PAN,491353******2113
+VISA-Electron.txt,12,0,VISA Electron,PAN,484459******2777
+VISA-Electron.txt,13,0,VISA Electron,PAN,484427******9409
+VISA-Electron.txt,14,0,VISA Electron,PAN,450836******9297
+VISA-Electron.txt,15,0,VISA Electron,PAN,450823******7726
+VISA-Electron.txt,16,0,VISA Electron,PAN,450881******1686
+VISA-Electron.txt,17,0,VISA Electron,PAN,491324******2221
+VISA-Electron.txt,18,0,VISA Electron,PAN,402681******5358
+VISA-Electron.txt,19,0,VISA Electron,PAN,402662******3846
+VISA-Electron.txt,20,0,VISA Electron,PAN,450853******9046
+VISA-Electron.txt,21,0,VISA Electron,PAN,402640******9897
+VISA-Electron.txt,22,0,VISA Electron,PAN,484442******8957
+VISA-Electron.txt,23,0,VISA Electron,PAN,491387******4535
+VISA-Electron.txt,24,0,VISA Electron,PAN,450883******0780
+VISA-Electron.txt,25,0,VISA Electron,PAN,450887******7697
+VISA-Electron.txt,26,0,VISA Electron,PAN,491745******2278
+VISA-Electron.txt,27,0,VISA Electron,PAN,417500******6570
+VISA-Electron.txt,28,0,VISA Electron,PAN,417500******6145
+VISA-Electron.txt,29,0,VISA Electron,PAN,417500******3196
+VISA-Electron.txt,30,0,VISA Electron,PAN,417500******5885
+VISA-Electron.txt,31,0,VISA Electron,PAN,417500******9838
+VISA-Electron.txt,32,0,VISA Electron,PAN,417500******9605
+VISA-Electron.txt,33,0,VISA Electron,PAN,417500******8735
+VISA-Electron.txt,34,0,VISA Electron,PAN,417500******4061
+VISA-Electron.txt,35,0,VISA Electron,PAN,417500******5423
+VISA-Electron.txt,36,0,VISA Electron,PAN,417500******1358
+VISA-Electron.txt,37,0,VISA Electron,PAN,417500******6814
+VISA-Electron.txt,38,0,VISA Electron,PAN,417500******5685
+VISA-Electron.txt,39,0,VISA Electron,PAN,417500******7588
+VISA-Electron.txt,40,0,VISA Electron,PAN,417500******5311
+VISA-Electron.txt,41,0,VISA Electron,PAN,417500******4386
+VISA-Electron.txt,42,0,VISA Electron,PAN,417500******8514
+VISA-Electron.txt,43,0,VISA Electron,PAN,417500******8015
+VISA-Electron.txt,44,0,VISA Electron,PAN,417500******7556
+VISA-Electron.txt,45,0,VISA Electron,PAN,417500******6943
+VISA-Electron.txt,46,0,VISA Electron,PAN,417500******4419
+VISA-Electron.txt,47,0,VISA Electron,PAN,417500******6442
+VISA-Electron.txt,48,0,VISA Electron,PAN,417500******8136
+VISA-Electron.txt,49,0,VISA Electron,PAN,417500******0285
+VISA-Electron.txt,50,0,VISA Electron,PAN,417500******8069
+VISA-Electron.txt,51,0,VISA Electron,PAN,417500******2528
+VISA.txt,2,0,VISA,PAN,469248******4679
+VISA.txt,3,0,VISA,PAN,430230***6231
+VISA.txt,4,0,VISA,PAN,403751***4550
+VISA.txt,5,0,VISA,PAN,416185******3079
+VISA.txt,6,0,VISA,PAN,448747*********7649
+VISA.txt,7,0,VISA,PAN,464201***1398
+VISA.txt,8,0,VISA,PAN,430023***6158
+VISA.txt,9,0,VISA,PAN,413365******7672
+VISA.txt,10,0,VISA,PAN,476927*********3894
+VISA.txt,11,0,VISA,PAN,414904******8330
+VISA.txt,12,0,VISA,PAN,465834***3627
+VISA.txt,13,0,VISA,PAN,424248******5576
+VISA.txt,14,0,VISA,PAN,414166*********1546
+VISA.txt,15,0,VISA,PAN,425689***0438
+VISA.txt,16,0,VISA,PAN,492390*********6071
+VISA.txt,17,0,VISA,PAN,404714*********3285
+VISA.txt,18,0,VISA,PAN,421314***5537
+VISA.txt,19,0,VISA,PAN,420126******1558
+VISA.txt,20,0,VISA,PAN,426401***4700
+VISA.txt,21,0,VISA,PAN,438538***8898
+VISA.txt,22,0,VISA,PAN,472558******5678
+VISA.txt,23,0,VISA,PAN,404274*********3850
+VISA.txt,24,0,VISA,PAN,414902***7973
+VISA.txt,25,0,VISA,PAN,429449*********4171
+VISA.txt,26,0,VISA,PAN,493077***6812

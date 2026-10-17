@@ -151,6 +151,7 @@ find-pan.py [--path PATH] [--file FILE [FILE ...]] [--log-dir LOG_DIR]
 |**--debug**        |Route 'debug' messages to stdout and the 'trace' log, including a message for each candidate that fails the Luhn check.|
 |**--mask**         |Mask PAN digits (keep the first 6 and last 4) in the log, CSV and Luhn-failure debug output. Track data is fully masked. Default off: full numbers are written.|
 |**--log-anti-pan** |Write anti-PAN hits to a separate log, `Find-PAN-anti-pan-<date>.log`, and show its path and entry count in the summary. Default off. Output is masked when `--mask` is set; anti-PAN hits never appear in the PAN log or the CSV.|
+|**--summary-json** |Write the run summary (match counts, files scanned, archives expanded or skipped, and every skipped file with its reason) to a JSON file. Files inside archives are named `archive.zip!/member/path`.|
 |**--version**      |Report the app and python versions.|
 
 
@@ -340,6 +341,33 @@ find-pan.py v3.0.1
 2024-09-15 20:04:44,333 [INFO]: -- Skipped Files --
 2024-09-15 20:04:44,333 [INFO]: [ARCHIVE-NO-TOOL] inner.7z - Extractor command not found: 7z
 </pre>
+
+# Regression Baselines
+`bin/baseline.py` records what find-pan finds in a set of files and later verifies that nothing has changed, so a
+changed regex, Luhn rule, masking rule or extractor shows up as an exact list of rows.
+
+<pre>
+$ uv run python bin/baseline.py --create plain-text --description "13 plain fixtures" --file RegressionTests/*.txt
+$ uv run python bin/baseline.py --validate plain-text      # one baseline
+$ uv run python bin/baseline.py --validate --all           # every baseline
+</pre>
+
+`--create NAME` passes every other argument to find-pan (`--path`, `--file`, `--mask`, `--rgx-patterns`, ...) and stores
+`RegressionTests/baseline/NAME/baseline.csv` (the findings in a canonical order) and `baseline.yaml` (the name,
+description, the exact find-pan switches, versions, every input file with its size and SHA-256, the extractor tools
+needed, and the summary counts and skipped files). It refuses to replace an existing baseline without `--force`, and
+never leaves a half-written one. `--csv`, `--log-dir`, `--summary-json`, `--verbose`, `--debug` and `--version` belong
+to baseline.py. Inputs must be inside the repository and must not include the baseline directory.
+
+`--validate` re-runs find-pan exactly as recorded and compares the CSV rows (order-independent) and the summary.
+A failure lists the rows that went `missing` or appeared as `extra` as `file:line:offset`, any changed counts and skipped
+files, and, separately, the input files that changed beyond line endings (text files are hashed with CRLF treated as LF).
+`--max-diff N` limits the rows printed per baseline. A baseline whose extractor tools are not installed is `SKIPPED
+(environment)`; `--strict` makes that a failure.
+
+Exit status: 0 everything matches, 1 a difference, 2 a usage or environment error. Baselines made on Windows validate
+on Linux and the reverse. The shipped baselines are `plain-text`, `masked` (the same files with `--mask`) and
+`archives` (zip, tar and 7z copies of the plain fixtures; needs `unzip`, `tar` and `7z`).
 
 # Notes
 - Ensure the necessary platform-specific tools (shred, sdelete/sdelete64) are available for secure file deletion.

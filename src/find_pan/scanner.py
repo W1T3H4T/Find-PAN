@@ -61,6 +61,8 @@ class Scanner:
         self._limits: ExtractionLimits | None = None
         #   Content digests of the archives currently being expanded (outermost first).
         self._expanding: list[str] = []
+        #   (extraction directory, display path of its archive), outermost first.
+        self._extractions: list[tuple[str, str]] = []
 
     # -- entry points ------------------------------------------------------
 
@@ -201,13 +203,29 @@ class Scanner:
                 limits=self._limits_config(),
             ) as directory:
                 self.reporter.archive_expanded()
-                self._walk(directory, extracted=True)
+                self._extractions.append((directory, self.display_path(archive_path)))
+                try:
+                    self._walk(directory, extracted=True)
+                finally:
+                    self._extractions.pop()
         except ExtractorUnavailable as error:
             self._skip(archive_path, SkipReason.ARCHIVE_NO_TOOL, str(error), "warning")
         except ExtractorError as error:
             self._skip(archive_path, SkipReason.ARCHIVE_FAILED, str(error), "error")
 
+    def display_path(self, path: str) -> str:
+        """Return a stable, platform-independent name for *path*.
+
+        A file inside an extracted archive is shown as ``<archive>!/<member>`` (chained for
+        nested archives) instead of its random temporary location; separators are ``/``.
+        """
+        for directory, prefix in reversed(self._extractions):
+            if path.startswith(directory + os.sep):
+                return f"{prefix}!/{path[len(directory) + 1:].replace(os.sep, '/')}"
+        return path.replace(os.sep, "/")
+
     def _skip(self, path: str, reason: SkipReason, detail: str = "", severity: str | None = None) -> None:
+        path = self.display_path(path)
         self.reporter.skip(path, reason, detail)
         if severity is not None:
             message = f"{path}: {detail}" if detail else path

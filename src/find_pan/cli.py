@@ -2,6 +2,7 @@
 errors, or chooses exit codes."""
 
 import argparse
+import json
 import os
 import sys
 import traceback
@@ -91,6 +92,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument( "--csv",
                         help="CSV file path for match output. Emits filename, line number, offset, pattern, and sanitized match data.",
                         type=str, default=None)
+    parser.add_argument( "--summary-json", help="Write the run summary (counts and skipped files) to this JSON file.",
+                        type=str, default=None, metavar="PATH")
     parser.add_argument( "--log-anti-pan", default=False, action="store_true",
                         help="Write anti-PAN hits to a separate log file (Find-PAN-anti-pan-<date>.log) and report it in the summary.")
 
@@ -119,6 +122,7 @@ def _settings_from(namespace: argparse.Namespace) -> Settings:
         debug=namespace.debug,
         mask=namespace.mask,
         log_anti_pan=namespace.log_anti_pan,
+        summary_json=namespace.summary_json,
     )
 
 
@@ -199,6 +203,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 1
 
 
+def _write_summary_json(path: str, data: dict, exit_status: int) -> None:
+    with open(path, "w", encoding="utf-8", newline="\n") as handle:
+        json.dump({**data, "exit_status": exit_status}, handle, indent=2, sort_keys=True)
+        handle.write("\n")
+
+
 def _run(namespace: argparse.Namespace, settings: Settings, argv: Sequence[str]) -> int:
     """Load configuration, build the reporting pipeline and scan."""
     if settings.rgx_patterns is None:
@@ -249,4 +259,10 @@ def _run(namespace: argparse.Namespace, settings: Settings, argv: Sequence[str])
         status = 1       # a requested file or archive was never scanned
     for line in reporter.summary_lines(settings.log_dir):
         loggers.trace.info("%s", line)
+    if settings.summary_json:
+        try:
+            _write_summary_json(settings.summary_json, reporter.summary_data(), status)
+        except OSError as error:
+            print(f"Error: cannot write summary JSON '{settings.summary_json}': {error}", file=sys.stderr)
+            status = 1
     return status
