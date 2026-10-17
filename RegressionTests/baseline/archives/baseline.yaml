@@ -1,0 +1,39 @@
+name: archives
+description: zip, tar and 7z archives, each holding the 13 plain fixtures
+created: '2026-10-17T22:41:32Z'
+find_pan:
+  version: 3.0.1
+  command:
+  - --file
+  - RegressionTests/ZIP_Test.zip
+  - RegressionTests/TAR_Test.tar
+  - RegressionTests/7z_Test.7z
+python: 3.14.5
+platform: win32
+requires_tools:
+- 7z
+- tar
+- unzip
+inputs:
+- path: RegressionTests/7z_Test.7z
+  size: 3331
+  sha256: 6ed47f0ba165fdb4341adbc05d18d426cce29bcaa6490a00fab1f3b20818417c
+  eol_normalized: false
+- path: RegressionTests/TAR_Test.tar
+  size: 16896
+  sha256: c5ef87eb8b5f379b3354d89ec498e385f5bc766cb369fc56485efefdf21cb4f9
+  eol_normalized: false
+- path: RegressionTests/ZIP_Test.zip
+  size: 6085
+  sha256: af4b82ef74ac997e019800ae6460c508ab4947d3efae8e1178f9af8795866c32
+  eol_normalized: false
+summary:
+  anti_pans: 3
+  archives_expanded: 3
+  archives_skipped: 0
+  bad_luhn: 0
+  exit_status: 0
+  files_scanned: 39
+  pans: 1047
+  skipped: []
+  tracks: 0

@@ -63,7 +63,12 @@ def test_archive_yields_the_same_pans_as_the_plain_files(name, tmp_path, capsys,
 def test_path_scan_expands_every_archive_found(tmp_path, capsys, plain_count):
     for name in ARCHIVES:
         require_extractor(FIXTURES / name)
-    status, output = run(tmp_path, capsys, "--path", str(FIXTURES))
+    #   Scan a copy: RegressionTests/ also holds the baseline CSVs, which contain card numbers too.
+    fixtures = tmp_path / "fixtures"
+    fixtures.mkdir()
+    for source in [*FIXTURES.glob("*.txt"), *(FIXTURES / name for name in ARCHIVES)]:
+        shutil.copy(source, fixtures / source.name)
+    status, output = run(tmp_path, capsys, "--path", str(fixtures))
     assert status == 0
     assert pans_matched(output) == plain_count * (1 + len(ARCHIVES))
     assert f"Archives expanded: {len(ARCHIVES)}" in output

@@ -1,0 +1,87 @@
+name: masked
+description: the 13 plain fixtures with --mask (pins redaction)
+created: '2026-10-17T22:41:33Z'
+find_pan:
+  version: 3.0.1
+  command:
+  - --mask
+  - --file
+  - RegressionTests/American-Express.txt
+  - RegressionTests/Diners-Club-Carte-Blanche.txt
+  - RegressionTests/Diners-Club-International.txt
+  - RegressionTests/Diners-Club-US-and-Canada.txt
+  - RegressionTests/Discover-Card.txt
+  - RegressionTests/InstaPayment.txt
+  - RegressionTests/JCB.txt
+  - RegressionTests/Laser.txt
+  - RegressionTests/Maestro.txt
+  - RegressionTests/Mastercard.txt
+  - RegressionTests/UnionPay.txt
+  - RegressionTests/VISA-Electron.txt
+  - RegressionTests/VISA.txt
+python: 3.14.5
+platform: win32
+requires_tools: []
+inputs:
+- path: RegressionTests/American-Express.txt
+  size: 463
+  sha256: 4c6d35f64ce804812f8547a96cf0283ee0abd5f158d5b993ca047e902bf5f67d
+  eol_normalized: true
+- path: RegressionTests/Diners-Club-Carte-Blanche.txt
+  size: 447
+  sha256: 744b26c90eaa75df7c1093318ccf90619c9d1a6c1044f353bd2ca143c8cede30
+  eol_normalized: true
+- path: RegressionTests/Diners-Club-International.txt
+  size: 525
+  sha256: 393e19518581717f703c1bb7fdc56d04f507c1a7b2aace385f8d2da52ad503b7
+  eol_normalized: true
+- path: RegressionTests/Diners-Club-US-and-Canada.txt
+  size: 497
+  sha256: c97fa20ebe1a4b7a1637cbc4ae152c52b1796a0687ff27a97c1030875ca62c76
+  eol_normalized: true
+- path: RegressionTests/Discover-Card.txt
+  size: 521
+  sha256: 832fc4c73db6fa4c9544a1665d753fc030c1e2a3352a67a41c177865fe6ec1ac
+  eol_normalized: true
+- path: RegressionTests/InstaPayment.txt
+  size: 484
+  sha256: b64daee0bddb5f4be75fbc5e04b78084b5d5376e44e12df86d3b5695a4b5a63c
+  eol_normalized: true
+- path: RegressionTests/JCB.txt
+  size: 512
+  sha256: 2b1607ff71fdb3e5fe0ee421d29fa2fc915e89117fc6a40006e78b558ab99678
+  eol_normalized: true
+- path: RegressionTests/Laser.txt
+  size: 517
+  sha256: 63bc6d194d18ff298da4b920183e39bf7ed0b74b28944ac0c67dd37921a301a8
+  eol_normalized: true
+- path: RegressionTests/Maestro.txt
+  size: 470
+  sha256: fd91393004dce20a148c13954fc606839d2650b6fc4a9306388d38a3a817416d
+  eol_normalized: true
+- path: RegressionTests/Mastercard.txt
+  size: 482
+  sha256: f66090b8c4eaca3fc474341cb307ce4f272fc8a7ed93461593144d985471c515
+  eol_normalized: true
+- path: RegressionTests/UnionPay.txt
+  size: 514
+  sha256: 2935dc04548a7f376d2c6e372ccc531287ede4e6ae0b9da36a399941e94088b0
+  eol_normalized: true
+- path: RegressionTests/VISA-Electron.txt
+  size: 935
+  sha256: f818cd3e4d665e717bdc19e61844511c8477857facc9c9387488c6f30dbf7fcc
+  eol_normalized: true
+- path: RegressionTests/VISA.txt
+  size: 464
+  sha256: 922a733f36449f2a623683a737dc23070d10ab82f9a6bd40904fc133964050cf
+  eol_normalized: true
+summary:
+  anti_pans: 1
+  archives_expanded: 0
+  archives_skipped: 0
+  bad_luhn: 0
+  exit_status: 0
+  files_scanned: 13
+  pans: 349
+  skipped: []
+  tracks: 0
