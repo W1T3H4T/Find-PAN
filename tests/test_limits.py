@@ -198,3 +198,43 @@ def test_generated_config_documents_the_default_limits(tmp_path):
     config.build_extractor_config(str(path))
     assert config.load_extraction_limits(str(path)) == ExtractionLimits()
     assert "limits:" in path.read_text(encoding="utf-8")
+
+
+# --- adaptive polling: the closer a cap, the faster the watchdog looks ---------------------------------
+
+
+def test_first_poll_is_immediate_so_a_fast_writer_is_seen_early():
+    assert archives._next_poll_delay(limits(), None, 0.0, 0, 0) == archives._MIN_POLL_SECONDS
+
+
+def test_far_from_every_cap_the_normal_rate_is_used():
+    previous = (0.0, 1000, 5)
+    defaults = ExtractionLimits()
+    assert archives._next_poll_delay(defaults, previous, 1.0, 1000, 5) == archives._POLL_SECONDS
+    assert archives._next_poll_delay(defaults, previous, 1.0, 2000, 6) == archives._POLL_SECONDS
+
+
+def test_an_idle_tool_near_a_cap_is_still_polled_fast_because_it_may_burst():
+    """Regression: an idle tool that started writing 50 ms later wrote 150 MB inside one 100 ms sleep."""
+    previous = (0.0, 0, 0)
+    delay = archives._next_poll_delay(limits(max_extracted_bytes=5 * MB), previous, 0.007, 0, 0)
+    assert delay < 0.02
+
+
+def test_a_fast_writer_near_the_byte_cap_is_polled_much_faster():
+    previous = (0.0, 0, 0)
+    # 1 GB/s towards a 5 MB cap with 1 MB left: the cap is ~1 ms away
+    delay = archives._next_poll_delay(limits(max_extracted_bytes=5 * MB), previous, 0.004, 4 * MB, 1)
+    assert archives._MIN_POLL_SECONDS <= delay < 0.02
+
+
+def test_a_fast_file_creator_near_the_count_cap_is_polled_much_faster():
+    previous = (0.0, 0, 0)
+    delay = archives._next_poll_delay(limits(max_files=1000), previous, 1.0, 0, 900)
+    assert archives._MIN_POLL_SECONDS <= delay < 0.1
+
+
+def test_the_delay_never_drops_below_the_floor():
+    previous = (0.0, 0, 0)
+    delay = archives._next_poll_delay(limits(max_extracted_bytes=5 * MB), previous, 0.001, 5 * MB - 1, 1)
+    assert delay == archives._MIN_POLL_SECONDS
