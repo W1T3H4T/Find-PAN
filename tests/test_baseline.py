@@ -94,12 +94,12 @@ def test_enumerate_is_sorted_by_utf8_bytes_not_walk_order(repo):
     assert listed == ["data/B.txt", "data/Z/z.txt", "data/a.txt", "data/\u00e9.txt"]
 
 
-def test_enumerate_skips_symlinks(repo, tmp_path):
+def test_enumerate_skips_symlinks(repo, monkeypatch):
+    """Simulated, so it runs where symlinks cannot be created (unprivileged Windows)."""
     write(repo / "data" / "real.txt")
-    try:
-        os.symlink(repo / "data" / "real.txt", repo / "data" / "link.txt")
-    except (OSError, NotImplementedError):
-        pytest.skip("symlinks cannot be created here")
+    write(repo / "data" / "link.txt")                    # stands in for a symbolic link
+    real_is_symlink = Path.is_symlink
+    monkeypatch.setattr(Path, "is_symlink", lambda self: self.name == "link.txt" or real_is_symlink(self))
     assert baseline.enumerate_inputs(["--path", str(repo / "data")], repo) == ["data/real.txt"]
 
 
