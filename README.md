@@ -161,7 +161,7 @@ The script generates two log files (three with `--log-anti-pan`):
 2. **Find-PAN.log:** Logs detailed information of identified PANs.
 3. **Find-PAN-anti-pan-<date>.log:** Written only with `--log-anti-pan`; lists the anti-PAN (suspect) hits.
 
-Log files are generated in the specified log directory or the current working directory if no log directory is provided.
+Log files are generated in the specified log directory. A run on a day that already has logs **appends** to them (each run starts with a `---- Find-PAN run started ----` line), so earlier results are never overwritten. Remove old logs with `bin/purge-log-files.py`.
 
 ## PAN and TRACK Patterns
 The script uses predefined regular expressions to identify PAN and TRACK 1 & 2 data. Supported PAN types include:
@@ -201,10 +201,16 @@ Issuer ranges can change, and the ISO specification does not publish every alloc
 The script also checks for patterns indicative of non-PAN data, such as sequential or repeated numbers.
 
 ## Binary File Handling
-The script can be instructed to detect binary files and skip them during the scanning process.
+With `--skip-binary`, executables (reported by libmagic) and binary files are skipped. A file is binary when its
+first 1024 bytes contain a NUL byte (unless a UTF-16/32 byte-order mark says it is text) or are more than 30%
+non-text control bytes; 8-bit text such as Latin-1 is not binary. Archives are never treated as binary, they are
+expanded. Each file is opened once: the same handle is classified and then scanned.
 
 ## Secure Deletion
-For files processed during tarfile scanning (files extracted from tar files), the script securely deletes them using platform-specific methods (`shred` on Linux, and `sdelete` on Windows).
+Files extracted from archives live in a unique temporary directory that is removed as a unit after scanning (a normal
+delete, not an overwrite). `bin/purge-log-files.py --path DIR --age DAYS [--prefix PREFIX]` removes old log files and
+uses `shred` (Linux) or `sdelete` (Windows) when installed. macOS and BSD have no `shred` by default (install coreutils
+for `gshred`); without a tool the files get a plain delete and the script warns that they are **not** securely wiped.
 
 ## Examples
 Scan a directory:

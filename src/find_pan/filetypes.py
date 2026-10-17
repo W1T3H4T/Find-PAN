@@ -4,6 +4,7 @@ import logging
 import os
 from dataclasses import dataclass
 from enum import Enum
+from functools import lru_cache
 
 from find_pan.config import detect_archive_type
 
@@ -23,14 +24,29 @@ _SAMPLE_SIZE = 1024
 _TAR_HEADER_SIZE = 512
 
 
-def is_executable(file_path: str, logger: logging.Logger, verbose: bool = False) -> bool:
+@lru_cache(maxsize=4)
+def _detector(magic_module):
+    """One libmagic instance per module, built on first use (it is expensive to construct)."""
+    return magic_module.Magic(mime=True)
+
+
+def read_head(file_path: str) -> bytes:
+    """Return the first bytes of *file_path*.  ``OSError`` propagates."""
+    with open(file_path, "rb") as handle:
+        return handle.read(_SAMPLE_SIZE)
+
+
+def is_executable(
+    file_path: str, logger: logging.Logger, verbose: bool = False, head: bytes | None = None
+) -> bool:
     """Return whether libmagic reports *file_path* as an executable.
 
+    With *head* (the leading bytes already read) the file is not opened again.
     python-magic is imported lazily.  On Windows the import needs the native
     ``libmagic-1.dll``; if it is missing the interpreter may fail, and on
     Linux/macOS ``libmagic`` comes from the system package manager.  When the
     library is unavailable or fails, this returns False and callers fall back
-    to the null-byte heuristic in ``has_binary_content``.
+    to the content heuristic in ``looks_binary``.
     """
     try:
         import magic  # pylint: disable=import-outside-toplevel
@@ -43,8 +59,9 @@ def is_executable(file_path: str, logger: logging.Logger, verbose: bool = False)
         return False
 
     try:
-        if os.path.isfile(file_path):
-            file_type = magic.Magic(mime=True).from_file(file_path)
+        if head is not None or os.path.isfile(file_path):
+            detector = _detector(magic)
+            file_type = detector.from_buffer(head) if head is not None else detector.from_file(file_path)
             logger.debug("MIME/Type: %s: %s", file_type, file_path)
             if any(mime_type in file_type for mime_type in EXECUTABLE_MIME_TYPES):
                 if verbose:
@@ -61,14 +78,25 @@ def is_executable(file_path: str, logger: logging.Logger, verbose: bool = False)
     return False
 
 
-def has_binary_content(file_path: str) -> bool:
-    """Return whether the start of the file contains both NUL and 0xFF bytes.
+#   Byte-order marks of UTF-16/32 text, which legitimately contains NUL bytes.
+_TEXT_BOMS = (b"\xff\xfe", b"\xfe\xff", b"\xef\xbb\xbf")
+#   Control bytes that do not occur in text (tab, LF, CR, FF and ESC are allowed).
+_NON_TEXT_BYTES = frozenset(set(range(0, 32)) - {9, 10, 12, 13, 27})
+_BINARY_RATIO = 0.30
 
-    The last two sampled bytes are ignored.  ``OSError`` propagates.
+
+def looks_binary(head: bytes) -> bool:
+    """Return whether the leading bytes of a file look like binary data.
+
+    A NUL byte makes it binary (unless a UTF-16/32 byte-order mark says the
+    file is text); otherwise it is binary when more than 30% of the sample is
+    non-text control bytes.  Latin-1 and other 8-bit text are not binary.
     """
-    with open(file_path, "rb") as handle:
-        sample = handle.read(_SAMPLE_SIZE)[:-2]
-    return 0x00 in sample and 0xFF in sample
+    if not head or head.startswith(_TEXT_BOMS):
+        return False
+    if b"\x00" in head:
+        return True
+    return sum(1 for byte in head if byte in _NON_TEXT_BYTES) / len(head) > _BINARY_RATIO
 
 
 class FileKind(Enum):
@@ -108,13 +136,11 @@ _BZIP2_BLOCK_MAGIC = b"1AY&SY"
 _TAR_COMPRESSED = ("gzip", "bzip2", "xz")
 
 
-def sniff_archive_format(file_path: str) -> str | None:
+def sniff_archive_format(head: bytes) -> str | None:
     """Return the archive format named by the file's leading bytes, or None.
 
-    Only content is consulted.  ``OSError`` propagates.
+    Only content is consulted.
     """
-    with open(file_path, "rb") as handle:
-        head = handle.read(_TAR_HEADER_SIZE)
     for offset, signature, name in _SIGNATURES:
         if head[offset:offset + len(signature)] == signature:
             return name
@@ -126,16 +152,27 @@ def sniff_archive_format(file_path: str) -> str | None:
 def classify(
     file_path: str, skip_binary: bool, logger: logging.Logger, verbose: bool = False
 ) -> FileClassification:
-    """Decide how to handle *file_path*, trusting content over the extension.
+    """Open *file_path* once to read its head and classify it (see ``classify_head``).
+
+    ``OSError`` propagates.
+    """
+    return classify_head(read_head(file_path), file_path, skip_binary, logger, verbose)
+
+
+def classify_head(
+    head: bytes, file_path: str, skip_binary: bool, logger: logging.Logger, verbose: bool = False
+) -> FileClassification:
+    """Decide how to handle a file from its leading bytes, trusting content over the extension.
 
     The extension is only a hint: it chooses between ``tar`` and a bare
     compressor for gzip/bzip2/xz data, and it triggers a note when it claims an
     archive the content does not confirm.  Archives take precedence over the
-    binary and executable checks, which apply only with ``skip_binary``.
-    ``OSError`` propagates.
+    binary and executable checks, which apply only with ``skip_binary``.  The
+    file is never opened here, so a caller that already holds it open can
+    classify and scan it with a single open.
     """
     hint = detect_archive_type(file_path)
-    sniffed = sniff_archive_format(file_path)
+    sniffed = sniff_archive_format(head)
 
     if sniffed is not None:
         archive_type = "tar" if (sniffed in _TAR_COMPRESSED and hint == "tar") else sniffed
@@ -146,8 +183,8 @@ def classify(
         note = f"extension suggests a {hint} archive but the content is not one; scanning as a file"
 
     if skip_binary:
-        if is_executable(file_path, logger, verbose):
+        if is_executable(file_path, logger, verbose, head=head):
             return FileClassification(FileKind.EXECUTABLE, note=note)
-        if has_binary_content(file_path):
+        if looks_binary(head):
             return FileClassification(FileKind.BINARY, note=note)
     return FileClassification(FileKind.TEXT, note=note)

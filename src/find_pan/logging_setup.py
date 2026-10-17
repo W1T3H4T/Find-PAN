@@ -41,10 +41,10 @@ def _fresh_logger(name: str, level: int) -> logging.Logger:
 
 
 def _add_file_handler(logger: logging.Logger, path: str, level: int) -> None:
-    if os.path.exists(path):
-        os.remove(path)
-    #   UTF-8 so U+FFFD from undecodable input never drops a finding on Windows.
-    handler = logging.FileHandler(path, encoding="utf-8")
+    #   Append, never delete: a second run on the same day must not destroy the
+    #   audit trail of the first.  UTF-8 so U+FFFD from undecodable input never
+    #   drops a finding on Windows.
+    handler = logging.FileHandler(path, mode="a", encoding="utf-8")
     handler.setLevel(level)
     handler.setFormatter(logging.Formatter(_FORMAT))
     logger.addHandler(handler)
@@ -53,7 +53,7 @@ def _add_file_handler(logger: logging.Logger, path: str, level: int) -> None:
 def build_loggers(settings: Settings) -> Loggers:
     """Create the log directories and loggers.
 
-    Prior log files with the same names are removed.  The anti-PAN logger and
+    Log files from earlier runs the same day are appended to, not replaced.  The anti-PAN logger and
     its file exist only when ``settings.log_anti_pan`` is set.
 
     Raises ``LoggingSetupError`` when a directory or log file cannot be created.
