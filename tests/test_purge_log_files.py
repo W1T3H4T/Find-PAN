@@ -1,4 +1,4 @@
-"""Tests for bin/purge-log-files.py: BUG-029 and BUG-031 and the crashes found next to them."""
+"""Tests for bin/purge-log-files.py: option-like names, the no-tool warning and the crashes found next to them."""
 
 import importlib.util
 import logging
@@ -42,7 +42,7 @@ def test_without_a_secure_delete_tool_the_file_is_removed_with_a_clear_warning(t
     with caplog.at_level(logging.WARNING, logger="test.purge"):
         purge.delete_file(str(target), flag, secure_del_app=None)
     assert not target.exists() and flag == [True]
-    assert "NOT securely" in caplog.text            # BUG-031: no false sense of security
+    assert "NOT securely" in caplog.text            # no false sense of security
 
 
 def test_the_fallback_warning_is_reported_once_per_run(tmp_path, caplog):

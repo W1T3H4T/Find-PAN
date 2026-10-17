@@ -19,7 +19,7 @@ DEFAULT_EXTRACTOR_CONFIG_PATH = ROOT / "config" / "find-pan-conf.yaml"
 
 
 @pytest.fixture
-def pan_config():
+def config_module():
     """Override the shared fixture: these tests exercise find_pan.config."""
     return find_pan_config
 
@@ -79,9 +79,9 @@ def test_default_extractor_configuration_exists_and_loads():
         assert extractor["compression"]
 
 
-def test_extractor_configuration_loads_when_file_exists(pan_config):
+def test_extractor_configuration_loads_when_file_exists(config_module):
     """load_extractor_config() returns the extractors dictionary from an existing file."""
-    extractors = pan_config.load_extractor_config(str(DEFAULT_EXTRACTOR_CONFIG_PATH))
+    extractors = config_module.load_extractor_config(str(DEFAULT_EXTRACTOR_CONFIG_PATH))
 
     assert isinstance(extractors, dict)
     assert "tar" in extractors
@@ -90,36 +90,36 @@ def test_extractor_configuration_loads_when_file_exists(pan_config):
     assert "gzip" in extractors
 
 
-def test_extractor_configuration_builds_when_file_missing(pan_config, tmp_path, monkeypatch):
+def test_extractor_configuration_builds_when_file_missing(config_module, tmp_path, monkeypatch):
     """find_extractor_config_path() creates the YAML file when it does not exist."""
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
     #   Hide the bundled appRoot config and the real home directory so the XDG
     #   location is used.
     monkeypatch.setattr(
-        pan_config, "_application_root", lambda: str(tmp_path / "empty-app-root")
+        config_module, "_application_root", lambda: str(tmp_path / "empty-app-root")
     )
-    monkeypatch.setattr(pan_config.os.path, "expanduser", lambda _p: str(tmp_path))
+    monkeypatch.setattr(config_module.os.path, "expanduser", lambda _p: str(tmp_path))
     monkeypatch.setattr(
-        pan_config.shutil,
+        config_module.shutil,
         "which",
         lambda tool: f"/usr/bin/{tool}" if tool in ("tar", "unzip", "gzip") else None,
     )
 
-    config_path = pan_config.find_extractor_config_path()
+    config_path = config_module.find_extractor_config_path()
     assert Path(config_path).exists()
 
-    extractors = pan_config.load_extractor_config(config_path)
+    extractors = config_module.load_extractor_config(config_path)
     assert extractors["tar"]["command"] == "tar"
     assert extractors["zip"]["command"] == "unzip"
     assert extractors["gzip"]["command"] == "gzip"
 
 
 #   ---------------------------------------------------------------------------
-#   JSON regex configuration discovery (BUG-005)
+#   JSON regex configuration discovery
 #   ---------------------------------------------------------------------------
 
 
-def test_json_regex_config_prefers_xdg_when_set(pan_config, tmp_path, monkeypatch):
+def test_json_regex_config_prefers_xdg_when_set(config_module, tmp_path, monkeypatch):
     """find_json_regex_config() returns the user XDG file when it exists."""
     config_dir = tmp_path / "find-pan"
     config_dir.mkdir()
@@ -128,32 +128,32 @@ def test_json_regex_config_prefers_xdg_when_set(pan_config, tmp_path, monkeypatc
 
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
 
-    path = pan_config.find_json_regex_config()
+    path = config_module.find_json_regex_config()
     assert path == str(config_file)
 
 
-def test_json_regex_config_falls_back_to_app_root(pan_config, tmp_path, monkeypatch):
-    """BUG-005: appRoot config is used when no user-level config exists."""
+def test_json_regex_config_falls_back_to_app_root(config_module, tmp_path, monkeypatch):
+    """appRoot config is used when no user-level config exists."""
     monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
-    monkeypatch.setattr(pan_config.os.path, "expanduser", lambda _p: str(tmp_path))
+    monkeypatch.setattr(config_module.os.path, "expanduser", lambda _p: str(tmp_path))
 
-    path = pan_config.find_json_regex_config()
+    path = config_module.find_json_regex_config()
     assert path.endswith(str(Path("config") / "find-pan-regex.json"))
     assert Path(path).exists()
 
 
 def test_json_regex_config_raises_when_no_config_exists(
-    pan_config, tmp_path, monkeypatch
+    config_module, tmp_path, monkeypatch
 ):
     """A missing configuration in every location raises FileNotFoundError."""
     monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
-    monkeypatch.setattr(pan_config.os.path, "expanduser", lambda _p: str(tmp_path))
+    monkeypatch.setattr(config_module.os.path, "expanduser", lambda _p: str(tmp_path))
     monkeypatch.setattr(
-        pan_config, "_application_root", lambda: str(tmp_path / "no-config-here")
+        config_module, "_application_root", lambda: str(tmp_path / "no-config-here")
     )
 
     with pytest.raises(FileNotFoundError):
-        pan_config.find_json_regex_config()
+        config_module.find_json_regex_config()
 
 
 class TestDetectArchiveType:
@@ -177,31 +177,31 @@ class TestDetectArchiveType:
         ],
         ids=lambda item: item[0],
     )
-    def test_supported_extensions(self, pan_config, filename, expected_type):
-        assert pan_config.detect_archive_type(filename) == expected_type
+    def test_supported_extensions(self, config_module, filename, expected_type):
+        assert config_module.detect_archive_type(filename) == expected_type
 
     @pytest.mark.parametrize(
         "filename",
         ["readme.txt", "data.bin", "image.png", "archive.unknown"],
     )
-    def test_unsupported_extensions_return_none(self, pan_config, filename):
-        assert pan_config.detect_archive_type(filename) is None
+    def test_unsupported_extensions_return_none(self, config_module, filename):
+        assert config_module.detect_archive_type(filename) is None
 
 
 class TestExtractorConfig:
     """find-pan-conf.yaml is discovered, built, and loaded."""
 
     def test_build_extractor_config_creates_yaml_with_discovered_tools(
-        self, pan_config, tmp_path, monkeypatch
+        self, config_module, tmp_path, monkeypatch
     ):
         monkeypatch.setattr(
-            pan_config.shutil,
+            config_module.shutil,
             "which",
             lambda tool: f"/usr/bin/{tool}" if tool in ("tar", "unzip", "gzip") else None,
         )
         config_path = tmp_path / "find-pan-conf.yaml"
 
-        pan_config.build_extractor_config(str(config_path))
+        config_module.build_extractor_config(str(config_path))
 
         data = yaml.safe_load(config_path.read_text(encoding="utf-8"))
         extractors = data["extractors"]
@@ -214,7 +214,7 @@ class TestExtractorConfig:
         for archive_type in ("tar", "zip", "7z", "gzip"):
             assert extractors[archive_type]["compression"]
 
-    def test_load_extractor_config_returns_extractors(self, pan_config, tmp_path):
+    def test_load_extractor_config_returns_extractors(self, config_module, tmp_path):
         config_path = tmp_path / "find-pan-conf.yaml"
         config_path.write_text(
             yaml.safe_dump(
@@ -227,7 +227,7 @@ class TestExtractorConfig:
             encoding="utf-8",
         )
 
-        extractors = pan_config.load_extractor_config(str(config_path))
+        extractors = config_module.load_extractor_config(str(config_path))
 
         assert extractors["tar"]["command"] == "gtar"
 
@@ -247,7 +247,7 @@ class TestFindExtractorConfigPath:
     the first writable XDG location and populated by discovering extractors on PATH.
     """
 
-    def test_returns_existing_config_file(self, pan_config, tmp_path):
+    def test_returns_existing_config_file(self, config_module, tmp_path):
         config_dir = tmp_path / "find-pan"
         config_dir.mkdir()
         config_file = config_dir / "find-pan-conf.yaml"
@@ -256,28 +256,28 @@ class TestFindExtractorConfigPath:
         monkeypatch = pytest.MonkeyPatch()
         monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
         try:
-            path = pan_config.find_extractor_config_path()
+            path = config_module.find_extractor_config_path()
             assert path == str(config_file)
             #   Existing file must not be overwritten.
             assert Path(path).read_text(encoding="utf-8") == "extractors:\n"
         finally:
             monkeypatch.undo()
 
-    def test_builds_config_under_xdg_config_home(self, pan_config, tmp_path, monkeypatch):
+    def test_builds_config_under_xdg_config_home(self, config_module, tmp_path, monkeypatch):
         monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
         #   Hide the bundled appRoot config and the real home directory so the
         #   XDG location is used.
         monkeypatch.setattr(
-            pan_config, "_application_root", lambda: str(tmp_path / "empty-app-root")
+            config_module, "_application_root", lambda: str(tmp_path / "empty-app-root")
         )
-        monkeypatch.setattr(pan_config.os.path, "expanduser", lambda _p: str(tmp_path))
+        monkeypatch.setattr(config_module.os.path, "expanduser", lambda _p: str(tmp_path))
         monkeypatch.setattr(
-            pan_config.shutil,
+            config_module.shutil,
             "which",
             lambda tool: f"/usr/bin/{tool}" if tool == "tar" else None,
         )
 
-        path = pan_config.find_extractor_config_path()
+        path = config_module.find_extractor_config_path()
 
         assert path == str(tmp_path / "find-pan" / "find-pan-conf.yaml")
         assert Path(path).exists()
@@ -286,66 +286,66 @@ class TestFindExtractorConfigPath:
         assert data["extractors"]["tar"]["command"] == "tar"
 
     def test_builds_config_under_home_dot_config_when_xdg_unset(
-        self, pan_config, tmp_path, monkeypatch
+        self, config_module, tmp_path, monkeypatch
     ):
         monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
         #   Force the search to the tmp_path by overriding the home directory.
-        monkeypatch.setattr(pan_config.os.path, "expanduser", lambda _p: str(tmp_path))
+        monkeypatch.setattr(config_module.os.path, "expanduser", lambda _p: str(tmp_path))
         #   Hide the bundled appRoot config so the home directory is used.
         monkeypatch.setattr(
-            pan_config, "_application_root", lambda: str(tmp_path / "empty-app-root")
+            config_module, "_application_root", lambda: str(tmp_path / "empty-app-root")
         )
         monkeypatch.setattr(
-            pan_config.shutil,
+            config_module.shutil,
             "which",
             lambda tool: f"/usr/bin/{tool}" if tool == "tar" else None,
         )
 
-        path = pan_config.find_extractor_config_path()
+        path = config_module.find_extractor_config_path()
 
         assert path == str(tmp_path / ".config" / "find-pan" / "find-pan-conf.yaml")
         assert Path(path).exists()
 
     def test_returns_app_root_extractor_config_when_no_user_config(
-        self, pan_config, tmp_path, monkeypatch
+        self, config_module, tmp_path, monkeypatch
     ):
-        """BUG-005: an appRoot config is used when no user-level config exists."""
+        """An appRoot config is used when no user-level config exists."""
         monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
-        monkeypatch.setattr(pan_config.os.path, "expanduser", lambda _p: str(tmp_path))
+        monkeypatch.setattr(config_module.os.path, "expanduser", lambda _p: str(tmp_path))
 
-        path = pan_config.find_extractor_config_path()
+        path = config_module.find_extractor_config_path()
 
         assert path.endswith(os.path.join("config", "find-pan-conf.yaml"))
         assert Path(path).exists()
 
     def test_raises_when_config_directory_cannot_be_created(
-        self, pan_config, tmp_path, monkeypatch
+        self, config_module, tmp_path, monkeypatch
     ):
         monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "not-a-directory"))
         #   Hide the bundled appRoot config and the real home directory so
         #   creation in the XDG location is attempted.
         monkeypatch.setattr(
-            pan_config, "_application_root", lambda: str(tmp_path / "empty-app-root")
+            config_module, "_application_root", lambda: str(tmp_path / "empty-app-root")
         )
-        monkeypatch.setattr(pan_config.os.path, "expanduser", lambda _p: str(tmp_path))
+        monkeypatch.setattr(config_module.os.path, "expanduser", lambda _p: str(tmp_path))
         monkeypatch.setattr(
-            pan_config.os,
+            config_module.os,
             "makedirs",
             lambda _path, exist_ok=False: (_ for _ in ()).throw(OSError("no write")),
         )
 
         with pytest.raises(FileNotFoundError):
-            pan_config.find_extractor_config_path()
+            config_module.find_extractor_config_path()
 
 
 class TestArchiveTypeDetection:
     """Longest multi-part extension wins over shorter suffixes."""
 
-    def test_tar_gz_beats_gz(self, pan_config):
-        assert pan_config.detect_archive_type("file.tar.gz") == "tar"
+    def test_tar_gz_beats_gz(self, config_module):
+        assert config_module.detect_archive_type("file.tar.gz") == "tar"
 
-    def test_case_insensitive_matching(self, pan_config):
-        assert pan_config.detect_archive_type("FILE.ZIP") == "zip"
+    def test_case_insensitive_matching(self, config_module):
+        assert config_module.detect_archive_type("FILE.ZIP") == "zip"
 
 
 def test_dump_patterns_round_trips_json():
