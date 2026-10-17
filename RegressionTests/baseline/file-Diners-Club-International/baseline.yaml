@@ -1,0 +1,26 @@
+name: file-Diners-Club-International
+description: single fixture Diners-Club-International.txt
+created: '2026-10-17T23:07:00Z'
+find_pan:
+  version: 3.1.0
+  command:
+  - --file
+  - RegressionTests/Diners-Club-International.txt
+python: 3.14.5
+platform: win32
+requires_tools: []
+inputs:
+- path: RegressionTests/Diners-Club-International.txt
+  size: 525
+  sha256: 393e19518581717f703c1bb7fdc56d04f507c1a7b2aace385f8d2da52ad503b7
+  eol_normalized: true
+summary:
+  anti_pans: 0
+  archives_expanded: 0
+  archives_skipped: 0
+  bad_luhn: 0
+  exit_status: 0
+  files_scanned: 1
+  pans: 25
+  skipped: []
+  tracks: 0

@@ -1,0 +1,26 @@
+name: file-JCB
+description: single fixture JCB.txt
+created: '2026-10-17T23:07:01Z'
+find_pan:
+  version: 3.1.0
+  command:
+  - --file
+  - RegressionTests/JCB.txt
+python: 3.14.5
+platform: win32
+requires_tools: []
+inputs:
+- path: RegressionTests/JCB.txt
+  size: 512
+  sha256: 2b1607ff71fdb3e5fe0ee421d29fa2fc915e89117fc6a40006e78b558ab99678
+  eol_normalized: true
+summary:
+  anti_pans: 1
+  archives_expanded: 0
+  archives_skipped: 0
+  bad_luhn: 0
+  exit_status: 0
+  files_scanned: 1
+  pans: 24
+  skipped: []
+  tracks: 0

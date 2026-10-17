@@ -1,0 +1,26 @@
+name: file-UnionPay
+description: single fixture UnionPay.txt
+created: '2026-10-17T23:07:04Z'
+find_pan:
+  version: 3.1.0
+  command:
+  - --file
+  - RegressionTests/UnionPay.txt
+python: 3.14.5
+platform: win32
+requires_tools: []
+inputs:
+- path: RegressionTests/UnionPay.txt
+  size: 514
+  sha256: 2935dc04548a7f376d2c6e372ccc531287ede4e6ae0b9da36a399941e94088b0
+  eol_normalized: true
+summary:
+  anti_pans: 0
+  archives_expanded: 0
+  archives_skipped: 0
+  bad_luhn: 0
+  exit_status: 0
+  files_scanned: 1
+  pans: 25
+  skipped: []
+  tracks: 0

@@ -1,0 +1,26 @@
+name: file-Laser
+description: single fixture Laser.txt
+created: '2026-10-17T23:07:02Z'
+find_pan:
+  version: 3.1.0
+  command:
+  - --file
+  - RegressionTests/Laser.txt
+python: 3.14.5
+platform: win32
+requires_tools: []
+inputs:
+- path: RegressionTests/Laser.txt
+  size: 517
+  sha256: 63bc6d194d18ff298da4b920183e39bf7ed0b74b28944ac0c67dd37921a301a8
+  eol_normalized: true
+summary:
+  anti_pans: 0
+  archives_expanded: 0
+  archives_skipped: 0
+  bad_luhn: 0
+  exit_status: 0
+  files_scanned: 1
+  pans: 25
+  skipped: []
+  tracks: 0

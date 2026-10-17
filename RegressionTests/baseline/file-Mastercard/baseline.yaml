@@ -1,0 +1,26 @@
+name: file-Mastercard
+description: single fixture Mastercard.txt
+created: '2026-10-17T23:07:03Z'
+find_pan:
+  version: 3.1.0
+  command:
+  - --file
+  - RegressionTests/Mastercard.txt
+python: 3.14.5
+platform: win32
+requires_tools: []
+inputs:
+- path: RegressionTests/Mastercard.txt
+  size: 482
+  sha256: f66090b8c4eaca3fc474341cb307ce4f272fc8a7ed93461593144d985471c515
+  eol_normalized: true
+summary:
+  anti_pans: 0
+  archives_expanded: 0
+  archives_skipped: 0
+  bad_luhn: 0
+  exit_status: 0
+  files_scanned: 1
+  pans: 25
+  skipped: []
+  tracks: 0
