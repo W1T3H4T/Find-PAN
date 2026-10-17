@@ -117,7 +117,7 @@ source $HOME/.pyenv/bin/activate
 
 <pre>
 find-pan.py [--path PATH] [--tar TAR] [--temp TEMP] [--log-dir LOG_DIR]
-            [--skip-binary]  [--verbose] [--debug]
+            [--skip-binary]  [--verbose] [--debug] [--mask]
 </pre>
 
 ## Command-line Arguments:
@@ -133,7 +133,8 @@ find-pan.py [--path PATH] [--tar TAR] [--temp TEMP] [--log-dir LOG_DIR]
 |**--line-limit**   |The number of lines to scan per file.  Zero means scan all files.|
 |**--report-delta** |The number of files to process before reporting progress.|
 |**--verbose**      |Route log file messages also to stdout.|
-|**--debug**        |Route 'debug' messages to stdout and the 'trace' log.|
+|**--debug**        |Route 'debug' messages to stdout and the 'trace' log, including a message for each candidate that fails the Luhn check.|
+|**--mask**         |Mask PAN digits (keep the first 6 and last 4) in the Luhn-failure debug messages. Track data is fully masked. Default off: without it, `--debug` logs the full candidate number.|
 |**--version**      |Report the app and python versions.|
 
 
@@ -239,6 +240,7 @@ Parameters and Defaults
  --report_delta=100
  --verbose=False
  --debug=False
+ --mask=False
  --version=False
 
 2024-09-15 20:04:44,333 [INFO]: Scanning test ...
