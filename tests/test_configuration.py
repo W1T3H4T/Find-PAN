@@ -1,10 +1,8 @@
 """Tests for processing the PAN regex configuration."""
 
-import importlib.util
 import json
 import random
 import re
-import sys
 from pathlib import Path
 
 import pytest
@@ -12,17 +10,6 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 CONFIGURATION_PATH = ROOT / "config" / "find-pan-regex.json"
-GENERATOR_PATH = ROOT / "bin" / "generate-pan.py"
-
-
-@pytest.fixture(scope="module")
-def pan_generator():
-    """Load the PAN generator module without requiring a package installation."""
-    specification = importlib.util.spec_from_file_location("generate_pan", GENERATOR_PATH)
-    module = importlib.util.module_from_spec(specification)
-    sys.modules[specification.name] = module
-    specification.loader.exec_module(module)
-    return module
 
 
 def test_regex_configuration_loads_and_compiles():

@@ -1,0 +1,3 @@
+# Keep shell scripts LF-only so WSL/Linux can execute them directly from a
+# checkout on a Windows filesystem.
+*.sh text eol=lf

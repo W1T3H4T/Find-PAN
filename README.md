@@ -65,15 +65,21 @@ Find-PAN uses `find-pan-regex.json` as its configuration file. This file is foun
   /usr/local/find-pan </pre>
 
 ## Modules and Libraries
-Install the operating-system `libmagic` dependency, then use [uv](https://docs.astral.sh/uv/) to create the project environment and install all runtime and test dependencies declared in `pyproject.toml`.
+Install the operating-system `libmagic` dependency, install [uv](https://docs.astral.sh/uv/), then run the one-time setup script for your platform. The setup configures `uv` so plain `uv` commands (`uv sync`, `uv run`, `uv add`) automatically use a per-platform project environment (`.venv-windows` or `.venv-linux`). This lets a checkout be shared between Windows and WSL/Linux without either side corrupting the other's environment.
+
+Windows (PowerShell):
 <pre>
-$ sudo apt update
-$ sudo app upgrade -y
-$ sudo apt install -y libmagic python3-full
-$ uv sync
+PS> .\bin\setup-env.ps1
 </pre>
 
-`uv sync` creates or updates `.venv` and installs the `pytest` development dependency by default. Run commands inside the managed environment with `uv run`:
+WSL / Linux / macOS (Debian/Ubuntu shown for the `libmagic` prerequisite):
+<pre>
+$ sudo apt update
+$ sudo apt install -y libmagic python3-full
+$ ./bin/setup-env.sh
+</pre>
+
+Both scripts persist `UV_PROJECT_ENVIRONMENT` for your user (`.venv-windows` on Windows, `.venv-linux` on POSIX systems). uv resolves the relative value against each project's root, so every `uv` project keeps its own platform-named environment. Open a new shell after setup, then run commands with plain `uv`:
 <pre>
 $ uv run python bin/find-pan.py --version
 $ uv run python bin/run-pytest-regression.py
@@ -151,7 +157,7 @@ The PAN expressions are maintained in [`config/find-pan-regex.json`](config/find
 
 - **Issuer ranges and total lengths:** Each expression encodes its card brand's published IIN/BIN range and accepted total PAN length. The patterns use explicit alternatives when a brand supports disjoint lengths, such as VISA's 13-, 16-, and 19-digit PANs, rather than accepting every length in a broad range.
 - **Numeric boundaries:** `(?<![0-9])` and `(?![0-9])` prevent a valid-length PAN from being reported when it is only a substring of a longer numeric value.
-- **Range precision:** Nested alternatives represent non-contiguous ranges. For example, Discover's `622126`–`622925` range is encoded without accepting adjacent `622` values outside that range. Mastercard includes both its `51`–`55` and `2221`–`2720` series.
+- **Range precision:** Nested alternatives represent non-contiguous ranges. For example, Discover's `622126`ï¿½`622925` range is encoded without accepting adjacent `622` values outside that range. Mastercard includes both its `51`ï¿½`55` and `2221`ï¿½`2720` series.
 - **Overlapping ranges:** More-specific patterns must win over broad patterns. The generic VISA expression excludes the configured VISA Electron prefixes so those matches are identified as VISA Electron instead.
 - **Validation after matching:** The scanner removes non-digits from a candidate PAN and requires it to pass the Luhn check before logging an event. The expressions reduce false positives; the Luhn check is an additional checksum validation, not an issuer lookup.
 - **Anti-PAN values:** The timestamp anti-pattern constrains `YYYYMMDDHHMMSS` components to valid numeric ranges. The scanner then validates the complete calendar date and time before treating it as an anti-PAN, preventing impossible dates such as February 30 from being ignored.
@@ -161,7 +167,7 @@ The PAN expressions are maintained in [`config/find-pan-regex.json`](config/find
 The current ranges and length rules were reviewed against the following published references:
 
 - [ISO/IEC 7812-1](https://www.iso.org/standard/70484.html), which defines the identification-card numbering system and IIN framework.
-- [Mastercard 2-Series BIN Implementation for Merchants](https://www.mastercard.us/content/dam/mccom/en-us/documents/merchant-2-series-BIN-impact-checklist-aug-2016.pdf), for the `222100`–`272099` Mastercard series.
+- [Mastercard 2-Series BIN Implementation for Merchants](https://www.mastercard.us/content/dam/mccom/en-us/documents/merchant-2-series-BIN-impact-checklist-aug-2016.pdf), for the `222100`ï¿½`272099` Mastercard series.
 - [Discover Network IPP/VAR Compliance Update](https://www.discovernetwork.com/downloads/IPP_VAR_Compliance.pdf), for Discover, Diners Club, JCB, and UnionPay co-brand ranges and 19-digit PAN support.
 - The [Payment card number issuer table](https://en.wikipedia.org/wiki/Payment_card_number), used as a public cross-reference for the configured issuer ranges and PAN lengths.
 
