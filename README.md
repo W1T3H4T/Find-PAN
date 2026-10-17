@@ -333,7 +333,7 @@ Archives are treated as untrusted input:
   characters in file names are replaced by `?`, and `--mask` also masks PANs found in file names and tool output.
 <pre>
 $ uv run python bin/find-pan.py --file test-archive.tar.gz notes.txt
-find-pan.py v3.1.0
+find-pan.py v3.1.1
 2024-09-15 20:04:44,333 [INFO]: -- Processing Summary --
 2024-09-15 20:04:44,333 [INFO]: PANs Matched  :    64704
 2024-09-15 20:04:44,333 [INFO]: TRACKs Matched:    15521
