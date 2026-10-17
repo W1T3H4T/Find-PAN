@@ -10,10 +10,7 @@
 ##  ===========================================================================
 ##  Copyright (c) 2023 David Means  <w1t3h4t@gmail.com>
 ##  ===========================================================================
-"""Create and validate find-pan regression baselines.
-
-Design: docs/superpowers/specs/2026-10-17-baseline-tool-design.md
-"""
+"""Create and validate find-pan regression baselines."""
 
 import argparse
 import csv
