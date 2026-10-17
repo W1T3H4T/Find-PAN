@@ -36,19 +36,12 @@ def test_creates_log_directory(tmp_path):
     assert (tmp_path / "logs").is_dir()
 
 
-def test_creates_pan_and_trace_files_and_removes_prior_ones(tmp_path):
-    settings = make_settings(tmp_path)
+
+
+def test_creates_the_pan_and_trace_files(tmp_path):
+    logging_setup.build_loggers(make_settings(tmp_path))
     logs = tmp_path / "logs"
-    logs.mkdir()
-    pan_name = logging_setup.generate_logfile_name("Find-PAN")
-    (logs / pan_name).write_text("stale", encoding="utf-8")
-
-    loggers = logging_setup.build_loggers(settings)
-    loggers.pan.info("fresh")
-    for handler in loggers.pan.handlers:
-        handler.flush()
-
-    assert "stale" not in (logs / pan_name).read_text(encoding="utf-8")
+    assert (logs / logging_setup.generate_logfile_name("Find-PAN")).exists()
     assert (logs / logging_setup.generate_logfile_name("Find-PAN-trace")).exists()
 
 

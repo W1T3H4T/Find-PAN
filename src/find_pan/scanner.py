@@ -7,6 +7,7 @@ scans it as text.
 """
 
 import hashlib
+import io
 import os
 from dataclasses import dataclass
 from typing import Callable, Iterable
@@ -14,11 +15,14 @@ from typing import Callable, Iterable
 from find_pan.archives import extract_archive
 from find_pan.detectors import scan_line
 from find_pan.errors import ConfigError, ExtractorUnavailable, ExtractorError
-from find_pan.filetypes import FileKind, classify
+from find_pan.filetypes import FileClassification, FileKind, classify_head
 from find_pan.logging_setup import Loggers
 from find_pan.models import ExtractionLimits, SkipReason
 from find_pan.reporting import Reporter
 from find_pan.settings import Settings
+
+#   Bytes read from the start of a file to classify it.
+_SAMPLE_BYTES = 1024
 
 
 @dataclass(frozen=True)
@@ -82,24 +86,29 @@ class Scanner:
         if not os.path.isfile(file_path):
             return
         try:
-            classification = classify(
-                file_path, self.settings.skip_binary, self.loggers.trace, self.settings.verbose
-            )
+            #   One open serves classification and the text scan, so the file cannot
+            #   change in between and no second open can fail differently.
+            with open(file_path, "rb") as raw:
+                head = raw.read(_SAMPLE_BYTES)
+                classification = classify_head(
+                    head, file_path, self.settings.skip_binary, self.loggers.trace, self.settings.verbose
+                )
+                if classification.kind is FileKind.TEXT:
+                    self._note(file_path, classification)
+                    raw.seek(0)
+                    self._scan_text(file_path, io.TextIOWrapper(raw, encoding="utf-8", errors="replace"))
+                    return
         except OSError as error:
             self._skip(file_path, SkipReason.UNREADABLE, str(error))
             return
 
-        if classification.note:
-            self.loggers.pan.info("%s: %s", file_path, classification.note)
-
+        self._note(file_path, classification)
         if classification.kind is FileKind.ARCHIVE:
             self._expand(file_path, classification.archive_type)
         elif classification.kind is FileKind.EXECUTABLE:
             self._skip(file_path, SkipReason.EXECUTABLE)
         elif classification.kind is FileKind.BINARY:
             self._skip(file_path, SkipReason.BINARY)
-        else:
-            self._scan_text(file_path)
 
     # -- helpers -------------------------------------------------------------
 
@@ -119,9 +128,13 @@ class Scanner:
                     continue
                 self.process_file(path)
 
-    def _scan_text(self, file_path: str) -> None:
+    def _note(self, file_path: str, classification: FileClassification) -> None:
+        if classification.note:
+            self.loggers.pan.info("%s: %s", file_path, classification.note)
+
+    def _scan_text(self, file_path: str, handle) -> None:
         try:
-            with open(file_path, "r", encoding="utf-8", errors="replace") as handle:
+            with handle:
                 self.loggers.pan.info("Scanning %s", os.path.basename(file_path))
                 self.reporter.file_started()
                 limit = self.settings.line_limit

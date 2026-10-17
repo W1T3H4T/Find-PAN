@@ -81,7 +81,7 @@ def test_empty_file_and_no_trailing_newline_and_invalid_utf8(build, tmp_path):
 
 
 def test_binary_file_skipped_when_skip_binary_and_counted(build, tmp_path, monkeypatch):
-    monkeypatch.setattr(scanner_module, "classify", lambda *a, **k: FileClassification(FileKind.BINARY))
+    monkeypatch.setattr(scanner_module, "classify_head", lambda *a, **k: FileClassification(FileKind.BINARY))
     target = tmp_path / "a.bin"
     target.write_text(f"card {VALID_PAN}\n", encoding="utf-8")
     scanner, reporter, sink = build(skip_binary=True)

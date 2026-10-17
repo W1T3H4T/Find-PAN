@@ -100,7 +100,6 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument( "--mask", default=False, action="store_true",
                         help="Mask PAN digits (keep first 6 and last 4) in the log, CSV and Luhn-failure debug output.")
     parser.add_argument( "--version", default=False, action="store_true", help="Print version information.")
-    parser.add_argument( "--exception-test", default=False, action="store_true", help="Test exception handler.")
     return parser
 # autopep8: on
 
@@ -120,7 +119,6 @@ def _settings_from(namespace: argparse.Namespace) -> Settings:
         debug=namespace.debug,
         mask=namespace.mask,
         log_anti_pan=namespace.log_anti_pan,
-        exception_test=namespace.exception_test,
     )
 
 
@@ -173,15 +171,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     argv = list(argv) if argv is not None else sys.argv[1:]
     _make_streams_tolerant()
 
-    #   --version works before any configuration is looked up.
-    if namespace.version:
-        _print_version_header(namespace, argv)
-        return 0
-    if namespace.exception_test:
+    if os.environ.get("FIND_PAN_EXCEPTION_TEST"):    # developer hook, not a user option
         try:
             print(10 / 0)
         except ZeroDivisionError:
             print_exception_info("Exception test called")
+
+    #   --version works before any configuration is looked up.
+    if namespace.version:
+        _print_version_header(namespace, argv)
+        return 0
 
     settings = _settings_from(namespace)
     if not (settings.path or settings.files):
@@ -210,6 +209,9 @@ def _run(namespace: argparse.Namespace, settings: Settings, argv: Sequence[str])
 
     _print_version_header(namespace, argv)
     loggers.trace.info("%s", _describe(namespace))
+    #   Separates runs in logs that are appended to (the anti-PAN log holds findings only).
+    for logger in (loggers.pan, loggers.trace):
+        logger.info("---- Find-PAN run started (%s) ----", format_version(PROGRAM_NAME))
 
     sinks = [LogSink(loggers.pan), TraceSink(loggers.trace)]
     if settings.log_anti_pan:

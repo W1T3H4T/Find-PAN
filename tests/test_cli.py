@@ -27,7 +27,7 @@ def test_parse_args_defaults():
     assert settings.path is None and settings.csv is None
     assert settings.report_delta == 500 and settings.line_limit == 0
     assert not any([settings.mask, settings.log_anti_pan, settings.debug, settings.verbose,
-                    settings.skip_binary, settings.rgx_prefix, settings.exception_test])
+                    settings.skip_binary, settings.rgx_prefix])
     assert settings.log_dir.endswith("Find-PAN-Logs")
     assert settings.files == ()
 
@@ -36,12 +36,12 @@ def test_parse_args_all_flags():
     settings = cli.parse_args([
         "--path", "p", "--file", "a.txt", "b.zip", "--file", "c.tar", "--log-dir", "l", "--rgx-patterns", "r.json",
         "--rgx-prefix", "--skip-binary", "--line-limit", "5", "--report-delta", "7", "--csv", "o.csv",
-        "--verbose", "--debug", "--mask", "--log-anti-pan", "--exception-test",
+        "--verbose", "--debug", "--mask", "--log-anti-pan",
     ])
     assert settings == Settings(
         path="p", files=("a.txt", "b.zip", "c.tar"), log_dir="l", rgx_patterns="r.json", rgx_prefix=True,
         skip_binary=True, line_limit=5, report_delta=7, csv="o.csv", verbose=True, debug=True,
-        mask=True, log_anti_pan=True, exception_test=True,
+        mask=True, log_anti_pan=True,
     )
 
 
@@ -142,9 +142,10 @@ def test_line_limit_flag_end_to_end(tmp_path, capsys):
 
 
 
-def test_exception_test_flag_exits_with_one(tmp_path, capsys):
+def test_exception_test_environment_variable_exits_with_one(tmp_path, capsys, monkeypatch):
+    monkeypatch.setenv("FIND_PAN_EXCEPTION_TEST", "1")
     with pytest.raises(SystemExit) as info:
-        cli.main(["--exception-test"])
+        cli.main(["--version"])
     assert info.value.code == 1
     assert "Exception Information:" in capsys.readouterr().out
 

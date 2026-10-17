@@ -18,8 +18,7 @@ def test_settings_defaults_and_frozen():
     assert defaults.report_delta == 500
     assert defaults.csv is None
     assert not any([defaults.rgx_prefix, defaults.skip_binary, defaults.verbose,
-                    defaults.debug, defaults.mask, defaults.log_anti_pan,
-                    defaults.exception_test])
+                    defaults.debug, defaults.mask, defaults.log_anti_pan])
     with pytest.raises(dataclasses.FrozenInstanceError):
         defaults.mask = True
 

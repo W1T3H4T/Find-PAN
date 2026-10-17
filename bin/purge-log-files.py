@@ -13,11 +13,13 @@ import os
 import platform
 import time
 from datetime import datetime
+import subprocess
 from shutil import which
-from subprocess import CalledProcessError, call
+from subprocess import CalledProcessError
 
-_LogObj = None
-secure_del_app = None
+#   Usable when this file is imported (as the tests do); __main__ replaces it
+#   with the file-backed logger from init_logger().
+_LogObj = logging.getLogger(__name__)
 
 
 #   ===========================================================================
@@ -87,30 +89,47 @@ def find_secure_delete_program():
 #   ===========================================================================
 #   Delete old files
 #   ===========================================================================
-def delete_file(file_path: str, reported_flag: list[bool]) -> None:
-    # Mapping of platforms to secure delete tools
+def delete_file(file_path: str, reported_flag: list[bool], secure_del_app: list[str] | None = None) -> None:
+    """Delete *file_path*, securely when *secure_del_app* (a command list) is given.
 
-    if len(secure_del_app):
+    Without a secure-delete tool the file is removed with a plain delete, which
+    does NOT overwrite its contents; that is warned about once per run.
+    """
+    #   Absolute, so a name such as "-rf.log" can never be read as an option.
+    file_path = os.path.abspath(file_path)
+
+    if secure_del_app:
+        command = list(secure_del_app)
+        #   GNU shred understands "--"; Windows sdelete does not.
+        if os.path.basename(command[0]).lower().startswith(("shred", "gshred")):
+            command.append("--")
+        command.append(file_path)
         try:
-            call([secure_del_app, file_path])
+            subprocess.run(command, check=True, capture_output=True)
             if os.path.exists(file_path):
                 os.remove(file_path)
             _LogObj.info("Removed %s", file_path)
+        except (CalledProcessError, OSError) as e:
+            _LogObj.warning("Error during secure delete of %s: %s", file_path, e)
+        return
 
-        except CalledProcessError as e:
-            _LogObj.warning("Error during secure delete: %s", e)
-    else:
+    if not reported_flag[0]:
+        _LogObj.warning(
+            "No secure delete application found: files are removed with a plain delete "
+            "and are NOT securely wiped (macOS/BSD have no shred by default; install coreutils)."
+        )
+        reported_flag[0] = True
+    try:
         os.remove(file_path)
-        if not reported_flag[0]:
-            _LogObj.warning("Secure delete application not found.")
-            reported_flag[0] = True
         _LogObj.info("Removed %s", file_path)
+    except OSError as e:
+        _LogObj.warning("Could not remove %s: %s", file_path, e)
 
 
 # =======================================================
 # Process the Log Directory
 # =======================================================
-def process_log_dir(path: str, age: int, prefix: str) -> None:
+def process_log_dir(path: str, age: int, prefix: str, secure_del_app: list[str] | None = None) -> None:
     reported_flag = [False]
     for file_name in os.listdir(path):
 
@@ -119,7 +138,7 @@ def process_log_dir(path: str, age: int, prefix: str) -> None:
             file_age = get_file_age_in_days(full_path)
 
             if file_age > age:
-                delete_file(full_path, reported_flag)
+                delete_file(full_path, reported_flag, secure_del_app)
             else:
                 _LogObj.info("Retained %s", full_path)
 
@@ -139,4 +158,4 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     secure_del_app = find_secure_delete_program()
-    process_log_dir(args.path, args.age, args.prefix)
+    process_log_dir(args.path, args.age, args.prefix, secure_del_app)

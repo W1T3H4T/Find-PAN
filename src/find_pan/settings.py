@@ -24,4 +24,3 @@ class Settings:
     debug: bool = False
     mask: bool = False
     log_anti_pan: bool = False
-    exception_test: bool = False

@@ -37,7 +37,7 @@ def valid_timestamp(value: str) -> bool:
         timestamp = datetime.strptime(value, "%Y%m%d%H%M%S")
     except ValueError:
         return False
-    return 1900 <= timestamp.year <= datetime.now().year + 1
+    return 1900 <= timestamp.year <= datetime.now().year
 
 
 def extract_pan(matched_data: str) -> str:
