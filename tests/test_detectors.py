@@ -61,15 +61,23 @@ def test_luhn_rejects_altered_check_digits(network, pan):
     ids=[name for name, _ in KNOWN_VALID_PANS],
 )
 def test_luhn_rejects_transposed_digits(network, pan):
-    """Swapping two distinct adjacent digits breaks the checksum.
+    """Swapping two adjacent digits breaks the checksum.
 
-    Equal adjacent digits are skipped: Luhn cannot detect that
-    transposition (a known limitation of the algorithm).
+    Luhn cannot detect swapping equal digits (nothing changes) or swapping 0 and 9 (a known
+    limitation of the algorithm), so the first adjacent pair that is neither is swapped.
     """
-    if pan[0] == pan[1]:
-        pytest.skip("Luhn cannot detect transposition of equal digits")
-    transposed = pan[1] + pan[0] + pan[2:]
+    index = next(i for i in range(len(pan) - 1)
+                 if pan[i] != pan[i + 1] and {pan[i], pan[i + 1]} != {"0", "9"})
+    transposed = pan[:index] + pan[index + 1] + pan[index] + pan[index + 2:]
+    assert transposed != pan
     assert not detectors.luhn_check(transposed)
+
+
+def test_luhn_cannot_detect_swapping_zero_and_nine():
+    """Documents the algorithm's blind spot, which the transposition test above steers around."""
+    for digits in ("1234095678901234", "5500090000000004", "0990099009900990", "4556737586890995"):
+        assert "09" in digits
+        assert detectors.luhn_check(digits) == detectors.luhn_check(digits.replace("09", "90", 1))
 
 
 def test_luhn_rejects_empty_and_all_zero_strings():
