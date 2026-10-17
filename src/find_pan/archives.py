@@ -23,9 +23,16 @@ from find_pan.models import ExtractionLimits
 
 
 _IS_WINDOWS = sys.platform == "win32"
-#   How often the watchdog inspects a running extractor.
+#   How often the watchdog inspects a running extractor, and the shortest interval it will use
+#   when a limit is close (a fast disk can write a lot in 100 ms).
 _POLL_SECONDS = 0.1
+_MIN_POLL_SECONDS = 0.005
+#   Worst-case write speeds assumed when sizing the poll delay (fast NVMe or tmpfs).
+_ASSUMED_BYTES_PER_SECOND = 2 * 1024 * 1024 * 1024
+_ASSUMED_FILES_PER_SECOND = 200_000
 _MB = 1024 * 1024
+#   Characters of tool output kept in an error message (stderr can be huge or hostile).
+_MAX_STDERR = 500
 
 
 def _tree_usage(directory: str) -> tuple[int, int]:
@@ -63,6 +70,33 @@ def _kill_tree(process: subprocess.Popen) -> None:
     process.wait()
 
 
+def _next_poll_delay(
+    limits: ExtractionLimits, previous: tuple[float, int, int] | None, now: float, total: int, count: int
+) -> float:
+    """Return how long the watchdog should wait before looking again.
+
+    Normally ``_POLL_SECONDS``.  The first look comes at once.  Otherwise the delay is half the
+    time the tool would need to reach a byte or file-count limit at the fastest rate seen so far
+    or the assumed worst-case disk speed, whichever is higher, so the remaining headroom is at
+    least halved at each look and the final overshoot is bounded by about ``_MIN_POLL_SECONDS``
+    of writing.  A tool that is idle now and bursts later is covered by the assumed rates.
+    *previous* is the (time, bytes, entries) of the last look.
+    """
+    if previous is None:
+        return _MIN_POLL_SECONDS
+    elapsed = now - previous[0]
+    byte_rate, file_rate = _ASSUMED_BYTES_PER_SECOND, _ASSUMED_FILES_PER_SECOND
+    if elapsed > 0:
+        byte_rate = max(byte_rate, (total - previous[1]) / elapsed)
+        file_rate = max(file_rate, (count - previous[2]) / elapsed)
+    delay = min(
+        _POLL_SECONDS,
+        (limits.max_extracted_bytes - total) / byte_rate / 2,
+        (limits.max_files - count) / file_rate / 2,
+    )
+    return max(_MIN_POLL_SECONDS, delay)
+
+
 def run_limited(cmd: list[str], directory: str, limits: ExtractionLimits) -> subprocess.CompletedProcess:
     """Run an extractor, stopping it if it exceeds *limits* on what it writes to *directory*.
 
@@ -79,6 +113,7 @@ def run_limited(cmd: list[str], directory: str, limits: ExtractionLimits) -> sub
         options = {"start_new_session": True} if not _IS_WINDOWS else {}
         process = subprocess.Popen(cmd, stdout=out_file, stderr=err_file, **options)
         started = time.monotonic()
+        previous = None
         try:
             while process.poll() is None:
                 if time.monotonic() - started > limits.timeout_seconds:
@@ -90,7 +125,9 @@ def run_limited(cmd: list[str], directory: str, limits: ExtractionLimits) -> sub
                     raise LimitExceeded(f"extracted file count exceeded {limits.max_files} files")
                 if shutil.disk_usage(directory)[2] < limits.min_free_bytes:
                     raise LimitExceeded(f"free disk space fell below {limits.min_free_bytes // _MB} MB")
-                time.sleep(_POLL_SECONDS)
+                now = time.monotonic()
+                time.sleep(_next_poll_delay(limits, previous, now, total, count))
+                previous = (now, total, count)
         except BaseException:
             _kill_tree(process)
             raise
@@ -102,8 +139,6 @@ def run_limited(cmd: list[str], directory: str, limits: ExtractionLimits) -> sub
     if process.returncode != 0:
         raise subprocess.CalledProcessError(process.returncode, cmd, output=stdout, stderr=stderr)
     return subprocess.CompletedProcess(cmd, 0, stdout, stderr)
-#   Characters of tool output kept in an error message (stderr can be huge or hostile).
-_MAX_STDERR = 500
 
 
 @lru_cache(maxsize=None)

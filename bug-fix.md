@@ -998,3 +998,25 @@ limits in `ExtractionLimits` (defaults: 10 GiB, 100,000 files, 600 s, 1 GiB free
 and `{tempdir}`. Covered by `tests/test_limits.py` and `tests/test_hardening.py`.
 
 ---
+
+## BUG-043: Extraction watchdog overshoot on fast filesystems
+
+**Status:** `done`
+
+**Severity:** Medium
+
+**Description:**
+The watchdog (BUG-042) polled every 100 ms. On Linux (ext4 in WSL2) a tool that started writing 50 ms
+after launch wrote about 150 MB (and thousands of files) inside one sleep before the first
+measurement showed any growth, so a 5 MB cap was exceeded thirty-fold. Found by running the suite on
+Linux; the two limit tests failed there while passing on Windows.
+
+**Fix applied:**
+`_next_poll_delay` sets each delay to half the time the tool would need to reach the byte or file
+cap at the faster of the observed rate and an assumed worst-case disk speed (2 GiB/s, 200,000
+files/s), floored at 5 ms and capped at 100 ms, and the first look is immediate. Headroom at least
+halves at every look, so overshoot is bounded by about 5 ms of writing wherever the cap is
+near, even for a tool that was idle and then bursts. Covered by `tests/test_limits.py` on Windows
+and Linux (probe: 151 MB overshoot became 14 MB).
+
+---
