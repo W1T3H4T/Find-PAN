@@ -14,6 +14,7 @@ from find_pan.config import (
     dump_patterns,
     find_extractor_config_path,
     find_json_regex_config,
+    load_extraction_limits,
     load_extractor_config,
     load_json_data,
 )
@@ -220,6 +221,7 @@ def _run(namespace: argparse.Namespace, settings: Settings, argv: Sequence[str])
     scanner = Scanner(
         settings, patterns, reporter, loggers,
         lambda: load_extractor_config(find_extractor_config_path()),
+        lambda: load_extraction_limits(find_extractor_config_path()),
     )
 
     status = 0

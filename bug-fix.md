@@ -931,3 +931,48 @@ and listed in the summary; a missing tool is a warning, a failing tool or a bad
 `--file` entry makes the exit status 1 after the run completes.
 
 ---
+
+## BUG-041: Hardening of automatic archive extraction
+
+**Status:** `done`
+
+**Severity:** Important
+
+**Description:**
+`--path` now runs external extractors on archives found in untrusted trees. A review of that
+path found: a tool that extracted members and then exited non-zero (for example on a `../`
+member) caused the whole archive to be skipped, hiding its valid members; an archive containing
+itself recursed until `RecursionError`; symbolic links inside an extracted tree were followed
+and could read files outside it; a relative archive name such as `-evil.zip` reached the tool
+looking like an option; and file names, member names and tool stderr could carry control
+characters (log injection) or PANs (leaking under `--mask`).
+
+**Fix applied:**
+Partial extractions are scanned and then reported as failed; recursion is detected by content
+digest; symlinks in extracted trees are skipped (`SYMLINK`); archive paths are made absolute;
+stderr is truncated; `Reporter.clean()` neutralizes control characters and masks PANs in
+everything derived from untrusted input. Path traversal itself was checked against crafted zip
+and tar archives and is neutralized by the tools. Covered by `tests/test_hardening.py`.
+
+---
+
+## BUG-042: Decompression bombs and brace handling in extractor arguments
+
+**Status:** `done`
+
+**Severity:** Important
+
+**Description:**
+Nothing bounded what an external extractor could write, how long it could run, or how much disk it
+could fill, and `--path` extracts any archive it meets. Separately, extractor arguments were passed
+through `str.format`, so a literal `{` or `}` in a configured argument raised `KeyError`.
+
+**Fix applied:**
+`archives.run_limited` runs the tool under a watchdog that polls the output directory and kills the
+tool and its children when extracted bytes, entry count, elapsed time or free disk space cross the
+limits in `ExtractionLimits` (defaults: 10 GiB, 100,000 files, 600 s, 1 GiB free). Limits live in the
+`limits:` section of `find-pan-conf.yaml` and can be overridden per extractor. A breach is an
+`ARCHIVE-FAILED` skip (partial members are still scanned). Arguments now substitute only `{archive}`
+and `{tempdir}`. Covered by `tests/test_limits.py` and `tests/test_hardening.py`.
+
+---

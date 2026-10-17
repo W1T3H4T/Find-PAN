@@ -41,6 +41,25 @@
 #   compression method.
 #
 # ---------------------------------------------------------------------------
+# Extraction limits (decompression-bomb protection)
+# ---------------------------------------------------------------------------
+#
+# While an extractor runs, find-pan watches its output directory and stops
+# (kills) the tool if it exceeds any of these limits.  Whatever was already
+# extracted is still scanned, and the archive is reported as ARCHIVE-FAILED.
+# The defaults are generous; raise or lower them here for all extractors, or
+# add any of the same keys to a single extractor below to override it.
+#
+#   max_extracted_bytes  total size of the extracted files        (default 10 GiB)
+#   max_files            number of extracted files and folders    (default 100000)
+#   timeout_seconds      wall-clock time for one extraction       (default 600)
+#   min_free_bytes       stop if free disk space falls below this (default 1 GiB)
+#
+limits:
+  max_extracted_bytes: 10737418240
+  max_files: 100000
+  timeout_seconds: 600
+  min_free_bytes: 1073741824
 
 extractors:
   tar:

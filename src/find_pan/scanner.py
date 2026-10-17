@@ -6,6 +6,7 @@ It classifies the file by content, then skips it, expands it (archives), or
 scans it as text.
 """
 
+import hashlib
 import os
 from dataclasses import dataclass
 from typing import Callable, Iterable
@@ -15,7 +16,7 @@ from find_pan.detectors import scan_line
 from find_pan.errors import ConfigError, ExtractorUnavailable, ExtractorError
 from find_pan.filetypes import FileKind, classify
 from find_pan.logging_setup import Loggers
-from find_pan.models import SkipReason
+from find_pan.models import ExtractionLimits, SkipReason
 from find_pan.reporting import Reporter
 from find_pan.settings import Settings
 
@@ -43,6 +44,7 @@ class Scanner:
         reporter: Reporter,
         loggers: Loggers,
         load_extractors: Callable[[], dict] | None = None,
+        load_limits: Callable[[], ExtractionLimits] | None = None,
     ) -> None:
         self.settings = settings
         self.patterns = patterns
@@ -51,6 +53,10 @@ class Scanner:
         self.problems: list[Problem] = []
         self._load_extractors = load_extractors
         self._extractors: dict | None = None
+        self._load_limits = load_limits
+        self._limits: ExtractionLimits | None = None
+        #   Content digests of the archives currently being expanded (outermost first).
+        self._expanding: list[str] = []
 
     # -- entry points ------------------------------------------------------
 
@@ -97,12 +103,21 @@ class Scanner:
 
     # -- helpers -------------------------------------------------------------
 
-    def _walk(self, directory: str) -> None:
+    def _walk(self, directory: str, extracted: bool = False) -> None:
+        """Process every file under *directory*.
+
+        Inside an extracted tree symbolic links are never followed: a hostile
+        archive could point one at a file outside the extraction directory.
+        """
         self.loggers.trace.info("Scanning directory '%s' ...", directory)
         for root, _, files in os.walk(directory):
             self.loggers.pan.info("Scanning directory '%s' ...", root)
             for name in files:
-                self.process_file(os.path.join(root, name))
+                path = os.path.join(root, name)
+                if extracted and os.path.islink(path):
+                    self._skip(path, SkipReason.SYMLINK, "symbolic link inside an archive is not followed")
+                    continue
+                self.process_file(path)
 
     def _scan_text(self, file_path: str) -> None:
         try:
@@ -128,7 +143,41 @@ class Scanner:
                 self._extractors = {}
         return self._extractors
 
+    def _limits_config(self) -> ExtractionLimits:
+        if self._limits is None:
+            try:
+                self._limits = self._load_limits() if self._load_limits else ExtractionLimits()
+            except (ConfigError, FileNotFoundError, ValueError, OSError) as error:
+                self.problems.append(Problem("warning", f"Extraction limits unavailable, using defaults: {error}"))
+                self._limits = ExtractionLimits()
+        return self._limits
+
+    @staticmethod
+    def _digest(path: str) -> str:
+        sha = hashlib.sha256()
+        with open(path, "rb") as handle:
+            for block in iter(lambda: handle.read(1 << 20), b""):
+                sha.update(block)
+        return sha.hexdigest()
+
     def _expand(self, archive_path: str, archive_type: str | None) -> None:
+        try:
+            digest = self._digest(archive_path)
+        except OSError as error:
+            self._skip(archive_path, SkipReason.UNREADABLE, str(error))
+            return
+        if digest in self._expanding:
+            #   An archive found inside its own expansion would recurse forever.
+            self._skip(archive_path, SkipReason.ARCHIVE_FAILED,
+                       "archive contains itself (recursive archive)", "error")
+            return
+        self._expanding.append(digest)
+        try:
+            self._expand_unchecked(archive_path, archive_type)
+        finally:
+            self._expanding.pop()
+
+    def _expand_unchecked(self, archive_path: str, archive_type: str | None) -> None:
         try:
             with extract_archive(
                 archive_path,
@@ -136,9 +185,10 @@ class Scanner:
                 self.loggers.trace,
                 archive_type=archive_type,
                 verbose=self.settings.verbose,
+                limits=self._limits_config(),
             ) as directory:
                 self.reporter.archive_expanded()
-                self._walk(directory)
+                self._walk(directory, extracted=True)
         except ExtractorUnavailable as error:
             self._skip(archive_path, SkipReason.ARCHIVE_NO_TOOL, str(error), "warning")
         except ExtractorError as error:
@@ -147,4 +197,5 @@ class Scanner:
     def _skip(self, path: str, reason: SkipReason, detail: str = "", severity: str | None = None) -> None:
         self.reporter.skip(path, reason, detail)
         if severity is not None:
-            self.problems.append(Problem(severity, f"{path}: {detail}" if detail else path))
+            message = f"{path}: {detail}" if detail else path
+            self.problems.append(Problem(severity, self.reporter.clean(message)))

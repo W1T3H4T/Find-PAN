@@ -94,7 +94,7 @@ def test_archive_is_detected_by_content_expanded_and_its_members_scanned(build, 
 def test_nested_archives_expand_through_the_same_processor(build, tmp_path, monkeypatch):
     outer = zip_stub(tmp_path / "outer.zip")
     middle = folder_with(tmp_path, "middle")
-    zip_stub(middle / "inner.zip")
+    (middle / "inner.zip").write_bytes(ZIP_MAGIC + b"inner")   # differs from the outer archive
     deepest = folder_with(tmp_path, "deepest", **{"deep.txt": f"card {SECOND_PAN}\n"})
     fake_extractor(monkeypatch, lambda path: middle if path.endswith("outer.zip") else deepest)
     scanner, reporter, sink = build(load_extractors=lambda: {"zip": {}})
