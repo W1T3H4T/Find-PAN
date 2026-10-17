@@ -19,3 +19,7 @@ class LoggingSetupError(FindPanError):
 
 class ExtractorError(FindPanError):
     """An archive could not be extracted."""
+
+
+class ExtractorUnavailable(ExtractorError):
+    """No usable extractor exists for an archive (unknown type, no entry, tool not installed)."""

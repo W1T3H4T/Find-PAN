@@ -15,6 +15,13 @@ from find_pan.redact import RedactedMatch, Redactor
 
 CSV_FIELDS = ["filename", "line_number", "offset", "pattern_name", "data_type", "matched_data"]
 _LOG_FORMAT = "%s:%s:%s->%s (%s), %s: %s"
+#   The summary lists at most this many skipped files; the log has them all.
+MAX_LISTED_SKIPS = 200
+#   Skips that mean requested content was not scanned: logged as warnings.
+_WARNING_SKIPS = (
+    SkipReason.NOT_FOUND, SkipReason.NOT_A_FILE, SkipReason.ARCHIVE_NO_TOOL,
+    SkipReason.ARCHIVE_FAILED, SkipReason.UNREADABLE,
+)
 
 
 def sanitize_for_ascii(value: str) -> str:
@@ -142,6 +149,7 @@ class Reporter:
         self._trace = trace_logger
         self._report_delta = report_delta
         self._closed = False
+        self._skipped: list[tuple[str, SkipReason, str]] = []
 
     def report(self, match) -> None:
         """Count *match*, redact it once, and emit it to the sinks that accept it."""
@@ -163,10 +171,16 @@ class Reporter:
                 self.stats.skipped_files,
             )
 
-    def skip(self, path: str, reason: SkipReason) -> None:
-        """Record that *path* was not scanned."""
-        self._trace.debug("Skipped %s (%s)", path, reason.value)
+    def skip(self, path: str, reason: SkipReason, detail: str = "") -> None:
+        """Record, log and remember (for the summary) that *path* was not scanned."""
+        level = logging.WARNING if reason in _WARNING_SKIPS else logging.INFO
+        self._trace.log(level, "Skipped [%s] %s%s", reason.value, path, f" - {detail}" if detail else "")
         self.stats.skipped(reason)
+        self._skipped.append((path, reason, detail))
+
+    def archive_expanded(self) -> None:
+        """Record that an archive was extracted and its contents processed."""
+        self.stats.archive_expanded()
 
     def summary_lines(self, log_dir: str) -> list[str]:
         """Return the end-of-run summary, one string per line."""
@@ -198,12 +212,23 @@ class Reporter:
         ]
         if stats.unreadable:
             lines.append(f"Unreadable {stats.unreadable} Files.")
+        if stats.archives_expanded:
+            lines.append(f"Archives expanded: {stats.archives_expanded}")
+        if stats.archives_skipped:
+            lines.append(f"Archives skipped (no tool or failed): {stats.archives_skipped}")
         lines += [
             "",
             "Scan complete.",
             "",
             f"Log files are located in: {log_dir}",
         ]
+        if self._skipped:
+            lines += ["", "-- Skipped Files --"]
+            for path, reason, detail in self._skipped[:MAX_LISTED_SKIPS]:
+                lines.append(f"[{reason.value}] {path}" + (f" - {detail}" if detail else ""))
+            hidden = len(self._skipped) - MAX_LISTED_SKIPS
+            if hidden > 0:
+                lines.append(f"... and {hidden} more (see the log)")
         return lines
 
     def close(self) -> None:

@@ -22,7 +22,7 @@ def _clean_loggers():
 
 
 def make_settings(tmp_path, **overrides):
-    values = dict(log_dir=str(tmp_path / "logs"), tar_tmp=str(tmp_path / "tar-tmp"))
+    values = dict(log_dir=str(tmp_path / "logs"))
     values.update(overrides)
     return Settings(**values)
 
@@ -31,10 +31,9 @@ def test_generate_logfile_name_uses_basename_and_date():
     assert re.fullmatch(r"Find-PAN-\d{2}[A-Z][a-z]{2}\d{4}\.log", logging_setup.generate_logfile_name("Find-PAN"))
 
 
-def test_creates_log_and_tar_tmp_directories(tmp_path):
+def test_creates_log_directory(tmp_path):
     logging_setup.build_loggers(make_settings(tmp_path))
     assert (tmp_path / "logs").is_dir()
-    assert (tmp_path / "tar-tmp").is_dir()
 
 
 def test_creates_pan_and_trace_files_and_removes_prior_ones(tmp_path):
@@ -92,7 +91,7 @@ def test_unwritable_log_dir_raises_logging_setup_error(tmp_path):
     blocker = tmp_path / "not-a-dir"
     blocker.write_text("file", encoding="utf-8")
     with pytest.raises(LoggingSetupError):
-        logging_setup.build_loggers(Settings(log_dir=str(blocker), tar_tmp=str(tmp_path / "t")))
+        logging_setup.build_loggers(Settings(log_dir=str(blocker)))
 
 
 def test_log_files_are_written_as_utf8(tmp_path):

@@ -60,8 +60,6 @@ def build_loggers(settings: Settings) -> Loggers:
     """
     try:
         os.makedirs(settings.log_dir, exist_ok=True)
-        if settings.tar_tmp:
-            os.makedirs(settings.tar_tmp, exist_ok=True)
 
         formatter = logging.Formatter(_FORMAT)
         trace_level = logging.DEBUG if settings.debug else logging.INFO

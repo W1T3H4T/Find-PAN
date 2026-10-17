@@ -7,12 +7,12 @@ from dataclasses import dataclass
 class Settings:
     """Every option the scanner reads.
 
-    ``archive`` is the value of the ``--tar`` command-line flag.
+    ``files`` holds the ``--file`` entries; archives are detected and expanded
+    automatically for both ``--path`` and ``--file``.
     """
 
     path: str | None = None
-    archive: str | None = None
-    tar_tmp: str = ""
+    files: tuple[str, ...] = ()
     log_dir: str = ""
     rgx_patterns: str | None = None
     rgx_prefix: bool = False

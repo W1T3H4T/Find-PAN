@@ -7,7 +7,7 @@ from contextlib import contextmanager
 import pytest
 
 from find_pan import scanner as scanner_module
-from find_pan.errors import ExtractorError
+from find_pan.filetypes import FileClassification, FileKind
 from find_pan.logging_setup import Loggers
 from find_pan.models import MatchKind, ScanStats
 from find_pan.redact import Redactor
@@ -57,7 +57,7 @@ def test_scan_file_reports_each_hit_once(build, tmp_path):
     target = tmp_path / "a.txt"
     target.write_text(f"one {VALID_PAN}\ntwo {SECOND_PAN} and {VALID_PAN}\n", encoding="utf-8")
     scanner, reporter, sink = build()
-    scanner.scan_file(str(target))
+    scanner.process_file(str(target))
     assert len(kinds(sink, MatchKind.PAN)) == 3
     assert reporter.stats.files == 1
 
@@ -66,7 +66,7 @@ def test_line_limit_scans_exactly_limit_lines(build, tmp_path):
     target = tmp_path / "a.txt"
     target.write_text(f"card {VALID_PAN}\n" * 6, encoding="utf-8")
     scanner, _, sink = build(line_limit=3)
-    scanner.scan_file(str(target))
+    scanner.process_file(str(target))
     assert len(kinds(sink, MatchKind.PAN)) == 3
 
 
@@ -75,17 +75,17 @@ def test_empty_file_and_no_trailing_newline_and_invalid_utf8(build, tmp_path):
     (tmp_path / "nonl.txt").write_bytes(f"card {VALID_PAN}".encode())
     (tmp_path / "bad.txt").write_bytes(b"\xfe\xfd caf\xe9 " + VALID_PAN.encode() + b"\n")
     scanner, reporter, sink = build()
-    scanner.scan_directory(str(tmp_path))
+    scanner.scan_path(str(tmp_path))
     assert reporter.stats.files == 3
     assert len(kinds(sink, MatchKind.PAN)) == 2
 
 
 def test_binary_file_skipped_when_skip_binary_and_counted(build, tmp_path, monkeypatch):
-    monkeypatch.setattr(scanner_module, "skip_reason", lambda *a, **k: scanner_module.SkipReason.BINARY)
+    monkeypatch.setattr(scanner_module, "classify", lambda *a, **k: FileClassification(FileKind.BINARY))
     target = tmp_path / "a.bin"
     target.write_text(f"card {VALID_PAN}\n", encoding="utf-8")
     scanner, reporter, sink = build(skip_binary=True)
-    scanner.scan_file(str(target))
+    scanner.process_file(str(target))
     assert sink.views == []
     assert reporter.stats.skipped_files == 1 and reporter.stats.binary == 1
     assert reporter.stats.files == 0
@@ -105,7 +105,7 @@ def test_unreadable_file_is_skipped_and_scan_continues(build, tmp_path, monkeypa
 
     monkeypatch.setattr(builtins, "open", flaky_open)
     scanner, reporter, sink = build()
-    scanner.scan_directory(str(tmp_path))
+    scanner.scan_path(str(tmp_path))
     assert [view.pan for view in kinds(sink, MatchKind.PAN)] == [SECOND_PAN]
     assert reporter.stats.unreadable == 1
 
@@ -120,50 +120,10 @@ def test_scan_directory_walks_nested_directories(build, tmp_path):
     assert {view.pan for view in kinds(sink, MatchKind.PAN)} == {VALID_PAN, SECOND_PAN}
 
 
-def test_scan_archive_scans_extracted_files_and_cleans_up(build, tmp_path, monkeypatch):
-    extracted = tmp_path / "extracted"
-    extracted.mkdir()
-    (extracted / "safe.txt").write_text(f"card {VALID_PAN}\n", encoding="utf-8")
-    state = {}
-
-    @contextmanager
-    def fake_extract(archive_path, extractor_config, tar_tmp, logger, **kwargs):
-        state["args"] = (archive_path, extractor_config, tar_tmp)
-        yield str(extracted)
-        state["cleaned"] = True
-
-    monkeypatch.setattr(scanner_module, "extract_archive", fake_extract)
-    scanner, _, sink = build(tar_tmp=str(tmp_path / "tmp"))
-    scanner.extractor_config = {"tar": {}}
-    scanner.scan_archive(str(tmp_path / "a.tar"))
-    assert len(kinds(sink, MatchKind.PAN)) == 1
-    assert state["cleaned"] and state["args"][2] == str(tmp_path / "tmp")
 
 
-def test_scan_archive_extractor_error_is_logged_not_raised(build, tmp_path, monkeypatch, caplog):
-    @contextmanager
-    def failing_extract(*args, **kwargs):
-        raise ExtractorError("Extractor failed for x")
-        yield  # pragma: no cover
-
-    monkeypatch.setattr(scanner_module, "extract_archive", failing_extract)
-    scanner, _, sink = build()
-    with caplog.at_level(logging.ERROR, logger="test.scan.pan"):
-        scanner.scan_archive(str(tmp_path / "a.tar"))
-    assert "Extractor failed for x" in caplog.text
-    assert sink.views == []
 
 
-def test_extraction_error_is_recorded_for_the_caller(build, tmp_path, monkeypatch):
-    @contextmanager
-    def failing_extract(*args, **kwargs):
-        raise ExtractorError("Extractor failed for x")
-        yield  # pragma: no cover
-
-    monkeypatch.setattr(scanner_module, "extract_archive", failing_extract)
-    scanner, _, _ = build()
-    scanner.scan_archive(str(tmp_path / "a.tar"))
-    assert scanner.extraction_errors == ["Extractor failed for x"]
 
 
 def test_unreadable_file_counted_as_unreadable_not_skipped(build, tmp_path, monkeypatch):
@@ -178,7 +138,7 @@ def test_unreadable_file_counted_as_unreadable_not_skipped(build, tmp_path, monk
 
     monkeypatch.setattr(builtins, "open", deny)
     scanner, reporter, _ = build()
-    scanner.scan_file(str(target))
+    scanner.process_file(str(target))
     assert reporter.stats.unreadable == 1
     assert reporter.stats.skipped_files == 0
     assert reporter.stats.files == 0

@@ -67,7 +67,6 @@ def _positive_int(value: str) -> int:
 # autopep8: off
 def build_parser() -> argparse.ArgumentParser:
     log_dir = os.path.join(os.path.expanduser("~"), "Find-PAN-Logs")
-    tar_dir = os.path.join(log_dir, "tar-temp")
     parser = argparse.ArgumentParser(
         prog=PROGRAM_NAME,
         description="Scan for PCI PAN and TRACK data patterns.",
@@ -76,9 +75,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     #   Mutable processing (change our runtime/detection behavior)
     parser.add_argument( "--path", help="Filesystem pathname to scan.", type=str, default=None)
-    parser.add_argument( "--tar", help="Archive file path (tar, tar.gz, zip, 7z, gz).", type=str, default=None)
-    parser.add_argument( "--tar-tmp", help="Parent directory for temporary archive extraction directories.",
-                        default=tar_dir)
+    parser.add_argument( "--file", help="Files to scan; any number, e.g. --file a.txt b.zip c.tar.gz. "
+                        "Archives are detected by content, expanded with the configured tools, and scanned.",
+                        nargs="+", action="extend", metavar="FILE", default=[])
     parser.add_argument( "--log-dir", help="Directory for log files.", default=log_dir)
     parser.add_argument( "--rgx-patterns", help="JSON file containing PAN and TRACK regular expressions.",
                         type=str, default=None)
@@ -108,8 +107,7 @@ def build_parser() -> argparse.ArgumentParser:
 def _settings_from(namespace: argparse.Namespace) -> Settings:
     return Settings(
         path=namespace.path,
-        archive=namespace.tar,
-        tar_tmp=namespace.tar_tmp,
+        files=tuple(namespace.file),
         log_dir=namespace.log_dir,
         rgx_patterns=namespace.rgx_patterns,
         rgx_prefix=namespace.rgx_prefix,
@@ -185,7 +183,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             print_exception_info("Exception test called")
 
     settings = _settings_from(namespace)
-    if not (settings.path or (settings.archive and settings.tar_tmp)):
+    if not (settings.path or settings.files):
         parser.print_help()
         return 1
 
@@ -205,9 +203,6 @@ def _run(namespace: argparse.Namespace, settings: Settings, argv: Sequence[str])
     """Load configuration, build the reporting pipeline and scan."""
     if settings.rgx_patterns is None:
         settings = replace(settings, rgx_patterns=find_json_regex_config())
-    extractor_config = None
-    if settings.archive and not settings.path:
-        extractor_config = load_extractor_config(find_extractor_config_path())
 
     loggers = build_loggers(settings)
     patterns = _load_patterns(settings, loggers)
@@ -222,15 +217,17 @@ def _run(namespace: argparse.Namespace, settings: Settings, argv: Sequence[str])
         sinks.append(CsvSink(settings.csv))
     stats = ScanStats()
     reporter = Reporter(Redactor(settings.mask), sinks, stats, loggers.trace, settings.report_delta)
-    scanner = Scanner(settings, patterns, reporter, loggers, extractor_config)
+    scanner = Scanner(
+        settings, patterns, reporter, loggers,
+        lambda: load_extractor_config(find_extractor_config_path()),
+    )
 
     status = 0
     stats.start()
     try:
+        scanner.scan_files(settings.files)
         if settings.path:
             scanner.scan_path(settings.path)
-        else:
-            scanner.scan_archive(settings.archive)
     except KeyboardInterrupt:
         loggers.trace.error("KeyboardInterrupt caught. Exiting.")
         status = 1
@@ -242,9 +239,10 @@ def _run(namespace: argparse.Namespace, settings: Settings, argv: Sequence[str])
             #   Report, but never replace an exception already in flight.
             print(f"Error: closing outputs failed: {error}", file=sys.stderr)
             status = 1
-    for message in scanner.extraction_errors:
-        print(f"Error: {message}", file=sys.stderr)
-        status = 1
+    for problem in scanner.problems:
+        print(f"{problem.severity.capitalize()}: {problem.message}", file=sys.stderr)
+    if stats.failures:
+        status = 1       # a requested file or archive was never scanned
     for line in reporter.summary_lines(settings.log_dir):
         loggers.trace.info("%s", line)
     return status

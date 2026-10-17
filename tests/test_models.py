@@ -10,8 +10,8 @@ from find_pan import errors, models, settings, version
 def test_settings_defaults_and_frozen():
     defaults = settings.Settings()
     assert defaults.path is None
-    assert defaults.archive is None
-    assert defaults.tar_tmp == ""
+    assert defaults.files == ()
+    assert not hasattr(defaults, "archive") and not hasattr(defaults, "tar_tmp")
     assert defaults.log_dir == ""
     assert defaults.rgx_patterns is None
     assert defaults.line_limit == 0
@@ -65,3 +65,20 @@ def test_format_version():
 def test_errors_share_base():
     for name in ("ConfigError", "LoggingSetupError", "ExtractorError"):
         assert issubclass(getattr(errors, name), errors.FindPanError)
+
+
+def test_stats_archive_and_new_skip_reasons():
+    stats = models.ScanStats()
+    stats.archive_expanded()
+    stats.skipped(models.SkipReason.ARCHIVE_NO_TOOL)
+    stats.skipped(models.SkipReason.ARCHIVE_FAILED)
+    stats.skipped(models.SkipReason.NOT_FOUND)
+    stats.skipped(models.SkipReason.NOT_A_FILE)
+    assert stats.archives_expanded == 1
+    assert stats.archives_skipped == 2
+    assert stats.skipped_files == 0          # binary + executable only, as before
+    assert stats.failures == 3               # ARCHIVE_FAILED, NOT_FOUND, NOT_A_FILE
+
+
+def test_extractor_unavailable_is_an_extractor_error():
+    assert issubclass(errors.ExtractorUnavailable, errors.ExtractorError)

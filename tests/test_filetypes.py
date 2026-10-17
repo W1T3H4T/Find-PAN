@@ -7,7 +7,6 @@ import types
 import pytest
 
 from find_pan import filetypes
-from find_pan.models import SkipReason
 
 LOGGER = logging.getLogger("test.filetypes")
 
@@ -27,11 +26,6 @@ def install_magic(monkeypatch, mime=None, error=None):
     monkeypatch.setitem(sys.modules, "magic", module)
 
 
-def test_skip_reason_none_when_skip_binary_false(tmp_path):
-    target = tmp_path / "f.bin"
-    target.write_bytes(b"\x00\xff" * 100)
-    assert filetypes.skip_reason(str(target), False, LOGGER) is None
-
 
 def test_binary_content_needs_both_nul_and_ff(tmp_path):
     both = tmp_path / "both.bin"
@@ -45,19 +39,12 @@ def test_binary_content_needs_both_nul_and_ff(tmp_path):
     assert not filetypes.has_binary_content(str(text))
 
 
-def test_skip_reason_binary_when_skip_binary(tmp_path, monkeypatch):
-    install_magic(monkeypatch, mime="text/plain")
-    target = tmp_path / "both.bin"
-    target.write_bytes(b"abc\x00def\xffghi" + b"x" * 20)
-    assert filetypes.skip_reason(str(target), True, LOGGER) is SkipReason.BINARY
-
 
 def test_executable_detected_via_stubbed_magic(tmp_path, monkeypatch):
     install_magic(monkeypatch, mime="application/x-dosexec")
     target = tmp_path / "prog.exe"
     target.write_bytes(b"MZ")
     assert filetypes.is_executable(str(target), LOGGER)
-    assert filetypes.skip_reason(str(target), True, LOGGER) is SkipReason.EXECUTABLE
 
 
 def test_text_file_not_executable(tmp_path, monkeypatch):
@@ -65,7 +52,6 @@ def test_text_file_not_executable(tmp_path, monkeypatch):
     target = tmp_path / "a.txt"
     target.write_text("hi", encoding="utf-8")
     assert not filetypes.is_executable(str(target), LOGGER)
-    assert filetypes.skip_reason(str(target), True, LOGGER) is None
 
 
 def test_magic_import_error_returns_false_and_warns(tmp_path, monkeypatch, caplog):

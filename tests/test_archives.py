@@ -3,14 +3,24 @@
 import gzip
 import logging
 import subprocess
+import tempfile
 from pathlib import Path
 
 import pytest
 
 from find_pan import archives
-from find_pan.errors import ExtractorError
+from find_pan.errors import ExtractorError, ExtractorUnavailable
 
 LOGGER = logging.getLogger("test.archives")
+
+
+@pytest.fixture(autouse=True)
+def system_temp(tmp_path, monkeypatch):
+    """Point the system temp directory at tmp_path so cleanup can be observed."""
+    root = tmp_path / "system-temp"
+    root.mkdir()
+    monkeypatch.setattr(tempfile, "tempdir", str(root))
+    return root
 
 
 def tar_config(**overrides):
@@ -34,25 +44,34 @@ class Runner:
         return subprocess.CompletedProcess(cmd, 0, "", "")
 
 
-def test_extract_archive_yields_dir_and_removes_it(tmp_path):
+def test_extract_archive_uses_system_temp_and_removes_it(tmp_path, system_temp):
     def effect(cmd):
         (Path(cmd[-1]) / "safe.txt").write_text("hello", encoding="utf-8")
 
     runner = Runner(effect)
     with archives.extract_archive(str(tmp_path / "a.tar"), tar_config(command="fake"),
-                                  str(tmp_path / "tmp"), LOGGER, runner=runner) as directory:
+                                  LOGGER, runner=runner) as directory:
+        assert Path(directory).parent == system_temp
         assert (Path(directory) / "safe.txt").read_text(encoding="utf-8") == "hello"
         kept = directory
     assert not Path(kept).exists()
-    assert runner.commands[0][-2:] == [str(tmp_path / "a.tar"), kept]
+    assert list(system_temp.iterdir()) == []
 
 
 def test_extract_archive_formats_args_with_archive_and_tempdir(tmp_path):
     runner = Runner()
     config = tar_config(command="fake", args=["-x", "{archive}", "-C", "{tempdir}"])
-    with archives.extract_archive(str(tmp_path / "a.tar"), config, str(tmp_path / "tmp"),
-                                  LOGGER, runner=runner) as directory:
+    with archives.extract_archive(str(tmp_path / "a.tar"), config, LOGGER, runner=runner) as directory:
         assert runner.commands[0][1:] == ["-x", str(tmp_path / "a.tar"), "-C", directory]
+
+
+def test_archive_type_argument_overrides_the_extension(tmp_path):
+    """Content, not the extension, picks the extractor."""
+    runner = Runner()
+    config = {"zip": {"command": "unzip", "args": ["{archive}", "{tempdir}"]}}
+    with archives.extract_archive(str(tmp_path / "mystery.dat"), config, LOGGER,
+                                  archive_type="zip", runner=runner):
+        assert "unzip" in Path(runner.commands[0][0]).name.lower()
 
 
 def test_extract_archive_copies_archive_when_configured(tmp_path):
@@ -61,60 +80,105 @@ def test_extract_archive_copies_archive_when_configured(tmp_path):
         handle.write(b"data")
     runner = Runner()
     config = {"gzip": {"command": "gzip", "args": ["-d", "{archive}"], "copy_archive_to_tempdir": True}}
-    with archives.extract_archive(str(gz_path), config, str(tmp_path / "tmp"), LOGGER,
-                                  runner=runner) as directory:
+    with archives.extract_archive(str(gz_path), config, LOGGER, runner=runner) as directory:
         copied = Path(runner.commands[0][-1])
         assert copied.name == "dump.gz" and copied.parent == Path(directory)
         assert copied.exists()
     assert not copied.parent.exists()
 
 
-def test_extract_archive_removes_dir_when_runner_fails(tmp_path):
-    seen = {}
-
+def test_failing_tool_raises_extractor_error_and_removes_dir(tmp_path, system_temp):
     def effect(cmd):
-        seen["dir"] = cmd[-1]
         raise subprocess.CalledProcessError(2, cmd, stderr="broken archive")
 
     runner = Runner(effect)
-    with pytest.raises(ExtractorError, match="Extractor failed.*broken archive"):
+    with pytest.raises(ExtractorError, match="Extractor failed.*broken archive") as info:
         with archives.extract_archive(str(tmp_path / "a.tar"), tar_config(command="fake"),
-                                      str(tmp_path / "tmp"), LOGGER, runner=runner):
+                                      LOGGER, runner=runner):
             pass
-    assert not Path(seen["dir"]).exists()
+    assert not isinstance(info.value, ExtractorUnavailable)
+    assert list(system_temp.iterdir()) == []
 
 
-def test_unsupported_type_raises_extractor_error(tmp_path):
-    with pytest.raises(ExtractorError, match="Unsupported archive type"):
-        with archives.extract_archive(str(tmp_path / "data.rar"), {}, str(tmp_path), LOGGER):
-            pass
-
-
-def test_missing_extractor_raises_extractor_error(tmp_path):
-    with pytest.raises(ExtractorError, match="No extractor configured"):
-        with archives.extract_archive(str(tmp_path / "a.zip"), {"tar": {}}, str(tmp_path), LOGGER):
+def test_unknown_type_is_unavailable(tmp_path):
+    with pytest.raises(ExtractorUnavailable, match="Unsupported archive type"):
+        with archives.extract_archive(str(tmp_path / "data.rar"), {}, LOGGER):
             pass
 
 
-def test_incomplete_extractor_raises_extractor_error(tmp_path):
-    with pytest.raises(ExtractorError, match="Incomplete extractor configuration"):
-        with archives.extract_archive(str(tmp_path / "a.tar"), tar_config(args=[]), str(tmp_path), LOGGER):
+def test_missing_extractor_entry_is_unavailable(tmp_path):
+    with pytest.raises(ExtractorUnavailable, match="No extractor configured"):
+        with archives.extract_archive(str(tmp_path / "a.zip"), {"tar": {}}, LOGGER):
             pass
 
 
-def test_missing_command_raises_extractor_error(tmp_path, monkeypatch):
+def test_incomplete_extractor_is_unavailable(tmp_path):
+    with pytest.raises(ExtractorUnavailable, match="Incomplete extractor configuration"):
+        with archives.extract_archive(str(tmp_path / "a.tar"), tar_config(args=[]), LOGGER):
+            pass
+
+
+def test_missing_command_is_unavailable(tmp_path, monkeypatch, system_temp):
     monkeypatch.setattr(archives.shutil, "which", lambda command: None)
     runner = Runner(error=FileNotFoundError("nope"))
-    with pytest.raises(ExtractorError, match="Extractor command not found"):
+    with pytest.raises(ExtractorUnavailable, match="Extractor command not found"):
         with archives.extract_archive(str(tmp_path / "a.tar"), tar_config(command="not-installed"),
-                                      str(tmp_path / "tmp"), LOGGER, runner=runner):
+                                      LOGGER, runner=runner):
             pass
+    assert list(system_temp.iterdir()) == []
 
 
-def test_copy_failure_raises_extractor_error(tmp_path):
+def test_copy_failure_raises_extractor_error(tmp_path, system_temp):
     config = {"gzip": {"command": "gzip", "args": ["-d", "{archive}"], "copy_archive_to_tempdir": True}}
     with pytest.raises(ExtractorError, match="Cannot copy"):
-        with archives.extract_archive(str(tmp_path / "missing.gz"), config, str(tmp_path / "tmp"), LOGGER,
-                                      runner=Runner()):
+        with archives.extract_archive(str(tmp_path / "missing.gz"), config, LOGGER, runner=Runner()):
             pass
-    assert not list((tmp_path / "tmp").glob("find-pan-*"))
+    assert list(system_temp.iterdir()) == []
+
+
+def run_tar(tmp_path, monkeypatch, windows, gnu, command="tar"):
+    monkeypatch.setattr(archives, "_IS_WINDOWS", windows)
+    monkeypatch.setattr(archives, "_is_gnu_tar", lambda path: gnu)
+    runner = Runner()
+    with archives.extract_archive(str(tmp_path / "a.tar"), tar_config(command=command), LOGGER, runner=runner):
+        pass
+    return runner.commands[0]
+
+
+def test_gnu_tar_on_windows_gets_force_local(tmp_path, monkeypatch):
+    """GNU tar treats a drive letter as a remote host; --force-local makes drive paths work."""
+    command = run_tar(tmp_path, monkeypatch, windows=True, gnu=True)
+    assert command[1] == "--force-local"
+
+
+def test_force_local_not_added_for_other_tars_or_platforms(tmp_path, monkeypatch):
+    assert "--force-local" not in run_tar(tmp_path, monkeypatch, windows=True, gnu=False)
+    assert "--force-local" not in run_tar(tmp_path, monkeypatch, windows=False, gnu=True)
+
+
+def test_force_local_not_duplicated_when_already_configured(tmp_path, monkeypatch):
+    monkeypatch.setattr(archives, "_IS_WINDOWS", True)
+    monkeypatch.setattr(archives, "_is_gnu_tar", lambda path: True)
+    runner = Runner()
+    config = tar_config(args=["--force-local", "-xf", "{archive}", "-C", "{tempdir}"])
+    with archives.extract_archive(str(tmp_path / "a.tar"), config, LOGGER, runner=runner):
+        pass
+    assert runner.commands[0].count("--force-local") == 1
+
+
+def test_non_tar_command_is_never_probed(tmp_path, monkeypatch):
+    def fail(path):
+        raise AssertionError("probed a non-tar command")
+
+    monkeypatch.setattr(archives, "_IS_WINDOWS", True)
+    monkeypatch.setattr(archives, "_is_gnu_tar", fail)
+    runner = Runner()
+    config = {"zip": {"command": "unzip", "args": ["{archive}", "{tempdir}"]}}
+    with archives.extract_archive(str(tmp_path / "a.zip"), config, LOGGER, runner=runner):
+        pass
+
+
+def test_gnu_tar_on_windows_receives_forward_slash_paths(tmp_path, monkeypatch):
+    command = run_tar(tmp_path, monkeypatch, windows=True, gnu=True)
+    assert "\\" not in " ".join(command[1:])
+    assert command[2].endswith("/a.tar")

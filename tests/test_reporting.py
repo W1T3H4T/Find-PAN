@@ -222,3 +222,53 @@ def test_close_is_idempotent():
     reporter.close()
     reporter.close()
     assert sink.closed
+
+
+def test_skip_is_logged_with_reason_and_detail(caplog):
+    reporter = make_reporter([], logger=logging.getLogger("test.skiplog"))
+    with caplog.at_level(logging.INFO, logger="test.skiplog"):
+        reporter.skip("/a.zip", SkipReason.ARCHIVE_FAILED, "unzip exited 2")
+        reporter.skip("/b.bin", SkipReason.BINARY)
+    failed, binary = caplog.records
+    assert failed.levelno == logging.WARNING
+    assert "/a.zip" in failed.getMessage() and "ARCHIVE-FAILED" in failed.getMessage()
+    assert "unzip exited 2" in failed.getMessage()
+    assert binary.levelno == logging.INFO and "/b.bin" in binary.getMessage()
+
+
+def test_summary_lists_every_skipped_file_with_reason():
+    reporter = make_reporter([])
+    reporter.skip("/missing.txt", SkipReason.NOT_FOUND, "no such file")
+    reporter.skip("/dir", SkipReason.NOT_A_FILE, "is a directory")
+    reporter.skip("/a.7z", SkipReason.ARCHIVE_NO_TOOL, "7z not installed")
+    reporter.skip("/b.bin", SkipReason.BINARY)
+    text = "\n".join(reporter.summary_lines("/logs"))
+    assert "-- Skipped Files --" in text
+    assert "[NOT-FOUND] /missing.txt - no such file" in text
+    assert "[NOT-A-FILE] /dir - is a directory" in text
+    assert "[ARCHIVE-NO-TOOL] /a.7z - 7z not installed" in text
+    assert "[BINARY] /b.bin" in text
+
+
+def test_summary_has_no_skipped_files_section_when_nothing_skipped():
+    assert "-- Skipped Files --" not in "\n".join(make_reporter([]).summary_lines("/logs"))
+
+
+def test_skipped_files_list_is_capped_with_a_pointer_to_the_log():
+    reporter = make_reporter([])
+    for index in range(reporting.MAX_LISTED_SKIPS + 5):
+        reporter.skip(f"/f{index}", SkipReason.BINARY)
+    text = "\n".join(reporter.summary_lines("/logs"))
+    assert f"[BINARY] /f{reporting.MAX_LISTED_SKIPS - 1}" in text
+    assert f"/f{reporting.MAX_LISTED_SKIPS} " not in text and f"/f{reporting.MAX_LISTED_SKIPS}\n" not in text
+    assert "and 5 more" in text
+
+
+def test_summary_archive_lines_only_when_nonzero():
+    reporter = make_reporter([])
+    assert "Archives" not in "\n".join(reporter.summary_lines("/logs"))
+    reporter.archive_expanded()
+    reporter.skip("/x.7z", SkipReason.ARCHIVE_NO_TOOL, "7z not installed")
+    text = "\n".join(reporter.summary_lines("/logs"))
+    assert "Archives expanded: 1" in text
+    assert "Archives skipped (no tool or failed): 1" in text

@@ -20,6 +20,10 @@ class SkipReason(str, Enum):
     BINARY = "BINARY"
     EXECUTABLE = "EXEC"
     UNREADABLE = "UNREADABLE"
+    NOT_FOUND = "NOT-FOUND"
+    NOT_A_FILE = "NOT-A-FILE"
+    ARCHIVE_NO_TOOL = "ARCHIVE-NO-TOOL"
+    ARCHIVE_FAILED = "ARCHIVE-FAILED"
 
 
 @dataclass(frozen=True)
@@ -47,6 +51,8 @@ class ScanStats:
         self.binary = 0
         self.executable = 0
         self.unreadable = 0
+        self.archives_expanded = 0
+        self._skip_reasons: dict[SkipReason, int] = {reason: 0 for reason in SkipReason}
         self._started = 0.0
         self._stopped = 0.0
 
@@ -66,14 +72,30 @@ class ScanStats:
         counted separately: one that fails to open was never scanned, and one
         that fails mid-read stays counted as scanned.
         """
+        self._skip_reasons[reason] += 1
         if reason is SkipReason.UNREADABLE:
             self.unreadable += 1
-            return
-        self.skipped_files += 1
-        if reason is SkipReason.BINARY:
+        elif reason is SkipReason.BINARY:
+            self.skipped_files += 1
             self.binary += 1
         elif reason is SkipReason.EXECUTABLE:
+            self.skipped_files += 1
             self.executable += 1
+
+    def archive_expanded(self) -> None:
+        self.archives_expanded += 1
+
+    @property
+    def archives_skipped(self) -> int:
+        """Archives that were not expanded (no tool available, or the tool failed)."""
+        return (self._skip_reasons[SkipReason.ARCHIVE_NO_TOOL]
+                + self._skip_reasons[SkipReason.ARCHIVE_FAILED])
+
+    @property
+    def failures(self) -> int:
+        """Skips that mean requested content was never scanned (they make the run fail)."""
+        return sum(self._skip_reasons[reason] for reason in (
+            SkipReason.ARCHIVE_FAILED, SkipReason.NOT_FOUND, SkipReason.NOT_A_FILE))
 
     def start(self) -> None:
         self._started = time.time()

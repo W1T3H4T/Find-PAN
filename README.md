@@ -132,7 +132,7 @@ Every match is redacted once by `redact.py` before any sink sees it, so output r
 # Usage
 
 <pre>
-find-pan.py [--path PATH] [--tar TAR] [--temp TEMP] [--log-dir LOG_DIR]
+find-pan.py [--path PATH] [--file FILE [FILE ...]] [--log-dir LOG_DIR]
             [--skip-binary]  [--verbose] [--debug] [--mask] [--log-anti-pan]
 </pre>
 
@@ -140,9 +140,8 @@ find-pan.py [--path PATH] [--tar TAR] [--temp TEMP] [--log-dir LOG_DIR]
 |Switch|Description|
 |-------------------|:-------------------------------------------------------|
 |**-h,--help**      |Show this information and exit.|
-|**--path**         |The filesystem path to scan for PAN and TRACK data (required when no --tar). |
-|**--tar**          |The archive file to scan: `.tar`, `.tar.gz`, `.tgz`, `.tar.bz2`, `.tbz2`, `.tar.xz`, `.txz`, `.zip`, `.jar`, `.war`, `.ear`, `.7z`, or `.gz` (required when no --path).|
-|**--tar-tmp**      |Parent directory for temporary archive extraction directories (required w/ --tar).|
+|**--path**         |A directory to scan for PAN and TRACK data. Archives found in it are detected and expanded (required when no --file).|
+|**--file**         |One or more files to scan, e.g. `--file a.txt b.zip c.tar.gz` (the flag may also be repeated; required when no --path). Only the listed files are processed. A missing path or a directory is reported on stderr and skipped, and the run continues. Archives are detected by content and expanded.|
 |**--log-dir**      |The directory for log files.|
 |**--skip-binary**  |Do not scan (skip) binary files.|
 |**--patterns**     |The JSON file containing PAN and TRACK regular expressions.|
@@ -213,9 +212,9 @@ Scan a directory:
 $ find-pan.py --path /path/to/directory
 </pre>
 
-Scan a tar archive:
+Scan specific files (archives are expanded automatically):
 <pre>
-$ find-pan.py --tar /path/to/archive.tar --temp /path/to/temporary/directory
+$ find-pan.py --file report.txt backup.tar.gz export.zip
 </pre>
 
 Specify a log directory:
@@ -266,8 +265,7 @@ Command-line arguments: ['--path', 'test', '--report-delta', '100', '--skip-bina
 2024-09-15 20:04:44,333 [INFO]: 
 Parameters and Defaults
  --path=test
- --tar=None
- --tar_tmp=/Users/anyone/Find-PAN-Logs/tar-temp
+ --file=[]
  --log_dir=/Users/anyone/Find-PAN-Logs
  --skip_binary=True
  --patterns=/usr/local/Find-PAN/patterns/find-pan-patterns.json
@@ -293,31 +291,33 @@ Parameters and Defaults
 2024-09-15 20:04:44,333 [INFO]: Total matches: 80225
 </pre>
 
-# Example Usage for an Archive Scan
-`--tar` accepts any supported archive format: `.tar`, `.tar.gz`, `.tgz`,
-`.tar.bz2`, `.tbz2`, `.tar.xz`, `.txz`, `.zip`, `.jar`, `.war`, `.ear`,
-`.7z`, and `.gz`.
+# Archives and File Types
+`--path` and `--file` use the same file processor. Each file is classified by its
+**content** (magic bytes), and the extension is only a hint:
 
-On first archive scan the application builds `find-pan-conf.yaml` in your
-config directory by discovering `tar`, `unzip`, `7z`, and `gzip` on `PATH`.
-Edit that file if tools are installed outside `PATH`.
+- **Archive** (tar, tar.gz/bz2/xz, zip including `.jar`/`.war`/`.ear`/Office files, 7z, gzip): expanded
+  into a temporary directory with a locally installed tool, and every member goes back through the
+  processor, so nested archives expand too. The directory is removed afterwards.
+- **Executable or binary** (with `--skip-binary`): skipped.
+- **Anything else**: scanned as text. A text file named `notes.zip` is scanned as text and a note is logged.
+
+The extraction tools (`tar`, `unzip`, `7z`, `gzip`) come from `find-pan-conf.yaml`, which is built the
+first time an archive is met by discovering the tools on `PATH`. Edit it if tools are installed
+elsewhere.
+
+Every skipped file is logged and listed under `-- Skipped Files --` in the end-of-run summary with its
+reason (`NOT-FOUND`, `NOT-A-FILE`, `ARCHIVE-NO-TOOL`, `ARCHIVE-FAILED`, `BINARY`, `EXEC`, `UNREADABLE`).
+A missing extraction tool is a warning; a tool that fails, or a `--file` entry that does not exist,
+makes the exit status 1 after the rest of the run has completed.
 <pre>
-$ uv run python bin/find-pan.py --tar test-archive.tar.gz
+$ uv run python bin/find-pan.py --file test-archive.tar.gz notes.txt
 find-pan.py v3.0.0
-Python 3.12.6 (main, Sep  6 2024, 19:03:47) [Clang 15.0.0 (clang-1500.3.9.4)]
-Command-line arguments: ['--tar', 'test-archive.tar.gz']
-2024-09-16 20:04:44,333 [INFO]: Archive Scan: extracting test-archive.tar.gz as tar into C:\...\find-pan-abcd1234 ...
-2024-09-15 20:04:44,333 [INFO]: Scanned 100 files; matched 37060 PANs, 6260 TRACKs
-2024-09-15 20:04:44,333 [INFO]: Scanned 200 files; matched 62728 PANs, 15521 TRACKs
-2024-09-15 20:04:44,333 [INFO]: Cleaned up temporary extraction directory: C:\...\find-pan-abcd1234
-2024-09-15 20:04:44,333 [INFO]: 
 2024-09-15 20:04:44,333 [INFO]: -- Processing Summary --
-2024-09-15 20:04:44,333 [INFO]: Scanned 202 files.
-2024-09-15 20:04:44,333 [INFO]: Matched 64704 PANs.
-2024-09-15 20:04:44,333 [INFO]: Matched 15521 TRACKs.
-2024-09-15 20:04:44,333 [INFO]: Skipped 69 Anti-PANs.
-2024-09-15 20:04:44,333 [INFO]: Skipped 0 Files
-2024-09-15 20:04:44,333 [INFO]: Total matches: 80225
+2024-09-15 20:04:44,333 [INFO]: PANs Matched  :    64704
+2024-09-15 20:04:44,333 [INFO]: TRACKs Matched:    15521
+2024-09-15 20:04:44,333 [INFO]: Archives expanded: 1
+2024-09-15 20:04:44,333 [INFO]: -- Skipped Files --
+2024-09-15 20:04:44,333 [INFO]: [ARCHIVE-NO-TOOL] inner.7z - Extractor command not found: 7z
 </pre>
 
 # Notes

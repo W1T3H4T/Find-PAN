@@ -245,7 +245,7 @@ def test_random_text_is_found_by_scanner(compiled_patterns, tmp_path):
 
     loggers = Loggers(pan=logging.getLogger("test.gen.pan"), trace=logging.getLogger("test.gen.trace"))
     reporter = Reporter(Redactor(False), [], ScanStats(), loggers.trace, 500)
-    Scanner(Settings(), compiled_patterns, reporter, loggers).scan_file(str(out))
+    Scanner(Settings(), compiled_patterns, reporter, loggers).process_file(str(out))
     stats = reporter.stats
     found = stats.count(MatchKind.PAN) + stats.count(MatchKind.TRACK)
     assert stats.count(MatchKind.BAD_LUHN) == 0

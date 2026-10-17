@@ -8,36 +8,67 @@ import logging
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 from contextlib import contextmanager
+from functools import lru_cache
 from typing import Callable, Iterator
 
 from find_pan.config import EXTRACTOR_CONFIG_FILENAME, detect_archive_type
-from find_pan.errors import ExtractorError
+from find_pan.errors import ExtractorError, ExtractorUnavailable
+
+
+_IS_WINDOWS = sys.platform == "win32"
+
+
+@lru_cache(maxsize=None)
+def _is_gnu_tar(command_path: str) -> bool:
+    """Return whether *command_path* is GNU tar (``tar --version`` says so)."""
+    try:
+        result = subprocess.run(
+            [command_path, "--version"], capture_output=True, text=True, check=False, timeout=10
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return "GNU tar" in result.stdout
+
+
+def _needs_force_local(command_path: str, args: list[str]) -> bool:
+    """GNU tar treats a drive letter as a remote host name; Windows paths need --force-local."""
+    return (
+        _IS_WINDOWS
+        and os.path.splitext(os.path.basename(command_path))[0].lower() in ("tar", "gtar")
+        and "--force-local" not in args
+        and _is_gnu_tar(command_path)
+    )
 
 
 @contextmanager
 def extract_archive(
     archive_path: str,
     extractor_config: dict[str, dict],
-    tar_tmp: str,
     logger: logging.Logger,
+    archive_type: str | None = None,
     runner: Callable = subprocess.run,
     verbose: bool = False,
 ) -> Iterator[str]:
     """Extract *archive_path* into a temporary directory and yield its path.
 
-    The directory and its contents are always removed afterwards.  Raises
-    ``ExtractorError`` for an unsupported type, a missing or incomplete
-    extractor configuration, a missing command, or a failing extraction.
+    The directory (created under the system temp directory) and its contents
+    are always removed afterwards.  *archive_type* is the extractor key found
+    by content detection; when omitted the file extension is used.
+
+    Raises ``ExtractorUnavailable`` when no usable extractor exists (unknown
+    type, no entry, incomplete entry, tool not installed) and ``ExtractorError``
+    when the tool runs but fails.
     """
-    archive_type = detect_archive_type(archive_path)
+    archive_type = archive_type or detect_archive_type(archive_path)
     if archive_type is None:
-        raise ExtractorError(f"Unsupported archive type: {archive_path}")
+        raise ExtractorUnavailable(f"Unsupported archive type: {archive_path}")
 
     extractor = extractor_config.get(archive_type)
     if not extractor:
-        raise ExtractorError(
+        raise ExtractorUnavailable(
             f"No extractor configured for archive type '{archive_type}' ({archive_path}). "
             f"Run the setup script to build {EXTRACTOR_CONFIG_FILENAME}."
         )
@@ -45,13 +76,11 @@ def extract_archive(
     command = extractor.get("command")
     args_template = extractor.get("args", [])
     if not command or not args_template:
-        raise ExtractorError(
+        raise ExtractorUnavailable(
             f"Incomplete extractor configuration for '{archive_type}': missing command or args."
         )
 
-    if tar_tmp:
-        os.makedirs(tar_tmp, exist_ok=True)
-    temp_dir = tempfile.mkdtemp(prefix="find-pan-", dir=tar_tmp or None)
+    temp_dir = tempfile.mkdtemp(prefix="find-pan-")
     try:
         logger.info("Archive Scan: extracting %s as %s into %s ...", archive_path, archive_type, temp_dir)
 
@@ -66,9 +95,16 @@ def extract_archive(
         else:
             archive_for_extractor = archive_path
 
-        cmd = [shutil.which(command) or command] + [
-            arg.format(archive=archive_for_extractor, tempdir=temp_dir) for arg in args_template
-        ]
+        command_path = shutil.which(command) or command
+        archive_arg, tempdir_arg = archive_for_extractor, temp_dir
+        force_local = _needs_force_local(command_path, args_template)
+        if force_local:
+            #   MSYS-based GNU tar also rejects backslashes in these paths.
+            archive_arg, tempdir_arg = archive_arg.replace("\\", "/"), tempdir_arg.replace("\\", "/")
+        args = [arg.format(archive=archive_arg, tempdir=tempdir_arg) for arg in args_template]
+        if force_local:
+            args.insert(0, "--force-local")
+        cmd = [command_path] + args
         if verbose:
             logger.info("Extractor command: %s", " ".join(cmd))
 
@@ -79,7 +115,7 @@ def extract_archive(
                 f"Extractor failed for {archive_path}: {error} (stderr: {error.stderr})"
             ) from error
         except FileNotFoundError as error:
-            raise ExtractorError(
+            raise ExtractorUnavailable(
                 f"Extractor command not found: {command}. "
                 f"Update {EXTRACTOR_CONFIG_FILENAME} with the correct path."
             ) from error

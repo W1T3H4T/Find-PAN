@@ -1,5 +1,6 @@
 """Tests for find_pan.cli."""
 
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -17,29 +18,28 @@ PAN = "4556737586899855"
 def scan_args(tmp_path, *extra):
     scan_dir = tmp_path / "scan"
     scan_dir.mkdir(exist_ok=True)
-    return ["--path", str(scan_dir), "--log-dir", str(tmp_path / "logs"),
-            "--tar-tmp", str(tmp_path / "tar"), *extra]
+    return ["--path", str(scan_dir), "--log-dir", str(tmp_path / "logs"), *extra]
 
 
 def test_parse_args_defaults():
     settings = cli.parse_args([])
     assert isinstance(settings, Settings)
-    assert settings.path is None and settings.archive is None and settings.csv is None
+    assert settings.path is None and settings.csv is None
     assert settings.report_delta == 500 and settings.line_limit == 0
     assert not any([settings.mask, settings.log_anti_pan, settings.debug, settings.verbose,
                     settings.skip_binary, settings.rgx_prefix, settings.exception_test])
     assert settings.log_dir.endswith("Find-PAN-Logs")
-    assert settings.tar_tmp.endswith("tar-temp")
+    assert settings.files == ()
 
 
 def test_parse_args_all_flags():
     settings = cli.parse_args([
-        "--path", "p", "--tar", "a.tar", "--tar-tmp", "t", "--log-dir", "l", "--rgx-patterns", "r.json",
+        "--path", "p", "--file", "a.txt", "b.zip", "--file", "c.tar", "--log-dir", "l", "--rgx-patterns", "r.json",
         "--rgx-prefix", "--skip-binary", "--line-limit", "5", "--report-delta", "7", "--csv", "o.csv",
         "--verbose", "--debug", "--mask", "--log-anti-pan", "--exception-test",
     ])
     assert settings == Settings(
-        path="p", archive="a.tar", tar_tmp="t", log_dir="l", rgx_patterns="r.json", rgx_prefix=True,
+        path="p", files=("a.txt", "b.zip", "c.tar"), log_dir="l", rgx_patterns="r.json", rgx_prefix=True,
         skip_binary=True, line_limit=5, report_delta=7, csv="o.csv", verbose=True, debug=True,
         mask=True, log_anti_pan=True, exception_test=True,
     )
@@ -67,7 +67,7 @@ def test_parser_does_not_look_up_config():
 
 
 def test_missing_arguments_prints_help_returns_1(tmp_path, capsys):
-    status = cli.main(["--log-dir", str(tmp_path / "logs"), "--tar-tmp", str(tmp_path / "tar")])
+    status = cli.main(["--log-dir", str(tmp_path / "logs")])
     assert status == 1
     assert "usage:" in capsys.readouterr().out
 
@@ -99,7 +99,7 @@ def test_unwritable_csv_returns_1_without_traceback(tmp_path, capsys):
 def test_unwritable_log_dir_returns_1(tmp_path, capsys):
     blocker = tmp_path / "file"
     blocker.write_text("x", encoding="utf-8")
-    status = cli.main(["--path", str(tmp_path), "--log-dir", str(blocker), "--tar-tmp", str(tmp_path / "t")])
+    status = cli.main(["--path", str(tmp_path), "--log-dir", str(blocker)])
     assert status == 1
     assert "Cannot set up logging" in capsys.readouterr().err
 
@@ -140,25 +140,6 @@ def test_line_limit_flag_end_to_end(tmp_path, capsys):
     assert "PANs Matched  :        3" in capsys.readouterr().out
 
 
-def test_archive_scan_uses_extractor_config(tmp_path, monkeypatch, capsys):
-    extracted = tmp_path / "extracted"
-    extracted.mkdir()
-    (extracted / "a.txt").write_text(f"card {PAN}\n", encoding="utf-8")
-
-    from contextlib import contextmanager
-    from find_pan import scanner as scanner_module
-
-    @contextmanager
-    def fake_extract(*args, **kwargs):
-        yield str(extracted)
-
-    monkeypatch.setattr(scanner_module, "extract_archive", fake_extract)
-    monkeypatch.setattr(cli, "find_extractor_config_path", lambda: "unused")
-    monkeypatch.setattr(cli, "load_extractor_config", lambda path: {"tar": {}})
-    status = cli.main(["--tar", str(tmp_path / "a.tar"), "--log-dir", str(tmp_path / "logs"),
-                       "--tar-tmp", str(tmp_path / "tar")])
-    assert status == 0
-    assert "PANs Matched  :        1" in capsys.readouterr().out
 
 
 def test_exception_test_flag_exits_with_one(tmp_path, capsys):
@@ -232,15 +213,6 @@ def test_invalid_regex_returns_1_with_one_line_error(tmp_path, capsys):
     assert "Error:" in captured.err and "Exception Information" not in captured.out
 
 
-def test_failed_extraction_is_reported_on_stderr_with_status_1(tmp_path, monkeypatch, capsys):
-    """Deferred minor 5: an archive that could not be extracted must be visible."""
-    monkeypatch.setattr(cli, "find_extractor_config_path", lambda: "unused")
-    monkeypatch.setattr(cli, "load_extractor_config", lambda path: {})
-    status = cli.main(["--tar", str(tmp_path / "nope.zip"), "--log-dir", str(tmp_path / "logs"),
-                       "--tar-tmp", str(tmp_path / "tar")])
-    captured = capsys.readouterr()
-    assert status == 1
-    assert "No extractor configured" in captured.err
 
 
 def test_close_failure_does_not_mask_scan_error(tmp_path, monkeypatch, capsys):
@@ -273,3 +245,113 @@ def test_console_encoding_never_drops_findings(tmp_path, monkeypatch, capsys):
     assert status == 0
     assert "Logging error" not in capsys.readouterr().err
     assert PAN in raw.getvalue().decode("cp1252")
+
+
+@pytest.mark.parametrize("flag", ["--tar", "--tar-tmp"])
+def test_removed_flags_are_rejected(flag, tmp_path, capsys):
+    with pytest.raises(SystemExit) as info:
+        cli.parse_args([flag, str(tmp_path)])
+    assert info.value.code == 2
+    assert "unrecognized arguments" in capsys.readouterr().err
+
+
+def test_file_flag_takes_many_files_and_can_repeat():
+    settings = cli.parse_args(["--file", "a", "b", "c", "--file", "d"])
+    assert settings.files == ("a", "b", "c", "d")
+
+
+def test_file_scans_only_the_listed_files(tmp_path, capsys):
+    listed = tmp_path / "listed.txt"
+    unlisted = tmp_path / "unlisted.txt"
+    listed.write_text(f"card {PAN}\n", encoding="utf-8")
+    unlisted.write_text("card 4012888888881881\n", encoding="utf-8")
+    status = cli.main(["--file", str(listed), "--log-dir", str(tmp_path / "logs")])
+    out = capsys.readouterr().out
+    assert status == 0
+    assert "PANs Matched  :        1" in out and "Scanned       :        1 Files." in out
+
+
+def test_file_and_path_can_be_combined(tmp_path, capsys):
+    scan_dir = tmp_path / "scan"
+    scan_dir.mkdir()
+    (scan_dir / "in_dir.txt").write_text("card 4012888888881881\n", encoding="utf-8")
+    listed = tmp_path / "listed.txt"
+    listed.write_text(f"card {PAN}\n", encoding="utf-8")
+    status = cli.main(["--file", str(listed), "--path", str(scan_dir), "--log-dir", str(tmp_path / "logs")])
+    assert status == 0
+    assert "PANs Matched  :        2" in capsys.readouterr().out
+
+
+def test_missing_file_entry_is_reported_skipped_and_the_run_continues(tmp_path, capsys):
+    good = tmp_path / "good.txt"
+    good.write_text(f"card {PAN}\n", encoding="utf-8")
+    folder = tmp_path / "folder"
+    folder.mkdir()
+    status = cli.main(["--file", str(tmp_path / "missing.txt"), str(folder), str(good),
+                       "--log-dir", str(tmp_path / "logs")])
+    captured = capsys.readouterr()
+    assert status == 1                                   # a requested file was never scanned
+    assert "missing.txt" in captured.err and "folder" in captured.err
+    assert "PANs Matched  :        1" in captured.out    # processing did not stop
+    assert "-- Skipped Files --" in captured.out
+    assert "[NOT-FOUND]" in captured.out and "[NOT-A-FILE]" in captured.out
+
+
+def test_archive_expanded_and_listed_in_summary(tmp_path, monkeypatch, capsys):
+    import zipfile
+
+    archive = tmp_path / "bundle.dat"        # content, not the extension, says zip
+    with zipfile.ZipFile(archive, "w") as handle:
+        handle.writestr("inner.txt", f"card {PAN}\n")
+    unzip = shutil.which("unzip")
+    if unzip is None:
+        pytest.skip("needs a local unzip")
+    monkeypatch.setattr(cli, "find_extractor_config_path", lambda: "unused")
+    monkeypatch.setattr(cli, "load_extractor_config", lambda path: {
+        "zip": {"command": unzip, "args": ["-o", "{archive}", "-d", "{tempdir}"]}})
+    status = cli.main(["--file", str(archive), "--log-dir", str(tmp_path / "logs")])
+    out = capsys.readouterr().out
+    assert status == 0
+    assert "PANs Matched  :        1" in out and "Archives expanded: 1" in out
+
+
+def test_missing_extractor_tool_is_a_warning_listed_in_the_summary(tmp_path, monkeypatch, capsys):
+    archive = tmp_path / "a.zip"
+    archive.write_bytes(b"PK\x03\x04" + b"\x00" * 40)
+    monkeypatch.setattr(cli, "find_extractor_config_path", lambda: "unused")
+    monkeypatch.setattr(cli, "load_extractor_config", lambda path: {})
+    status = cli.main(["--file", str(archive), "--log-dir", str(tmp_path / "logs")])
+    captured = capsys.readouterr()
+    assert status == 0                                    # a missing tool is a warning, not a failure
+    assert "Warning:" in captured.err
+    assert "[ARCHIVE-NO-TOOL]" in captured.out and "Archives skipped (no tool or failed): 1" in captured.out
+
+
+def test_failing_extractor_tool_is_an_error_and_listed(tmp_path, monkeypatch, capsys):
+    archive = tmp_path / "a.zip"
+    archive.write_bytes(b"PK\x03\x04" + b"\x00" * 40)
+    monkeypatch.setattr(cli, "find_extractor_config_path", lambda: "unused")
+    monkeypatch.setattr(cli, "load_extractor_config", lambda path: {
+        "zip": {"command": sys.executable, "args": ["-c", "import sys; sys.exit(3)"]}})
+    status = cli.main(["--file", str(archive), "--log-dir", str(tmp_path / "logs")])
+    captured = capsys.readouterr()
+    assert status == 1
+    assert "Error:" in captured.err
+    assert "[ARCHIVE-FAILED]" in captured.out
+
+
+def test_path_scan_expands_archives_found_in_the_directory(tmp_path, monkeypatch, capsys):
+    import zipfile
+
+    unzip = shutil.which("unzip")
+    if unzip is None:
+        pytest.skip("needs a local unzip")
+    scan_dir = tmp_path / "scan"
+    scan_dir.mkdir()
+    with zipfile.ZipFile(scan_dir / "bundle.zip", "w") as handle:
+        handle.writestr("inner.txt", f"card {PAN}\n")
+    monkeypatch.setattr(cli, "find_extractor_config_path", lambda: "unused")
+    monkeypatch.setattr(cli, "load_extractor_config", lambda path: {
+        "zip": {"command": unzip, "args": ["-o", "{archive}", "-d", "{tempdir}"]}})
+    assert cli.main(["--path", str(scan_dir), "--log-dir", str(tmp_path / "logs")]) == 0
+    assert "PANs Matched  :        1" in capsys.readouterr().out

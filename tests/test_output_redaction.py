@@ -36,7 +36,7 @@ def run_scan(tmp_path, capsys):
 
     def _run(*flags):
         status = cli.main([
-            "--path", str(scan_dir), "--log-dir", str(logs), "--tar-tmp", str(tmp_path / "tar"),
+            "--path", str(scan_dir), "--log-dir", str(logs),
             "--csv", str(csv_path), *flags,
         ])
         captured = capsys.readouterr()
@@ -100,7 +100,7 @@ def test_zero_anti_pans_creates_empty_file_and_count_zero(tmp_path, capsys):
     scan_dir.mkdir()
     (scan_dir / "clean.txt").write_text("nothing here\n", encoding="utf-8")
     status = cli.main(["--path", str(scan_dir), "--log-dir", str(tmp_path / "logs"),
-                       "--tar-tmp", str(tmp_path / "tar"), "--log-anti-pan"])
+                       "--log-anti-pan"])
     assert status == 0
     anti_log = next(Path(tmp_path / "logs").glob("*anti-pan*"))
     assert anti_log.read_text(encoding="utf-8") == ""

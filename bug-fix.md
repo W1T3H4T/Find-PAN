@@ -908,3 +908,26 @@ path and entry count to the summary.
 - The console streams use `errors="replace"`, so U+FFFD never produces a logging error on a Windows console.
 
 ---
+
+## BUG-040: `--tar` / `--tar-tmp` replaced by `--file`; archives detected by content
+
+**Status:** `done`
+
+**Severity:** Medium
+
+**Description:**
+Archives could only be scanned through a dedicated `--tar` flag that trusted file
+extensions, `--path` never expanded archives, and a failed or unavailable
+extraction was only visible in the log file.
+
+**Fix applied:**
+`--file FILE [FILE ...]` (repeatable) and `--path` share one file processor
+(`Scanner.process_file`). `filetypes.classify` decides by content (magic bytes);
+the extension is only a hint. Archives are expanded with the configured external
+tools into a system temporary directory that is always removed, and their members
+go back through the processor (nested archives expand naturally). `--tar` and
+`--tar-tmp` are removed with no compatibility layer. Every skipped file is logged
+and listed in the summary; a missing tool is a warning, a failing tool or a bad
+`--file` entry makes the exit status 1 after the run completes.
+
+---
