@@ -1,4 +1,5 @@
-"""Tests for the bug-fix.md sweep: BUG-009, 013, 014, 015, 019 and 030."""
+"""Tests for the bug sweep: appended logs, one open per file, the binary heuristic, a cached
+libmagic, the timestamp bound and the exception-test hook."""
 
 import builtins
 import logging
@@ -20,7 +21,7 @@ from find_pan.settings import Settings
 VALID_PAN = "4556737586899855"
 
 
-# --- BUG-019: timestamps in the future are not anti-PAN timestamps ----------------------------
+# --- timestamps in the future are not anti-PAN timestamps ----------------------------
 
 
 def test_timestamp_in_the_current_year_is_valid():
@@ -37,7 +38,7 @@ def test_far_future_and_ancient_timestamps_are_rejected():
     assert not detectors.valid_timestamp("18991231235959")
 
 
-# --- BUG-014: the binary heuristic -------------------------------------------------------------
+# --- the binary heuristic -------------------------------------------------------------
 
 
 def test_nul_byte_alone_makes_a_file_binary():
@@ -63,7 +64,7 @@ def test_the_last_bytes_of_the_sample_count_too():
     assert filetypes.looks_binary(b"x" * 1000 + b"\x00")
 
 
-# --- BUG-015: libmagic is constructed once -----------------------------------------------------------
+# --- libmagic is constructed once -----------------------------------------------------------
 
 
 def install_counting_magic(monkeypatch, mime="text/plain"):
@@ -101,7 +102,7 @@ def test_magic_buffer_is_used_when_a_head_is_supplied(tmp_path, monkeypatch):
     assert filetypes.is_executable(str(path), logging.getLogger("test.sweep"), head=b"MZ" + b"\x00" * 60)
 
 
-# --- BUG-013: each file is opened once ------------------------------------------------------------------
+# --- each file is opened once ------------------------------------------------------------------
 
 
 @pytest.fixture
@@ -164,7 +165,7 @@ def test_a_nul_containing_file_is_skipped_as_binary_with_skip_binary(build, tmp_
     assert reporter.stats.binary == 1 and reporter.stats.files == 0
 
 
-# --- BUG-009: earlier runs' logs are kept ------------------------------------------------------------------
+# --- earlier runs' logs are kept ------------------------------------------------------------------
 
 
 def test_logs_from_an_earlier_run_the_same_day_are_kept(tmp_path):
@@ -204,7 +205,7 @@ def test_each_run_writes_a_start_marker(tmp_path, capsys):
     assert pan_log.count("Find-PAN run started") == 2
 
 
-# --- BUG-030: --exception-test is not a user-facing flag -----------------------------------------------------------
+# --- --exception-test is not a user-facing flag -----------------------------------------------------------
 
 
 def test_exception_test_is_not_an_advertised_option(capsys):
