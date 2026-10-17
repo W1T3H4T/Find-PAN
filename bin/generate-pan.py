@@ -10,6 +10,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
 
+from lorem_text import lorem
+
 try:
     from re import _parser as regex_parser
 except ImportError:  # pragma: no cover
@@ -159,6 +161,100 @@ def generate_pans(
     return generated_pans
 
 
+FILLER_SEPARATORS = (" ", " ", " ", ", ", ": ", " - ", "; ", " | ", "=")
+DEFAULT_MAX_HITS = 3
+TRACK_NAMES = ("DOE/JANE", "SMITH/JOHN", "PUBLIC/J Q", "TEST/CARDHOLDER", "ROE/RICHARD")
+
+
+def load_optional_section(patterns_path: Path, section: str) -> dict[str, dict]:
+    """Load a pattern section from the configuration; empty when absent."""
+    with patterns_path.open(encoding="utf-8") as patterns_file:
+        section_data = json.load(patterns_file).get(section)
+    return section_data if isinstance(section_data, dict) else {}
+
+
+def collect_regexes(section: dict[str, dict]) -> list[re.Pattern]:
+    """Compile every regex of a configuration section."""
+    return [
+        re.compile(regex)
+        for entry in section.values()
+        for regex in entry.get("regex", [])
+        if isinstance(regex, str)
+    ]
+
+
+def generate_clean_pan(
+    pan_patterns: dict[str, dict], anti_pans: list[re.Pattern], rng: random.Random
+) -> str:
+    """Generate a Luhn-valid PAN that does not trip any anti-PAN pattern."""
+    for _ in range(MAX_GENERATION_ATTEMPTS):
+        pattern_data = pan_patterns[rng.choice(list(pan_patterns))]
+        pan = generate_matching_luhn_pan(rng.choice(pattern_data["regex"]), rng)
+        if not any(anti.search(pan) for anti in anti_pans):
+            return pan
+    raise ValueError("Could not generate a PAN that avoids the anti-PAN patterns.")
+
+
+def build_track(pan: str, track_number: int, rng: random.Random) -> str:
+    """Build Track 1 (%B...) or Track 2 (;...) data around *pan*."""
+    expiry = f"{rng.randint(27, 39):02d}{rng.randint(1, 12):02d}"
+    service_code = rng.choice(("101", "201", "220", "601"))
+    discretionary = "".join(rng.choice("0123456789") for _ in range(rng.randint(4, 12)))
+    if track_number == 1:
+        return f"%B{pan}^{rng.choice(TRACK_NAMES)}^{expiry}{service_code}{discretionary}?"
+    return f";{pan}={expiry}{service_code}{discretionary}?"
+
+
+def generate_hit(
+    pan_patterns: dict[str, dict],
+    track_regexes: list[re.Pattern],
+    anti_pans: list[re.Pattern],
+    rng: random.Random,
+) -> str:
+    """Generate one embedded PAN or (when track patterns exist) track record."""
+    pan = generate_clean_pan(pan_patterns, anti_pans, rng)
+    if not track_regexes or rng.random() < 0.6:
+        return pan
+    for _ in range(MAX_GENERATION_ATTEMPTS):
+        track = build_track(pan, rng.choice((1, 2)), rng)
+        if any(regex.fullmatch(track) for regex in track_regexes):
+            return track
+    return pan
+
+
+def filler(rng: random.Random) -> str:
+    """Return a short run of lorem-ipsum text (digit-free, drawn from the seeded rng)."""
+    words = [rng.choice(lorem.WORDS) for _ in range(rng.randint(2, 8))]
+    if rng.random() < 0.3:
+        words[0] = words[0].capitalize()
+    return " ".join(words) + rng.choice(("", "", ".", ",", "?"))
+
+
+def generate_random_text(
+    pan_patterns: dict[str, dict],
+    track_regexes: list[re.Pattern],
+    anti_pans: list[re.Pattern],
+    lines: int,
+    max_hits: int,
+    rng: random.Random,
+) -> list[str]:
+    """Generate *lines* lines of random text with 1..*max_hits* PAN/track hits each.
+
+    Filler is lorem-ipsum text (lorem-text package) and contains no digits, so
+    it cannot form false PAN or anti-PAN matches next to an embedded hit.
+    """
+    output = []
+    for _ in range(lines):
+        parts = [filler(rng)]
+        for _ in range(rng.randint(1, max_hits)):
+            parts.append(rng.choice(FILLER_SEPARATORS))
+            parts.append(generate_hit(pan_patterns, track_regexes, anti_pans, rng))
+            parts.append(rng.choice(FILLER_SEPARATORS))
+            parts.append(filler(rng))
+        output.append("".join(parts))
+    return output
+
+
 def default_output_path(pattern_name: str) -> Path:
     """Return the default output file path for *pattern_name*.
 
@@ -212,6 +308,20 @@ def parse_arguments(arguments: list[str] | None = None) -> argparse.Namespace:
         help="Output file path. Defaults to a file named after the pattern.",
     )
     parser.add_argument(
+        "--random-text",
+        type=int,
+        metavar="LINES",
+        help="Generate LINES lines of random text with embedded PAN and track data, "
+        "several hits per line, instead of one PAN per line. Uses --pan-pattern "
+        "when given, otherwise every PAN pattern.",
+    )
+    parser.add_argument(
+        "--max-hits",
+        type=int,
+        default=DEFAULT_MAX_HITS,
+        help="With --random-text, the maximum PAN/track hits per line (each line gets 1 to this many).",
+    )
+    parser.add_argument(
         "--verbose",
         action="store_true",
         help="Include regex patterns in the output alongside each generated PAN.",
@@ -227,10 +337,33 @@ def main(arguments: list[str] | None = None) -> int:
         print("Error: --all cannot be used with --pan-pattern.", file=sys.stderr)
         return 2
 
+    if args.random_text is not None and (args.random_text < 1 or args.max_hits < 1):
+        print("Error: --random-text and --max-hits must be at least 1.", file=sys.stderr)
+        return 2
+
     try:
         patterns = load_pan_patterns(args.patterns)
         if args.list_pan_patterns:
             print("\n".join(patterns))
+            return 0
+
+        if args.random_text is not None:
+            if args.pan_pattern:
+                chosen = resolve_pattern_name(patterns, args.pan_pattern)
+                selected = {chosen: patterns[chosen]}
+            else:
+                selected = patterns
+            text_lines = generate_random_text(
+                selected,
+                collect_regexes(load_optional_section(args.patterns, "TRACK Pattern")),
+                collect_regexes(load_optional_section(args.patterns, "Anti-PAN Pattern")),
+                args.random_text,
+                args.max_hits,
+                random.Random(args.seed),
+            )
+            output_path = args.output or Path.cwd() / "Random-Text.txt"
+            output_path.write_text("\n".join(text_lines) + "\n", encoding="utf-8")
+            print(f"Wrote {len(text_lines)} line(s) of random text to {output_path}", file=sys.stderr)
             return 0
 
         if args.all:

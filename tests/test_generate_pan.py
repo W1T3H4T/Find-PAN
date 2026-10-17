@@ -189,3 +189,54 @@ def test_main_verbose_output_includes_regex_and_pan_prefix(tmp_path, monkeypatch
     assert "Synthetic PANs for VISA:" in text
     assert text.count("PAN:") == 2
     assert text.count("Regex 1:") == 2
+
+
+def test_random_text_lines_have_multiple_hits(tmp_path):
+    out = tmp_path / "random.txt"
+
+    result = generate_pan.main(
+        ["--random-text", "40", "--max-hits", "4", "--seed", "1",
+         "--patterns", str(CONFIGURATION_PATH), "--output", str(out)]
+    )
+    assert result == 0
+    lines = out.read_text(encoding="utf-8").splitlines()
+    assert len(lines) == 40
+    assert all(any(c.isdigit() for c in line) for line in lines)
+
+
+def test_random_text_is_reproducible_with_seed(tmp_path):
+    a, b = tmp_path / "a.txt", tmp_path / "b.txt"
+    for out in (a, b):
+        generate_pan.main(["--random-text", "5", "--seed", "7",
+                           "--patterns", str(CONFIGURATION_PATH), "--output", str(out)])
+    assert a.read_text() == b.read_text()
+
+
+def test_random_text_rejects_bad_counts():
+    assert generate_pan.main(["--random-text", "0"]) == 2
+    assert generate_pan.main(["--random-text", "3", "--max-hits", "0"]) == 2
+
+
+def test_random_text_is_found_by_scanner(scanner, compiled_patterns, tmp_path):
+    """The scanner must find every embedded hit, with no Luhn or anti-PAN noise."""
+    import re
+
+    out = tmp_path / "random.txt"
+    generate_pan.main(["--random-text", "60", "--max-hits", "4", "--seed", "3",
+                       "--patterns", str(CONFIGURATION_PATH), "--output", str(out)])
+    lines = out.read_text(encoding="utf-8").splitlines()
+
+    # Each hit is a bare PAN or a track record (which embeds one PAN).
+    track = re.compile(r"%B\d{12,19}\^[^^]+\^\d+\?|;\d{12,19}=\d+\?")
+    bare_pan = re.compile(r"(?<!\d)\d{12,19}(?!\d)")
+    expected = 0
+    for line in lines:
+        expected += len(track.findall(line))
+        expected += len(bare_pan.findall(track.sub(" ", line)))
+
+    scanner.process_file(str(out), compiled_patterns)
+    found = scanner._MatchCount["PAN"] + scanner._MatchCount["TRACK"]
+    assert scanner._MatchCount["BAD-LUHN"] == 0
+    assert scanner._MatchCount["ANTI-PAN"] == 0
+    assert found == expected
+    assert found > len(lines)

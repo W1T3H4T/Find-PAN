@@ -115,3 +115,77 @@ def test_trace_file_failure_reports_original_error(scanner, tmp_path, monkeypatc
             for handler in list(logger.handlers):
                 handler.close()
                 logger.removeHandler(handler)
+
+
+def test_multiple_valid_pans_on_one_line_all_reported(scanner, scan_file):
+    scan_file(f"a {VALID_PAN} b 4012888888881881 c 5424000000000015\n")
+
+    assert scanner._MatchCount["PAN"] == 3
+
+
+def test_anti_pan_does_not_suppress_pan_elsewhere_on_line(scanner, scan_file):
+    scan_file(f"seq 123456789012345678 card {VALID_PAN}\n")
+
+    assert scanner._MatchCount["ANTI-PAN"] == 1
+    assert scanner._MatchCount["PAN"] == 1
+
+
+def test_multiple_anti_pans_on_one_line_counted(scanner, scan_file):
+    scan_file("123456789012345678 and 654321098765432109\n")
+
+    assert scanner._MatchCount["ANTI-PAN"] == 2
+    assert scanner._MatchCount["PAN"] == 0
+
+
+def test_same_bad_number_matched_by_two_patterns_counted_once(scanner, scan_file):
+    scan_file(f"{BAD_PAN}\n")
+
+    assert scanner._MatchCount["BAD-LUHN"] == 1
+
+
+def test_multiple_tracks_on_one_line_reported(scanner, scan_file):
+    scan_file(";4556737586899855=25121010000000000000? ;4012888888881881=25121010000000000000?\n")
+
+    assert scanner._MatchCount["TRACK"] == 2
+    assert scanner._MatchCount["PAN"] == 0
+
+
+def test_line_limit_scans_exactly_limit_lines(scanner, scan_file):
+    scanner._Args.line_limit = 3
+    scan_file((f"card {VALID_PAN}\n") * 6)
+
+    assert scanner._MatchCount["PAN"] == 3
+
+
+def test_mask_applies_to_csv_and_log(scanner, scan_file, tmp_path, caplog):
+    import csv
+
+    csv_path = tmp_path / "masked.csv"
+    scanner.open_csv_output(str(csv_path))
+    scanner._Args.mask = True
+    try:
+        with caplog.at_level(logging.INFO, logger=scanner._DefaultLogObj.name):
+            scan_file(f"Card: {VALID_PAN}\n")
+    finally:
+        scanner.close_csv_output()
+
+    rows = list(csv.DictReader(csv_path.open(encoding="utf-8")))
+    assert rows[0]["matched_data"] == "455673******9855"
+    logged = " ".join(r.getMessage() for r in caplog.records)
+    assert VALID_PAN not in logged
+    assert "455673******9855" in logged
+
+
+def test_unmasked_csv_and_log_keep_full_pan(scanner, scan_file, tmp_path, caplog):
+    import csv
+
+    csv_path = tmp_path / "plain.csv"
+    scanner.open_csv_output(str(csv_path))
+    try:
+        with caplog.at_level(logging.INFO, logger=scanner._DefaultLogObj.name):
+            scan_file(f"Card: {VALID_PAN}\n")
+    finally:
+        scanner.close_csv_output()
+
+    assert list(csv.DictReader(csv_path.open(encoding="utf-8")))[0]["matched_data"] == VALID_PAN
+    assert VALID_PAN in " ".join(r.getMessage() for r in caplog.records)

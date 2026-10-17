@@ -1,3 +1,4 @@
+lorem-text>=3.0
 names>=0.3.0
 python-magic>=0.4.27
 pyyaml>=6.0.1

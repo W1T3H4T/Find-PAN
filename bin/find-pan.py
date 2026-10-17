@@ -344,6 +344,9 @@ def sanitize_for_ascii(value: str) -> str:
 # Luhn algorithm check
 # ===========================================================================
 def luhn_check(num: str) -> bool:
+    #   An empty or all-zero string has a zero checksum but is never a PAN.
+    if not str(num).strip("0"):
+        return False
     rev_digits = [int(x) for x in str(num)][::-1]
     checksum = 0
     for i, d in enumerate(rev_digits):
@@ -375,6 +378,11 @@ def mask_matched_data(matched: str, pan: str) -> str:
         else:
             masked.append(char)
     return "".join(masked)
+
+
+def mask_text(text: str) -> str:
+    """Mask every PAN-length (12-19 digit) run in free text."""
+    return re.sub(r"(?<!\d)\d{12,19}(?!\d)", lambda m: mask_pan(m.group(0)), text)
 
 
 # ===========================================================================
@@ -565,57 +573,10 @@ def process_file(file_path: str, compiled_patterns: list) -> None:
             line_count = 0
             for line_number, line in enumerate(f, 1):
                 line_count += 1
-                if _Args.line_limit > 0 and line_count >= _Args.line_limit:
+                if _Args.line_limit > 0 and line_count > _Args.line_limit:
                     break
 
-                # Run the PAN & TRACK Data Finder using Pre-Coimpiled Patterns
-                for category, pattern_name, compiled_pattern in compiled_patterns:
-                    match = compiled_pattern.search(line)
-                    if not match:
-                        continue
-
-                    if (
-                        category == "Anti-PAN Pattern"
-                        and pattern_name == "Timestamp"
-                        and not valid_timestamp(match.group(0))
-                    ):
-                        continue
-
-                    data_type = None
-                    if category == "Anti-PAN Pattern":
-                        data_type = "ANTI-PAN"
-                    elif category in ["PAN Pattern", "TRACK Pattern"]:
-                        data_type = "PAN" if category == "PAN Pattern" else "TRACK"
-
-                    if data_type:
-                        #   A candidate that fails the Luhn check must not
-                        #   hide a valid PAN later on the line (or matched by a
-                        #   later pattern), so keep looking until one is accepted.
-                        accepted = False
-                        for candidate in compiled_pattern.finditer(line):
-                            reporter = DataReporter(
-                                file_path,
-                                line_number,
-                                candidate.start(),
-                                candidate.group(0),
-                                line,
-                                pattern_name,
-                                compiled_pattern.pattern,
-                                data_type
-                            )
-                            if reporter.accepted:
-                                accepted = True
-                                break
-                        if accepted:
-                            break
-                        continue
-
-                    # - We shouldn't get here
-                    message = "Unexpected match: " +\
-                        f"{file_path}:{line_number} " +\
-                        f"->{pattern_name}={compiled_pattern.pattern} " +\
-                        f"{line}"
-                    raise ValueError(message)
+                scan_line(file_path, line_number, line, compiled_patterns)
 
     except (PermissionError, FileNotFoundError, IOError) as e:
         _TraceLogObj.warning("Skipping file due to error: %s - %s", file_path, e)
@@ -625,11 +586,67 @@ def process_file(file_path: str, compiled_patterns: list) -> None:
 
 
 # ===========================================================================
+# Scan one line, reporting every anti-PAN, PAN and TRACK match on it
+# ===========================================================================
+def _overlaps(span: tuple, spans: list) -> bool:
+    return any(span[0] < other[1] and other[0] < span[1] for other in spans)
+
+
+def scan_line(file_path: str, line_number: int, line: str, compiled_patterns: list) -> None:
+    #   Anti-PAN matches only exclude their own span: other numbers on the same
+    #   line are still examined.  Candidates overlapping an anti-PAN or an
+    #   already accepted match are skipped; a Luhn failure only blocks other
+    #   patterns from being counted a second time, not from being validated.
+    excluded = []
+    failed = []
+
+    for category, pattern_name, compiled_pattern in compiled_patterns:
+        if category != "Anti-PAN Pattern":
+            continue
+        for match in compiled_pattern.finditer(line):
+            if pattern_name == "Timestamp" and not valid_timestamp(match.group(0)):
+                continue
+            span = match.span()
+            if _overlaps(span, excluded):
+                continue
+            excluded.append(span)
+            DataReporter(file_path, line_number, match.start(), match.group(0), line,
+                         pattern_name, compiled_pattern.pattern, "ANTI-PAN")
+
+    for category, pattern_name, compiled_pattern in compiled_patterns:
+        if category == "Anti-PAN Pattern":
+            continue
+        if category not in ["PAN Pattern", "TRACK Pattern"]:
+            # - We shouldn't get here
+            raise ValueError(
+                "Unexpected match: " +
+                f"{file_path}:{line_number} " +
+                f"->{pattern_name}={compiled_pattern.pattern} " +
+                f"{line}"
+            )
+        data_type = "PAN" if category == "PAN Pattern" else "TRACK"
+        for match in compiled_pattern.finditer(line):
+            span = match.span()
+            if _overlaps(span, excluded):
+                continue
+            reporter = DataReporter(
+                file_path, line_number, match.start(), match.group(0), line,
+                pattern_name, compiled_pattern.pattern, data_type,
+                count_failure=not _overlaps(span, failed),
+            )
+            if reporter.accepted:
+                excluded.append(span)
+            else:
+                failed.append(span)
+
+
+# ===========================================================================
 # Class to report PAN and TRACK data
 # ===========================================================================
 class DataReporter:  # pylint: disable=too-many-instance-attributes
     def __init__(self, file_path: str, line_number: int, offset: int, matched_data: str,
-                 line: str, pattern_name: str, search: str, data_type: str):
+                 line: str, pattern_name: str, search: str, data_type: str,
+                 count_failure: bool = True):
         self.file_path = file_path
         self.line_number = line_number
         self.offset = offset
@@ -650,7 +667,8 @@ class DataReporter:  # pylint: disable=too-many-instance-attributes
 
         self.pan = self.extract_pan_from_match()
         if not self.pan or not luhn_check(self.pan):
-            _MatchCount["BAD-LUHN"] += 1
+            if count_failure:
+                _MatchCount["BAD-LUHN"] += 1
             extracted, matched = self.pan, self.matched_data
             if getattr(_Args, "mask", False):
                 extracted = mask_pan(self.pan)
@@ -691,8 +709,12 @@ class DataReporter:  # pylint: disable=too-many-instance-attributes
         _MatchCount[self.data_type] += 1
 
     def print_info(self) -> None:
+        line = self.line
+        if getattr(_Args, "mask", False):
+            line = mask_text(mask_matched_data(self.matched_data, self.pan).join(
+                line.split(self.matched_data)))
         _DefaultLogObj.info(
-            "%s:%s:%s->%s (%s), %s: %s", self.file_path, self.line_number, self.offset, self.pattern_name, self.data_type, self.search, self.line
+            "%s:%s:%s->%s (%s), %s: %s", self.file_path, self.line_number, self.offset, self.pattern_name, self.data_type, self.search, line
         )
 
     def write_csv_row(self) -> None:
@@ -704,7 +726,10 @@ class DataReporter:  # pylint: disable=too-many-instance-attributes
             "offset": self.offset,
             "pattern_name": sanitize_for_ascii(self.pattern_name),
             "data_type": sanitize_for_ascii(self.data_type),
-            "matched_data": sanitize_for_ascii(self.matched_data),
+            "matched_data": sanitize_for_ascii(
+                mask_matched_data(self.matched_data, self.pan)
+                if getattr(_Args, "mask", False) else self.matched_data
+            ),
         })
 
 
@@ -815,7 +840,7 @@ def process_cmdline_arguments() -> argparse.ArgumentParser:
     parser.add_argument( "--verbose", default=False, action="store_true", help="Verbose output.")
     parser.add_argument( "--debug", default=False, action="store_true", help="Enable debug logging.")
     parser.add_argument( "--mask", default=False, action="store_true",
-                        help="Mask PAN digits (keep first 6 and last 4) in Luhn-failure debug messages.")
+                        help="Mask PAN digits (keep first 6 and last 4) in the log, CSV and Luhn-failure debug output.")
     parser.add_argument( "--version", default=False, action="store_true", help="Print version information.",)
     parser.add_argument( "--exception-test", default=False, action="store_true", help="Test exception handler.",)
 

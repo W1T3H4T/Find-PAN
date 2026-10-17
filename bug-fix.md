@@ -287,7 +287,7 @@ remaining cleanup error is logged as a warning instead of aborting the scan.
 
 ## BUG-011: `DataReporter` silently drops Luhn-failing matches
 
-**Status:** `todo`
+**Status:** `in progress`
 
 **Severity:** High
 
@@ -305,6 +305,10 @@ losing forensic information.
 **Fix direction:**
 Log Luhn-failing matches at `WARNING` and separate construction from the
 reporting side effects.
+
+**Progress:** Luhn failures are now logged at `DEBUG` (visible with `--debug`)
+with file, line, offset, pattern and digits; `--mask` masks the digits. The
+WARNING-level logging and the constructor/reporting split remain open.
 
 ---
 
@@ -481,7 +485,7 @@ Document the future-year tolerance or tighten the bound; cache `now()`.
 
 ## BUG-020: Only first matching category per line is reported
 
-**Status:** `todo`
+**Status:** `done`
 
 **Severity:** Medium
 
@@ -497,6 +501,11 @@ Under-counting when multiple card data formats appear on the same line.
 **Fix direction:**
 Remove the premature `break` and report all distinct matches (taking care not
 to double-report overlapping matches).
+
+**Fix applied:** `process_file()` now delegates to `scan_line()`, which uses
+`finditer` for every pattern and reports all distinct anti-PAN, PAN and TRACK
+matches on a line. Overlapping matches are skipped so nothing is double
+reported. Covered by `tests/test_debug_luhn.py`.
 
 ---
 
@@ -523,7 +532,7 @@ Handle SIGTERM on Unix; guard `handle_interrupt()` against `None` loggers.
 
 ## BUG-022: Dead `raise ValueError` for new config categories
 
-**Status:** `todo`
+**Status:** `done`
 
 **Severity:** Medium
 
@@ -539,6 +548,9 @@ Config extensibility breaks the scanner.
 
 **Fix direction:**
 Replace the hard-coded category list with a mapping or default behavior.
+
+**Fix applied:** `scan_line()` raises `ValueError` for any unknown
+category instead of a dead branch after the match loop.
 
 ---
 
@@ -631,7 +643,7 @@ Normalize the path and check for actual traversal rather than the substring.
 
 ## BUG-028: `luhn_check()` accepts empty and all-zero strings
 
-**Status:** `todo`
+**Status:** `done`
 
 **Severity:** Low
 
@@ -647,6 +659,9 @@ surprised.
 
 **Fix direction:**
 Reject empty input and consider rejecting all-zero PANs.
+
+**Fix applied:** `luhn_check()` returns `False` for empty and all-zero
+strings. Covered by `tests/test_luhn.py`.
 
 ---
 
@@ -731,5 +746,70 @@ Running `find-pan.py --version` on the Windows dev machine produced
 
 **Tests:** `tests/conftest.py` (deterministic stub), manual `--version` and
 `--help` verification.
+
+---
+
+## BUG-033: `--line-limit N` scans only N-1 lines
+
+**Status:** `done`
+
+**Severity:** Medium
+
+**Location:** `bin/find-pan.py` (`process_file()` line loop)
+
+**Description:**
+The loop incremented `line_count` and then broke on `line_count >= line_limit`,
+so the Nth line was never scanned.
+
+**Failure scenario:**
+`--line-limit 3` on a file with a PAN on every line reported 2 PANs.
+
+**Fix applied:**
+The limit check is now `line_count > line_limit`. Covered by
+`test_line_limit_scans_exactly_limit_lines`.
+
+---
+
+## BUG-034: A Luhn failure or anti-PAN hid other matches on the same line
+
+**Status:** `done`
+
+**Severity:** High
+
+**Location:** `bin/find-pan.py` (`process_file()` / `DataReporter`)
+
+**Description:**
+After the first match on a line the scanner stopped, even when that match
+failed the Luhn check. A valid PAN later on the line, or matched by a later
+pattern, was missed. Anti-PAN matches were also run through the Luhn check:
+failures were counted as `BAD-LUHN`, and passing ones were written to the log
+and CSV as findings, so the `ANTI-PAN` summary was wrong.
+
+**Fix applied:**
+`scan_line()` examines every match of every pattern. Anti-PANs are counted
+without a Luhn check, are never reported as findings and exclude only their own
+span. A bad number matched by two patterns is counted once in `BAD-LUHN`.
+Covered by `tests/test_debug_luhn.py`.
+
+---
+
+## BUG-035: `--mask` did not cover log and CSV output
+
+**Status:** `done`
+
+**Severity:** Medium
+
+**Location:** `bin/find-pan.py` (`DataReporter.print_info()`, `write_csv_row()`)
+
+**Description:**
+`--mask` only masked the Luhn-failure debug message. Accepted matches still
+wrote full PANs to the CSV `matched_data` column and to the INFO log line
+(which includes the whole source line).
+
+**Fix applied:**
+With `--mask`, the CSV `matched_data`, the INFO log line (matched text and any
+other 12-19 digit run on the line) and the Luhn-failure debug message keep only
+the first 6 and last 4 digits. Track data is masked completely. Covered by
+`test_mask_applies_to_csv_and_log`.
 
 ---

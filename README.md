@@ -134,7 +134,7 @@ find-pan.py [--path PATH] [--tar TAR] [--temp TEMP] [--log-dir LOG_DIR]
 |**--report-delta** |The number of files to process before reporting progress.|
 |**--verbose**      |Route log file messages also to stdout.|
 |**--debug**        |Route 'debug' messages to stdout and the 'trace' log, including a message for each candidate that fails the Luhn check.|
-|**--mask**         |Mask PAN digits (keep the first 6 and last 4) in the Luhn-failure debug messages. Track data is fully masked. Default off: without it, `--debug` logs the full candidate number.|
+|**--mask**         |Mask PAN digits (keep the first 6 and last 4) in the log, CSV and Luhn-failure debug output. Track data is fully masked. Default off: full numbers are written.|
 |**--version**      |Report the app and python versions.|
 
 
@@ -220,6 +220,24 @@ $ python bin/generate-pan.py --pan-pattern "VISA Electron"
 </pre>
 
 Omit `--pan-pattern` in an interactive terminal to choose from a numbered menu. Use `--seed NUMBER` when reproducible synthetic values are required, or `--patterns PATH` to use an alternate pattern configuration.
+
+### Random Text with Embedded PAN and Track Data
+
+`--random-text LINES` writes lorem-ipsum text (from the `lorem-text` package) with Luhn-valid PANs and Track 1 / Track 2 records embedded in it, several per line. It is intended for exercising the scanner against realistic, noisy input, including multiple hits on one line.
+
+<pre>
+$ python bin/generate-pan.py --random-text 100 --max-hits 4 --seed 42 --output sample.txt
+</pre>
+
+|Argument|Description|
+|---|---|
+|**--random-text LINES**|Number of lines of random text to generate. Must be at least 1.|
+|**--max-hits N**|Maximum PAN/track hits per line; each line gets 1 to N (default 3).|
+|**--pan-pattern NAME**|Restrict embedded PANs to one pattern. Without it, every configured PAN pattern is used.|
+|**--seed NUMBER**|Reproducible output.|
+|**--output PATH**|Output file. Defaults to `Random-Text.txt` in the current directory.|
+
+Embedded PANs are generated to avoid the configured anti-PAN patterns, and the lorem text contains no digits, so `find-pan.py` reports each embedded hit and nothing else.
 
 # Example Usage for a File System Scan
 <pre>

@@ -1,3 +1,17 @@
+# Normalize text files to LF in the working tree and the repository.
+* text=auto eol=lf
+
 # Keep shell scripts LF-only so WSL/Linux can execute them directly from a
 # checkout on a Windows filesystem.
 *.sh text eol=lf
+
+# Never rewrite binary files.
+*.png binary
+*.jpg binary
+*.gif binary
+*.ico binary
+*.gz binary
+*.tgz binary
+*.zip binary
+*.tar binary
+*.7z binary
