@@ -24,6 +24,7 @@ class SkipReason(str, Enum):
     NOT_A_FILE = "NOT-A-FILE"
     ARCHIVE_NO_TOOL = "ARCHIVE-NO-TOOL"
     ARCHIVE_FAILED = "ARCHIVE-FAILED"
+    SYMLINK = "SYMLINK"
 
 
 @dataclass(frozen=True)

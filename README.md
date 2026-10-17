@@ -306,9 +306,19 @@ first time an archive is met by discovering the tools on `PATH`. Edit it if tool
 elsewhere.
 
 Every skipped file is logged and listed under `-- Skipped Files --` in the end-of-run summary with its
-reason (`NOT-FOUND`, `NOT-A-FILE`, `ARCHIVE-NO-TOOL`, `ARCHIVE-FAILED`, `BINARY`, `EXEC`, `UNREADABLE`).
+reason (`NOT-FOUND`, `NOT-A-FILE`, `ARCHIVE-NO-TOOL`, `ARCHIVE-FAILED`, `BINARY`, `EXEC`, `UNREADABLE`, `SYMLINK`).
 A missing extraction tool is a warning; a tool that fails, or a `--file` entry that does not exist,
 makes the exit status 1 after the rest of the run has completed.
+
+Archives are treated as untrusted input:
+
+- If a tool extracts some members and then fails (for example on an unsafe `../` member), the members that were
+  extracted are still scanned and the archive is reported as `ARCHIVE-FAILED` (partial).
+- Symbolic links inside an extracted archive are not followed (`SYMLINK`); `--path` still follows links in your own tree.
+- An archive that contains itself (a recursive "quine" archive) is detected by content and skipped instead of
+  being expanded forever. Legitimately nested archives have no depth limit.
+- Archive paths are passed to the tools as absolute paths, tool output in messages is truncated, control
+  characters in file names are replaced by `?`, and `--mask` also masks PANs found in file names and tool output.
 <pre>
 $ uv run python bin/find-pan.py --file test-archive.tar.gz notes.txt
 find-pan.py v3.0.0

@@ -931,3 +931,27 @@ and listed in the summary; a missing tool is a warning, a failing tool or a bad
 `--file` entry makes the exit status 1 after the run completes.
 
 ---
+
+## BUG-041: Hardening of automatic archive extraction
+
+**Status:** `done`
+
+**Severity:** Important
+
+**Description:**
+`--path` now runs external extractors on archives found in untrusted trees. A review of that
+path found: a tool that extracted members and then exited non-zero (for example on a `../`
+member) caused the whole archive to be skipped, hiding its valid members; an archive containing
+itself recursed until `RecursionError`; symbolic links inside an extracted tree were followed
+and could read files outside it; a relative archive name such as `-evil.zip` reached the tool
+looking like an option; and file names, member names and tool stderr could carry control
+characters (log injection) or PANs (leaking under `--mask`).
+
+**Fix applied:**
+Partial extractions are scanned and then reported as failed; recursion is detected by content
+digest; symlinks in extracted trees are skipped (`SYMLINK`); archive paths are made absolute;
+stderr is truncated; `Reporter.clean()` neutralizes control characters and masks PANs in
+everything derived from untrusted input. Path traversal itself was checked against crafted zip
+and tar archives and is neutralized by the tools. Covered by `tests/test_hardening.py`.
+
+---

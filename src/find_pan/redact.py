@@ -83,6 +83,10 @@ class Redactor:
     def __init__(self, enabled: bool) -> None:
         self.enabled = enabled
 
+    def text(self, value: str) -> str:
+        """Mask PAN-like content in free text when redaction is enabled."""
+        return mask_text(value) if self.enabled else value
+
     def apply(self, match: Match) -> RedactedMatch:
         if not self.enabled:
             return RedactedMatch(**vars(match))

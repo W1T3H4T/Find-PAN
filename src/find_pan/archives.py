@@ -19,6 +19,8 @@ from find_pan.errors import ExtractorError, ExtractorUnavailable
 
 
 _IS_WINDOWS = sys.platform == "win32"
+#   Characters of tool output kept in an error message (stderr can be huge or hostile).
+_MAX_STDERR = 500
 
 
 @lru_cache(maxsize=None)
@@ -93,7 +95,8 @@ def extract_archive(
             except OSError as error:
                 raise ExtractorError(f"Cannot copy {archive_path} for extraction: {error}") from error
         else:
-            archive_for_extractor = archive_path
+            #   Absolute, so a relative name such as "-evil.zip" can never look like an option.
+            archive_for_extractor = os.path.abspath(archive_path)
 
         command_path = shutil.which(command) or command
         archive_arg, tempdir_arg = archive_for_extractor, temp_dir
@@ -108,12 +111,19 @@ def extract_archive(
         if verbose:
             logger.info("Extractor command: %s", " ".join(cmd))
 
+        partial_failure = None
         try:
             runner(cmd, check=True, capture_output=True, text=True)
         except subprocess.CalledProcessError as error:
-            raise ExtractorError(
-                f"Extractor failed for {archive_path}: {error} (stderr: {error.stderr})"
-            ) from error
+            stderr = (error.stderr or "")[:_MAX_STDERR]
+            message = f"Extractor failed for {archive_path}: {error} (stderr: {stderr})"
+            if not os.listdir(temp_dir):
+                raise ExtractorError(message) from error
+            #   Tools such as tar and unzip exit non-zero after extracting when a member
+            #   was unsafe or damaged.  Scan what was extracted, then report the failure.
+            partial_failure = ExtractorError(
+                message + " [partial extraction: the extracted members were scanned]"
+            )
         except FileNotFoundError as error:
             raise ExtractorUnavailable(
                 f"Extractor command not found: {command}. "
@@ -121,6 +131,8 @@ def extract_archive(
             ) from error
 
         yield temp_dir
+        if partial_failure is not None:
+            raise partial_failure
     finally:
         try:
             shutil.rmtree(temp_dir)

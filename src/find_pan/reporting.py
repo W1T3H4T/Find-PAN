@@ -171,8 +171,18 @@ class Reporter:
                 self.stats.skipped_files,
             )
 
+    def clean(self, text: str) -> str:
+        """Make *text* safe to show: control characters become '?', PANs are masked under --mask.
+
+        Used for anything derived from untrusted input (paths, archive member
+        names, extractor output) that reaches the log, the summary or stderr.
+        """
+        text = "".join("?" if (ord(char) < 32 or ord(char) == 127) else char for char in text)
+        return self.redactor.text(text)
+
     def skip(self, path: str, reason: SkipReason, detail: str = "") -> None:
         """Record, log and remember (for the summary) that *path* was not scanned."""
+        path, detail = self.clean(path), self.clean(detail)
         level = logging.WARNING if reason in _WARNING_SKIPS else logging.INFO
         self._trace.log(level, "Skipped [%s] %s%s", reason.value, path, f" - {detail}" if detail else "")
         self.stats.skipped(reason)
