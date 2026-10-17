@@ -217,7 +217,7 @@ def test_random_text_rejects_bad_counts():
     assert generate_pan.main(["--random-text", "3", "--max-hits", "0"]) == 2
 
 
-def test_random_text_is_found_by_scanner(scanner, compiled_patterns, tmp_path):
+def test_random_text_is_found_by_scanner(compiled_patterns, tmp_path):
     """The scanner must find every embedded hit, with no Luhn or anti-PAN noise."""
     import re
 
@@ -234,9 +234,21 @@ def test_random_text_is_found_by_scanner(scanner, compiled_patterns, tmp_path):
         expected += len(track.findall(line))
         expected += len(bare_pan.findall(track.sub(" ", line)))
 
-    scanner.process_file(str(out), compiled_patterns)
-    found = scanner._MatchCount["PAN"] + scanner._MatchCount["TRACK"]
-    assert scanner._MatchCount["BAD-LUHN"] == 0
-    assert scanner._MatchCount["ANTI-PAN"] == 0
+    import logging
+
+    from find_pan.logging_setup import Loggers
+    from find_pan.models import MatchKind, ScanStats
+    from find_pan.redact import Redactor
+    from find_pan.reporting import Reporter
+    from find_pan.scanner import Scanner
+    from find_pan.settings import Settings
+
+    loggers = Loggers(pan=logging.getLogger("test.gen.pan"), trace=logging.getLogger("test.gen.trace"))
+    reporter = Reporter(Redactor(False), [], ScanStats(), loggers.trace, 500)
+    Scanner(Settings(), compiled_patterns, reporter, loggers).process_file(str(out))
+    stats = reporter.stats
+    found = stats.count(MatchKind.PAN) + stats.count(MatchKind.TRACK)
+    assert stats.count(MatchKind.BAD_LUHN) == 0
+    assert stats.count(MatchKind.ANTI_PAN) == 0
     assert found == expected
     assert found > len(lines)

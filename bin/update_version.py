@@ -2,7 +2,7 @@
 ##  ===========================================================================
 ##  File    :   update_version.py
 ##  Who     :   David Means <w1t3h4t@gmail.com>
-##  What    :   Manage the Find-PAN project version in pyproject.toml.
+##  What    :   Manage the Find-PAN project version in pyproject.toml and src/find_pan/version.py.
 ##              Supports bumping major/minor/patch, setting an explicit
 ##              version, or printing the current version.
 ##  ===========================================================================
@@ -36,7 +36,20 @@ def write_pyproject_version(
     new_text, count = VERSION_PATTERN.subn(new_version_line, text, count=1)
     if count == 0:
         raise ValueError(f"Could not find version line to update in {pyproject_path}")
-    pyproject_path.write_text(new_text, encoding="utf-8")
+    pyproject_path.write_bytes(new_text.encode("utf-8"))  # keep LF on Windows
+
+
+MODULE_VERSION_PATTERN = re.compile(r'^__version__\s*=\s*"\d+\.\d+\.\d+"', re.MULTILINE)
+
+
+def write_version_module(version_path: Path, version: tuple[int, int, int]) -> None:
+    """Persist the version in the package's version module."""
+    text = version_path.read_text(encoding="utf-8")
+    new_line = f'__version__ = "{version[0]}.{version[1]}.{version[2]}"'
+    new_text, count = MODULE_VERSION_PATTERN.subn(new_line, text, count=1)
+    if count == 0:
+        raise ValueError(f"Could not find __version__ line to update in {version_path}")
+    version_path.write_bytes(new_text.encode("utf-8"))  # keep LF on Windows
 
 
 def parse_set_version(value: str) -> tuple[int, int, int]:
@@ -83,6 +96,13 @@ def build_parser() -> argparse.ArgumentParser:
         default=Path(__file__).resolve().parents[1] / "pyproject.toml",
         help="Path to pyproject.toml (default: repository root).",
     )
+    parser.add_argument(
+        "--version-file",
+        type=Path,
+        default=None,
+        help="Path to the package version module "
+        "(default: src/find_pan/version.py next to pyproject.toml, updated only if it exists).",
+    )
     return parser
 
 
@@ -109,6 +129,9 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("No version action specified")
 
     write_pyproject_version(args.pyproject, new_version)
+    version_file = args.version_file or args.pyproject.parent / "src" / "find_pan" / "version.py"
+    if args.version_file is not None or version_file.exists():
+        write_version_module(version_file, new_version)
     print(f"Updated version: {current[0]}.{current[1]}.{current[2]} -> {new_version[0]}.{new_version[1]}.{new_version[2]}")
     return 0
 

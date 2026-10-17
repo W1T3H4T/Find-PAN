@@ -1,0 +1,153 @@
+"""File-type checks used to decide whether a file is worth scanning."""
+
+import logging
+import os
+from dataclasses import dataclass
+from enum import Enum
+
+from find_pan.config import detect_archive_type
+
+#   MIME types of executables and libraries that are never worth scanning.
+EXECUTABLE_MIME_TYPES = (
+    "application/x-executable",
+    "application/x-sharedlib",
+    "application/x-shared-library",
+    "application/x-pie-executable",
+    "application/x-mach-binary",
+    "application/x-dosexec",
+    "application/vnd.microsoft.portable-executable",
+    "application/x-dylib",
+)
+
+_SAMPLE_SIZE = 1024
+_TAR_HEADER_SIZE = 512
+
+
+def is_executable(file_path: str, logger: logging.Logger, verbose: bool = False) -> bool:
+    """Return whether libmagic reports *file_path* as an executable.
+
+    python-magic is imported lazily.  On Windows the import needs the native
+    ``libmagic-1.dll``; if it is missing the interpreter may fail, and on
+    Linux/macOS ``libmagic`` comes from the system package manager.  When the
+    library is unavailable or fails, this returns False and callers fall back
+    to the null-byte heuristic in ``has_binary_content``.
+    """
+    try:
+        import magic  # pylint: disable=import-outside-toplevel
+    except ImportError:
+        logger.warning(
+            "python-magic is not available; install the platform libmagic "
+            "dependency to enable MIME-based binary skipping for %s",
+            file_path,
+        )
+        return False
+
+    try:
+        if os.path.isfile(file_path):
+            file_type = magic.Magic(mime=True).from_file(file_path)
+            logger.debug("MIME/Type: %s: %s", file_type, file_path)
+            if any(mime_type in file_type for mime_type in EXECUTABLE_MIME_TYPES):
+                if verbose:
+                    logger.info("Skipped %s: %s", file_type, file_path)
+                return True
+    except PermissionError:
+        logger.warning("Skipping file due to PermissionError: %s", file_path)
+    except Exception as error:  # pylint: disable=broad-exception-caught
+        logger.warning(
+            "python-magic failed for %s (%s); using fallback binary detection.",
+            file_path,
+            error,
+        )
+    return False
+
+
+def has_binary_content(file_path: str) -> bool:
+    """Return whether the start of the file contains both NUL and 0xFF bytes.
+
+    The last two sampled bytes are ignored.  ``OSError`` propagates.
+    """
+    with open(file_path, "rb") as handle:
+        sample = handle.read(_SAMPLE_SIZE)[:-2]
+    return 0x00 in sample and 0xFF in sample
+
+
+class FileKind(Enum):
+    """How the scanner should handle a file."""
+
+    TEXT = "text"
+    ARCHIVE = "archive"
+    EXECUTABLE = "executable"
+    BINARY = "binary"
+
+
+@dataclass(frozen=True)
+class FileClassification:
+    """The result of ``classify``: what to do with a file, and why.
+
+    ``archive_type`` is the extractor key (``tar``, ``zip``, ``7z``, ``gzip``,
+    ``bzip2``, ``xz``) and is only set for archives.  ``note`` records a
+    disagreement between the extension and the content.
+    """
+
+    kind: FileKind
+    archive_type: str | None = None
+    note: str = ""
+
+
+#   Content signatures: (offset, bytes, format).  The tar "ustar" marker sits at offset 257.
+_SIGNATURES = (
+    (0, b"PK\x03\x04", "zip"),
+    (0, b"PK\x05\x06", "zip"),
+    (0, b"PK\x07\x08", "zip"),
+    (0, b"7z\xbc\xaf\x27\x1c", "7z"),
+    (0, b"\x1f\x8b\x08", "gzip"),
+    (0, b"\xfd7zXZ\x00", "xz"),
+    (257, b"ustar", "tar"),
+)
+_BZIP2_BLOCK_MAGIC = b"1AY&SY"
+_TAR_COMPRESSED = ("gzip", "bzip2", "xz")
+
+
+def sniff_archive_format(file_path: str) -> str | None:
+    """Return the archive format named by the file's leading bytes, or None.
+
+    Only content is consulted.  ``OSError`` propagates.
+    """
+    with open(file_path, "rb") as handle:
+        head = handle.read(_TAR_HEADER_SIZE)
+    for offset, signature, name in _SIGNATURES:
+        if head[offset:offset + len(signature)] == signature:
+            return name
+    if head[:3] == b"BZh" and head[4:10] == _BZIP2_BLOCK_MAGIC:
+        return "bzip2"
+    return None
+
+
+def classify(
+    file_path: str, skip_binary: bool, logger: logging.Logger, verbose: bool = False
+) -> FileClassification:
+    """Decide how to handle *file_path*, trusting content over the extension.
+
+    The extension is only a hint: it chooses between ``tar`` and a bare
+    compressor for gzip/bzip2/xz data, and it triggers a note when it claims an
+    archive the content does not confirm.  Archives take precedence over the
+    binary and executable checks, which apply only with ``skip_binary``.
+    ``OSError`` propagates.
+    """
+    hint = detect_archive_type(file_path)
+    sniffed = sniff_archive_format(file_path)
+
+    if sniffed is not None:
+        archive_type = "tar" if (sniffed in _TAR_COMPRESSED and hint == "tar") else sniffed
+        return FileClassification(FileKind.ARCHIVE, archive_type)
+
+    note = ""
+    if hint is not None:
+        note = f"extension suggests a {hint} archive but the content is not one; scanning as a file"
+
+    if skip_binary:
+        if is_executable(file_path, logger, verbose):
+            return FileClassification(FileKind.EXECUTABLE, note=note)
+        if has_binary_content(file_path):
+            return FileClassification(FileKind.BINARY, note=note)
+    return FileClassification(FileKind.TEXT, note=note)

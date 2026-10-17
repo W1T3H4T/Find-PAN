@@ -287,7 +287,7 @@ remaining cleanup error is logged as a warning instead of aborting the scan.
 
 ## BUG-011: `DataReporter` silently drops Luhn-failing matches
 
-**Status:** `in progress`
+**Status:** `done`
 
 **Severity:** High
 
@@ -310,11 +310,14 @@ reporting side effects.
 with file, line, offset, pattern and digits; `--mask` masks the digits. The
 WARNING-level logging and the constructor/reporting split remain open.
 
+**Fix applied:** resolved by the `find_pan` package restructure (see
+`docs/superpowers/specs/2026-10-17-find-pan-modularization-design.md`): Luhn failures are first-class `BAD_LUHN` matches routed to `TraceSink` (DEBUG), masked under `--mask`. Covered by `tests/test_reporting.py` and `tests/test_output_redaction.py`.
+
 ---
 
 ## BUG-012: Heavy module-level global coupling
 
-**Status:** `todo`
+**Status:** `done`
 
 **Severity:** Medium
 
@@ -331,6 +334,9 @@ Running two scans in the same process corrupts counters and logging state.
 **Fix direction:**
 Introduce an explicit scanner context object and pass it through the call
 graph.
+
+**Fix applied:** resolved by the `find_pan` package restructure (see
+`docs/superpowers/specs/2026-10-17-find-pan-modularization-design.md`): `Settings` and a `Reporter` are passed explicitly; no mutable module globals remain.
 
 ---
 
@@ -401,7 +407,7 @@ Create and reuse a single `Magic` instance, or inject it as a dependency.
 
 ## BUG-016: `process_cmdline_arguments()` parses args multiple times
 
-**Status:** `todo`
+**Status:** `done`
 
 **Severity:** Medium
 
@@ -417,11 +423,14 @@ Inconsistent Namespace objects; confusing behavior with custom actions.
 **Fix direction:**
 Parse once and reuse the resulting Namespace.
 
+**Fix applied:** resolved by the `find_pan` package restructure (see
+`docs/superpowers/specs/2026-10-17-find-pan-modularization-design.md`): `cli.parse_args()` parses once and returns a `Settings` object.
+
 ---
 
 ## BUG-017: Progress-delta accounting is off by one
 
-**Status:** `todo`
+**Status:** `done`
 
 **Severity:** Medium
 
@@ -439,11 +448,14 @@ Progress reports are inaccurate; multiple scans in one process mis-report.
 Move the increment before `calculate_delta()` and reset `_LastReportDelta` at
 scan start.
 
+**Fix applied:** resolved by the `find_pan` package restructure (see
+`docs/superpowers/specs/2026-10-17-find-pan-modularization-design.md`): `Reporter.file_started()` counts the file and then checks the progress interval; `--report-delta` must be >= 1. Covered by `test_progress_logged_every_report_delta_files`.
+
 ---
 
 ## BUG-018: `print_scan_summary()` prints `FILES - 1`
 
-**Status:** `todo`
+**Status:** `done`
 
 **Severity:** Medium
 
@@ -458,6 +470,9 @@ Misleading summary; unexplained magic constant.
 
 **Fix direction:**
 Remove the `- 1` adjustment and report the actual count.
+
+**Fix applied:** resolved by the `find_pan` package restructure (see
+`docs/superpowers/specs/2026-10-17-find-pan-modularization-design.md`): `ScanStats` owns the counts and the summary reports the true file count. Covered by `test_summary_reports_true_file_count_and_totals`.
 
 ---
 
@@ -511,7 +526,7 @@ reported. Covered by `tests/test_debug_luhn.py`.
 
 ## BUG-021: Signal handling incomplete and unsafe before loggers exist
 
-**Status:** `todo`
+**Status:** `done`
 
 **Severity:** Medium
 
@@ -527,6 +542,9 @@ log flush.
 
 **Fix direction:**
 Handle SIGTERM on Unix; guard `handle_interrupt()` against `None` loggers.
+
+**Fix applied:** resolved by the `find_pan` package restructure (see
+`docs/superpowers/specs/2026-10-17-find-pan-modularization-design.md`): no custom signal handler; Python raises `KeyboardInterrupt`, which `cli.main` handles at every stage (configuration, scan and summary): sinks are closed, the summary is printed when a scan started, and the exit status is 1.
 
 ---
 
@@ -556,7 +574,7 @@ category instead of a dead branch after the match loop.
 
 ## BUG-023: Visual Studio debug branch shadows `_Args`
 
-**Status:** `todo`
+**Status:** `done`
 
 **Severity:** Medium
 
@@ -571,6 +589,9 @@ Accidentally enabling the flag silently overrides real CLI arguments.
 
 **Fix direction:**
 Remove the branch or guard it behind a `FIND_PAN_DEBUG` environment variable.
+
+**Fix applied:** resolved by the `find_pan` package restructure (see
+`docs/superpowers/specs/2026-10-17-find-pan-modularization-design.md`): the Visual Studio argument branch and the global `_Args` were removed.
 
 ---
 
@@ -593,7 +614,7 @@ Change the annotation to `str | None` and remove the embedded newlines.
 
 ## BUG-025: `print_version_info()` re-parses arguments
 
-**Status:** `todo`
+**Status:** `done`
 
 **Severity:** Low
 
@@ -605,6 +626,9 @@ to check `version`.
 
 **Fix direction:**
 Use the already-parsed `_Args` Namespace.
+
+**Fix applied:** resolved by the `find_pan` package restructure (see
+`docs/superpowers/specs/2026-10-17-find-pan-modularization-design.md`): `--version` prints from `version.format_version()` without re-parsing arguments.
 
 ---
 
@@ -811,5 +835,99 @@ With `--mask`, the CSV `matched_data`, the INFO log line (matched text and any
 other 12-19 digit run on the line) and the Luhn-failure debug message keep only
 the first 6 and last 4 digits. Track data is masked completely. Covered by
 `test_mask_applies_to_csv_and_log`.
+
+---
+
+## BUG-036: `--debug` raised `NameError` (`json` not imported)
+
+**Status:** `done`
+
+**Severity:** High
+
+**Location:** `bin/find-pan.py` `main()` (old code)
+
+**Description:**
+`main()` called `json.dumps()` to dump the patterns under `--debug`, but the
+script never imported `json`.
+
+**Failure scenario:**
+`find-pan.py --debug --path ...` crashed with `NameError` as soon as the
+patterns loaded.
+
+**Fix applied:**
+The dump moved to `find_pan.config.dump_patterns()`, which imports `json`.
+Covered by `test_dump_patterns_round_trips_json` and
+`test_debug_dumps_patterns_without_name_error`.
+
+---
+
+## BUG-037: Version duplicated in the script and `pyproject.toml`
+
+**Status:** `done`
+
+**Severity:** Low
+
+**Location:** `bin/find-pan.py` (`_FindPANVersion`), `pyproject.toml`
+
+**Description:**
+The version existed in two places and `bin/update_version.py` updated only
+`pyproject.toml`, so they could drift apart.
+
+**Fix applied:**
+`src/find_pan/version.py` holds `__version__`; `update_version.py` updates it
+together with `pyproject.toml`. Covered by
+`test_bump_updates_pyproject_and_version_module_together` and
+`test_version_module_and_pyproject_agree`.
+
+---
+
+## BUG-038: `--log-anti-pan` (new feature, tracked for completeness)
+
+**Status:** `done`
+
+**Description:**
+Anti-PAN hits are counted but shown nowhere by default. `--log-anti-pan` writes
+them (masked under `--mask`) to `Find-PAN-anti-pan-<date>.log` and adds the log
+path and entry count to the summary.
+
+---
+
+## BUG-039: Deferred findings from the modularization review
+
+**Status:** `done`
+
+**Severity:** Minor
+
+**Fix applied (each covered by a test):**
+- The `Command-line arguments:` line is printed again (`sys.argv` is used when `main()` gets no argv).
+- `--mask` also masks cards written with spaces or dashes (4-4-4-4, 4-4-4-4-3 and Amex 4-6-5) in logged source lines.
+- Ctrl-C at any stage of `cli.main` exits with status 1 and no traceback.
+- Unreadable files have their own `Unreadable N Files.` summary line and no longer inflate `Skipped N Files.`
+- An invalid regex, malformed extractor YAML and a failed archive copy are one-line `Error:` messages (`ConfigError` / `ExtractorError`); a failed extraction is printed to stderr and the exit status is 1.
+- A failing sink `close()` no longer replaces the error being reported; `Reporter.close()` is idempotent.
+- The console streams use `errors="replace"`, so U+FFFD never produces a logging error on a Windows console.
+
+---
+
+## BUG-040: `--tar` / `--tar-tmp` replaced by `--file`; archives detected by content
+
+**Status:** `done`
+
+**Severity:** Medium
+
+**Description:**
+Archives could only be scanned through a dedicated `--tar` flag that trusted file
+extensions, `--path` never expanded archives, and a failed or unavailable
+extraction was only visible in the log file.
+
+**Fix applied:**
+`--file FILE [FILE ...]` (repeatable) and `--path` share one file processor
+(`Scanner.process_file`). `filetypes.classify` decides by content (magic bytes);
+the extension is only a hint. Archives are expanded with the configured external
+tools into a system temporary directory that is always removed, and their members
+go back through the processor (nested archives expand naturally). `--tar` and
+`--tar-tmp` are removed with no compatibility layer. Every skipped file is logged
+and listed in the summary; a missing tool is a warning, a failing tool or a bad
+`--file` entry makes the exit status 1 after the run completes.
 
 ---
