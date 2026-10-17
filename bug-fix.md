@@ -242,7 +242,7 @@ Audit logs contained two identical entries for every detection.
 
 ## BUG-009: Prior log files are silently deleted
 
-**Status:** `todo`
+**Status:** `done`
 
 **Severity:** High
 
@@ -257,6 +257,8 @@ Rerunning the scanner overwrites evidence from an earlier scan.
 
 **Fix direction:**
 Append to logs or include a timestamp in the filename instead of deleting.
+
+**Fix applied:** log files are opened in append mode and never deleted; each run writes a `---- Find-PAN run started ----` marker to the PAN and trace logs (the anti-PAN log holds findings only). Covered by `tests/test_bugsweep.py`.
 
 ---
 
@@ -342,7 +344,7 @@ graph.
 
 ## BUG-013: `process_file()` opens the same file twice
 
-**Status:** `todo`
+**Status:** `done`
 
 **Severity:** Medium
 
@@ -360,11 +362,13 @@ or content may differ unexpectedly.
 Read the file once and decode the buffer, or wrap the same handle with
 `io.TextIOWrapper`.
 
+**Fix applied:** `Scanner.process_file` opens a file once, reads a 1024-byte head for classification (libmagic uses `from_buffer`), then wraps the same handle for the text scan. Covered by `test_a_text_file_is_opened_exactly_once`.
+
 ---
 
 ## BUG-014: Binary detection requires both `0x00` and `0xFF`
 
-**Status:** `todo`
+**Status:** `done`
 
 **Severity:** Medium
 
@@ -383,11 +387,13 @@ PAN matches in non-text data.
 Use `python-magic` consistently or implement a real heuristic (null-byte
 presence / non-printable ratio) over the full 1024-byte sample.
 
+**Fix applied:** `filetypes.looks_binary` treats a NUL byte (unless a UTF-16/32 BOM is present) or more than 30% non-text control bytes in the full 1024-byte sample as binary; Latin-1 text is not binary.
+
 ---
 
 ## BUG-015: `magic.Magic()` instantiated per file
 
-**Status:** `todo`
+**Status:** `done`
 
 **Severity:** Medium
 
@@ -402,6 +408,8 @@ Scanning large directories is unnecessarily slow.
 
 **Fix direction:**
 Create and reuse a single `Magic` instance, or inject it as a dependency.
+
+**Fix applied:** the libmagic instance is built once per module (`_detector`, cached).
 
 ---
 
@@ -478,7 +486,7 @@ Remove the `- 1` adjustment and report the actual count.
 
 ## BUG-019: `valid_timestamp()` accepts timestamps one year in the future
 
-**Status:** `todo`
+**Status:** `done`
 
 **Severity:** Medium
 
@@ -495,6 +503,8 @@ from reporting.
 
 **Fix direction:**
 Document the future-year tolerance or tighten the bound; cache `now()`.
+
+**Fix applied:** `valid_timestamp` accepts years up to the current year only.
 
 ---
 
@@ -597,7 +607,7 @@ Remove the branch or guard it behind a `FIND_PAN_DEBUG` environment variable.
 
 ## BUG-024: `enumerate_command_line_arguments()` return type is wrong
 
-**Status:** `todo`
+**Status:** `done`
 
 **Severity:** Low
 
@@ -609,6 +619,8 @@ It also injects newlines into the joined output.
 
 **Fix direction:**
 Change the annotation to `str | None` and remove the embedded newlines.
+
+**Resolved by the restructure:** `enumerate_command_line_arguments()` no longer exists; `cli._describe()` builds the parameter listing.
 
 ---
 
@@ -634,7 +646,7 @@ Use the already-parsed `_Args` Namespace.
 
 ## BUG-026: `_FindPANVersion` format is unusual
 
-**Status:** `todo`
+**Status:** `done`
 
 **Severity:** Low
 
@@ -646,11 +658,13 @@ The version is stored as a space-separated string `"2 3 1"` and split on use.
 **Fix direction:**
 Store as a tuple or a conventional `__version__` constant.
 
+**Resolved by the restructure:** the version lives in `src/find_pan/version.py` (`__version__ = "X.Y.Z"`) and is kept in sync with `pyproject.toml` by `bin/update_version.py`.
+
 ---
 
 ## BUG-027: `custom_tar_filter()` rejects benign filenames containing `..`
 
-**Status:** `todo`
+**Status:** `done`
 
 **Severity:** Low
 
@@ -662,6 +676,8 @@ The substring check `".." in tarinfo.name` blocks legitimate names like
 
 **Fix direction:**
 Normalize the path and check for actual traversal rather than the substring.
+
+**Resolved earlier:** the Python tar extraction and `custom_tar_filter()` were removed (BUG-004); external tools extract archives and `../` members are neutralized by them (checked in BUG-041).
 
 ---
 
@@ -691,7 +707,7 @@ strings. Covered by `tests/test_luhn.py`.
 
 ## BUG-029: `secure_delete()` paths starting with `-` may be parsed as flags
 
-**Status:** `todo`
+**Status:** `done`
 
 **Severity:** Low
 
@@ -705,11 +721,13 @@ some secure-delete tools may interpret it as an option.
 Insert `--` before the path if the tool supports it, or reject member names
 starting with `-`.
 
+**Fix applied:** in `bin/purge-log-files.py` (the only remaining secure-delete code) paths are made absolute, `--` precedes the path for `shred`/`gshred`, and the command is a flat list. The same function also crashed when no tool was found (`len(None)`) or when one was (a list nested in a list); both are fixed. Covered by `tests/test_purge_log_files.py`.
+
 ---
 
 ## BUG-030: `--exception-test` is a production debugging backdoor
 
-**Status:** `todo`
+**Status:** `done`
 
 **Severity:** Low
 
@@ -722,11 +740,13 @@ exception handler. It is exposed to end users.
 **Fix direction:**
 Remove the flag or hide it behind a build/debug environment variable.
 
+**Fix applied:** the `--exception-test` option is removed from the CLI and `Settings`; the handler can still be exercised with the environment variable `FIND_PAN_EXCEPTION_TEST=1`.
+
 ---
 
 ## BUG-031: macOS/BSD secure-delete falls back to plain `os.remove`
 
-**Status:** `todo`
+**Status:** `done`
 
 **Severity:** Low
 
@@ -739,6 +759,8 @@ believe data is securely wiped when it is not.
 
 **Fix direction:**
 Document the fallback behavior or add support for `rm -P` on BSD/macOS.
+
+**Fix applied:** no new tool is added (`rm -P` is ineffective on APFS/SSD). Instead the fallback is explicit: a one-time warning says files are removed with a plain delete and are NOT securely wiped, and the README documents it.
 
 ---
 
