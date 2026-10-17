@@ -1,7 +1,7 @@
 # Find-PAN Modularization Design
 
 Date: 2026-10-17
-Status: Draft for review (not committed)
+Status: Approved 2026-10-17 (not committed)
 
 ## 1. Purpose
 
@@ -81,7 +81,7 @@ easiest to test.
 (`archive` is the value of the unchanged `--tar` flag):
 `path`, `archive`, `tar_tmp`, `log_dir`, `rgx_patterns`, `rgx_prefix`,
 `skip_binary`, `line_limit`, `report_delta`, `csv`, `verbose`, `debug`, `mask`,
-`exception_test`. It contains no argparse code. `cli.py` builds it from parsed
+`log_anti_pan`, `exception_test`. It contains no argparse code. `cli.py` builds it from parsed
 arguments, so tests construct a `Settings` directly.
 
 ### models.py
@@ -161,18 +161,31 @@ receive only a `RedactedMatch`, never a raw `Match`.
 | `LogSink` | `PAN`, `TRACK` | INFO line on the PAN logger |
 | `CsvSink` | `PAN`, `TRACK` | CSV row, flushed per row |
 | `TraceSink` | `BAD_LUHN` | `DEBUG` line on the trace logger |
+| `AntiPanSink` | `ANTI_PAN` (only created when `--log-anti-pan` is set) | INFO line in its own log file, `Find-PAN-anti-pan-<DDMonYYYY>.log` in the log directory |
 
-`ANTI_PAN` matches are counted but shown by no sink, as today.
+`ANTI_PAN` matches are always counted. By default no sink shows them. With
+`--log-anti-pan`, the CLI adds an `AntiPanSink` that writes them, after
+redaction (so `--mask` applies), to a dedicated log file whose name contains
+`anti-pan`. They never appear in the PAN log, the trace log or the CSV. When the
+flag is off the sink and its file are not created, so no empty file is left
+behind.
 `sanitize_for_ascii` is applied inside the sinks that need it. `Reporter` also
 provides `skip(path, reason)`, `progress()` (report-delta messages) and
 `summary()` (the existing "Processing Summary" / "Skipped Summary" text, built
 from real counts, so the old `FILES - 1` adjustment disappears).
+When `--log-anti-pan` is set, the "Skipped Summary" gains two lines:
+`Anti-PAN log   : <full path of the anti-PAN log file>` and
+`Anti-PANs logged: <N>`, where N is the number of entries written to that file.
+The existing `Detected N Anti-PANs.` line is unchanged and always shown.
+Without the flag the summary is identical to today's.
 
 ### logging_setup.py
 
 `build_loggers(settings) -> Loggers` creates the log directory, removes prior
 log files as today, and builds the PAN and trace loggers without module
-globals. Failure raises `LoggingSetupError`. A trace file handler failure
+globals. When `settings.log_anti_pan` is set it also builds a third logger
+writing to `Find-PAN-anti-pan-<DDMonYYYY>.log` (same date format and directory
+as the other logs; a prior file of that name is removed like the others). Failure raises `LoggingSetupError`. A trace file handler failure
 reports the original error.
 
 ### config.py
@@ -184,7 +197,7 @@ compilation (with and without prefix). It adds the `--debug` pattern dump
 
 ### cli.py
 
-`parse_args(argv) -> Settings` (single parse; `--version` and `--help` work
+`parse_args(argv) -> Settings` (adds the `--log-anti-pan` flag, default off; single parse; `--version` and `--help` work
 without any configuration file), `main(argv=None) -> int`. `main` is the only
 place that wires components, installs the SIGINT handler, prints errors and
 chooses exit codes. `print_exception_info()` and `--exception-test` stay here
@@ -264,6 +277,12 @@ Out of scope and left in `bug-fix.md` as `todo`: BUG-009, 013, 014, 015, 019,
 
 - `detectors`: table-driven Luhn, anti-PAN, overlap, multi-hit lines, tracks.
 - `redact`: every masking rule, enabled and disabled.
+- Summary: with `--log-anti-pan` the summary names the anti-PAN log path and the
+  logged count (equal to the number of lines written); without it neither line
+  appears.
+- `--log-anti-pan`: the anti-PAN log file exists and contains the hits only
+  when the flag is set; it is absent otherwise; hits never appear in the PAN
+  log, trace log or CSV; and they are masked under `--mask`.
 - `reporting`: `Reporter` with in-memory fake sinks; each real sink alone.
 - `settings` / `cli`: `parse_args(argv)` returns `Settings`; no globals.
 - `filetypes`, `archives`, `scanner`: `tmp_path` based; the subprocess runner is
@@ -303,8 +322,15 @@ in section 9.
 
 ## 9. Behavior compatibility
 
-Unchanged: all CLI flags and defaults, log and CSV formats, log file names,
+New: `--log-anti-pan` (default off; with it off, output is identical to today).
+
+Unchanged: all existing CLI flags and defaults, log and CSV formats, log file names,
 summary wording, exit codes, `--version` / `--help` without configuration.
+
+Note: "today" means the current working tree, where anti-PAN hits are
+counted and not shown (`scan_line`, BUG-034). `--log-anti-pan` opts in to a
+separate `Find-PAN-anti-pan-<date>.log` for them; it does not change the counts
+or the other outputs.
 
 Intended differences, all bug fixes: `--debug` no longer raises `NameError`; the
 summary reports the true file count (no `- 1`); progress reports fire on the
