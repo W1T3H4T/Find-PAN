@@ -119,7 +119,7 @@ source $HOME/.pyenv/bin/activate
 
 |Module|Responsibility|
 |---|---|
-|`cli.py`|Argument parsing, wiring, signals, exit codes.|
+|`cli.py`|Argument parsing, wiring, error reporting, exit codes.|
 |`settings.py`, `version.py`, `errors.py`|Immutable run settings, the version, and the error types.|
 |`config.py`|Regex and archive-extractor configuration.|
 |`detectors.py`|Luhn check and per-line detection (pure functions).|

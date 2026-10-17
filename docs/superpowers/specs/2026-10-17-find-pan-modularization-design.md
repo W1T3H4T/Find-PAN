@@ -125,7 +125,7 @@ Extractor failures raise `ExtractorError`.
 
 ### scanner.py
 
-`Scanner(settings, patterns, reporter)` with `run()`, `scan_directory()`,
+`Scanner(settings, patterns, reporter, loggers, extractor_config)` with `scan_path()`, `scan_directory()`,
 `scan_file()` and `scan_archive()`. It walks files, applies the line limit
 (`line_count > line_limit` semantics), calls `detectors.scan_line`, and passes
 every `Match` to `reporter.report`. It reports skips through
@@ -199,7 +199,7 @@ compilation (with and without prefix). It adds the `--debug` pattern dump
 
 `parse_args(argv) -> Settings` (adds the `--log-anti-pan` flag, default off; single parse; `--version` and `--help` work
 without any configuration file), `main(argv=None) -> int`. `main` is the only
-place that wires components, installs the SIGINT handler, prints errors and
+place that wires components, handles `KeyboardInterrupt`, prints errors and
 chooses exit codes. `print_exception_info()` and `--exception-test` stay here
 for unexpected exceptions.
 
@@ -218,7 +218,7 @@ cli.main(argv)
   config    <- config.load(settings)               # patterns, extractor config
   loggers   <- logging_setup.build_loggers(settings)
   reporter  <- Reporter(Redactor(settings.mask), sinks, ScanStats())
-  Scanner(settings, patterns, reporter).run()
+  Scanner(settings, patterns, reporter, loggers).scan_path(...) / scan_archive(...)
   reporter.close()                                 # always, in finally
   print reporter.summary(); return exit code
 ```
@@ -238,7 +238,7 @@ counts, redacts once, and fans out to the sinks that accept that kind.
   temporary extraction directory is always removed.
 - Start-up order: arguments, then configuration and patterns, then loggers, then
   sinks (CSV last). A bad pattern file does not leave a half-written CSV.
-- SIGINT: the handler only raises `KeyboardInterrupt`. `main` catches it,
+- SIGINT: no custom handler is installed; Python raises `KeyboardInterrupt` and `main` catches it at every stage,
   closes the sinks, prints the summary and exits with status 1 (unchanged).
 - Sinks are closed in a `finally`, so the CSV is always flushed and closed.
 

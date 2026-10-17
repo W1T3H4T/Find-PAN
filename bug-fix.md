@@ -544,7 +544,7 @@ log flush.
 Handle SIGTERM on Unix; guard `handle_interrupt()` against `None` loggers.
 
 **Fix applied:** resolved by the `find_pan` package restructure (see
-`docs/superpowers/specs/2026-10-17-find-pan-modularization-design.md`): no custom signal handler; Python raises `KeyboardInterrupt`, which `cli.main` handles after the loggers exist, closing sinks and printing the summary.
+`docs/superpowers/specs/2026-10-17-find-pan-modularization-design.md`): no custom signal handler; Python raises `KeyboardInterrupt`, which `cli.main` handles at every stage (configuration, scan and summary): sinks are closed, the summary is printed when a scan started, and the exit status is 1.
 
 ---
 
@@ -889,5 +889,22 @@ together with `pyproject.toml`. Covered by
 Anti-PAN hits are counted but shown nowhere by default. `--log-anti-pan` writes
 them (masked under `--mask`) to `Find-PAN-anti-pan-<date>.log` and adds the log
 path and entry count to the summary.
+
+---
+
+## BUG-039: Deferred findings from the modularization review
+
+**Status:** `done`
+
+**Severity:** Minor
+
+**Fix applied (each covered by a test):**
+- The `Command-line arguments:` line is printed again (`sys.argv` is used when `main()` gets no argv).
+- `--mask` also masks cards written with spaces or dashes (4-4-4-4, 4-4-4-4-3 and Amex 4-6-5) in logged source lines.
+- Ctrl-C at any stage of `cli.main` exits with status 1 and no traceback.
+- Unreadable files have their own `Unreadable N Files.` summary line and no longer inflate `Skipped N Files.`
+- An invalid regex, malformed extractor YAML and a failed archive copy are one-line `Error:` messages (`ConfigError` / `ExtractorError`); a failed extraction is printed to stderr and the exit status is 1.
+- A failing sink `close()` no longer replaces the error being reported; `Reporter.close()` is idempotent.
+- The console streams use `errors="replace"`, so U+FFFD never produces a logging error on a Windows console.
 
 ---
