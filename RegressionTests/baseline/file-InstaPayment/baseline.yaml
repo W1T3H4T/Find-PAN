@@ -2,7 +2,7 @@ name: file-InstaPayment
 description: single fixture InstaPayment.txt
 created: '2026-10-17T23:07:01Z'
 find_pan:
-  version: 3.1.0
+  version: 3.1.1
   command:
   - --file
   - RegressionTests/InstaPayment.txt

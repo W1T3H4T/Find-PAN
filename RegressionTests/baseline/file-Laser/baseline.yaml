@@ -2,7 +2,7 @@ name: file-Laser
 description: single fixture Laser.txt
 created: '2026-10-17T23:07:02Z'
 find_pan:
-  version: 3.1.0
+  version: 3.1.1
   command:
   - --file
   - RegressionTests/Laser.txt
