@@ -303,3 +303,58 @@ def test_main_passes_unknown_switches_to_find_pan_and_accepts_double_dash(repo, 
     assert PAN not in csv_text and "*" in csv_text
     data = yaml.safe_load((bl_root / "masked" / "baseline.yaml").read_text(encoding="utf-8"))
     assert "--mask" in data["find_pan"]["command"]
+
+
+# --- review findings ----------------------------------------------------------------------------------------------------
+
+
+def test_create_refuses_a_run_that_did_not_scan_everything(repo, bl_root):
+    """A baseline of a run with a skipped or failed archive would never really be checked."""
+    bogus = repo / "RegressionTests" / "broken.7z"
+    bogus.write_bytes(bytes([0x37, 0x7A, 0xBC, 0xAF, 0x27, 0x1C]) + b"\x00" * 40)
+    with pytest.raises(baseline.BaselineError):
+        create(repo, bl_root, "arch", "--file", str(bogus))
+    assert not (bl_root / "arch").exists()
+    assert not bl_root.exists() or list(bl_root.iterdir()) == []
+
+
+def test_validate_all_survives_garbled_baseline_files(repo, bl_root, capsys):
+    create(repo, bl_root, "good")
+    create(repo, bl_root, "garbled")
+    (bl_root / "garbled" / "baseline.yaml").write_bytes(b"\xff\xfe\x00 not utf-8 \x81")
+    create(repo, bl_root, "badrow")
+    csv_path = bl_root / "badrow" / "baseline.csv"
+    lines = csv_path.read_text(encoding="utf-8").splitlines()
+    parts = lines[1].split(",")
+    parts[1] = "x"
+    lines[1] = ",".join(parts)
+    csv_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    assert run_main(repo, bl_root, "--validate", "--all") == 2
+    out = capsys.readouterr().out
+    assert "good: PASS" in out and "garbled: ERROR" in out and "badrow: ERROR" in out
+
+
+@pytest.mark.parametrize("failure", [OSError("disk full"), KeyboardInterrupt()], ids=["oserror", "interrupt"])
+def test_a_failed_replace_keeps_the_old_baseline_and_leaves_no_staging(repo, bl_root, monkeypatch, failure):
+    create(repo, bl_root, "keep")
+    before = tree_state(bl_root / "keep")
+    real_replace = baseline.os.replace
+    target = bl_root / "keep"
+
+    def flaky(src, dst):
+        if Path(dst) == target and Path(src).parent == bl_root:        # staging -> target
+            raise failure
+        return real_replace(src, dst)
+
+    monkeypatch.setattr(baseline.os, "replace", flaky)
+    with pytest.raises(type(failure)):
+        create(repo, bl_root, "keep", *files_args(repo), force=True)
+    assert tree_state(target) == before
+    assert [entry.name for entry in bl_root.iterdir()] == ["keep"]
+
+
+@pytest.mark.parametrize("value", ["0", "-1", "abc"])
+def test_max_diff_must_be_a_positive_number(repo, bl_root, value, capsys):
+    create(repo, bl_root)
+    assert run_main(repo, bl_root, "--validate", "plain", "--max-diff", value) == 2
+    capsys.readouterr()

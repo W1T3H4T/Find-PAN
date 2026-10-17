@@ -89,23 +89,23 @@ def test_rewrite_args_rejects_an_equals_form_of_an_owned_switch(repo):
 
 def test_enumerate_is_sorted_by_utf8_bytes_not_walk_order(repo):
     for name in ("B.txt", "a.txt", "\u00e9.txt", "Z/z.txt"):
-        write(repo / name)
-    listed = baseline.enumerate_inputs(["--path", str(repo)], repo)
-    assert listed == ["B.txt", "Z/z.txt", "a.txt", "\u00e9.txt"]
+        write(repo / "data" / name)
+    listed = baseline.enumerate_inputs(["--path", str(repo / "data")], repo)
+    assert listed == ["data/B.txt", "data/Z/z.txt", "data/a.txt", "data/\u00e9.txt"]
 
 
 def test_enumerate_skips_symlinks(repo, tmp_path):
-    write(repo / "real.txt")
+    write(repo / "data" / "real.txt")
     try:
-        os.symlink(repo / "real.txt", repo / "link.txt")
+        os.symlink(repo / "data" / "real.txt", repo / "data" / "link.txt")
     except (OSError, NotImplementedError):
         pytest.skip("symlinks cannot be created here")
-    assert baseline.enumerate_inputs(["--path", str(repo)], repo) == ["real.txt"]
+    assert baseline.enumerate_inputs(["--path", str(repo / "data")], repo) == ["data/real.txt"]
 
 
 def test_enumerate_lists_an_archive_once_without_its_members(repo):
-    write(repo / "bundle.zip", b"PK\x03\x04" + b"\x00" * 30)
-    assert baseline.enumerate_inputs(["--path", str(repo)], repo) == ["bundle.zip"]
+    write(repo / "data" / "bundle.zip", b"PK\x03\x04" + b"\x00" * 30)
+    assert baseline.enumerate_inputs(["--path", str(repo / "data")], repo) == ["data/bundle.zip"]
 
 
 def test_enumerate_path_and_file_union_is_deduplicated(repo):
@@ -138,10 +138,10 @@ def test_hash_binary_is_raw(repo):
 
 
 def test_inputs_manifest_is_sorted_and_complete(repo):
-    write(repo / "b.txt", "b")
-    write(repo / "a.txt", "a")
-    manifest = baseline.inputs_manifest(["--path", str(repo)], repo)
-    assert [entry["path"] for entry in manifest] == ["a.txt", "b.txt"]
+    write(repo / "data" / "b.txt", "b")
+    write(repo / "data" / "a.txt", "a")
+    manifest = baseline.inputs_manifest(["--path", str(repo / "data")], repo)
+    assert [entry["path"] for entry in manifest] == ["data/a.txt", "data/b.txt"]
     assert set(manifest[0]) == {"path", "size", "sha256", "eol_normalized"}
 
 
@@ -226,3 +226,52 @@ def test_inputs_may_not_include_the_baseline_directory_itself(repo):
     with pytest.raises(BaselineError, match="baseline directory"):
         baseline.enumerate_inputs(["--file", str(repo / "RegressionTests" / "baseline" / "x" / "baseline.csv")], repo)
     assert baseline.enumerate_inputs(["--file", str(repo / "RegressionTests" / "a.txt")], repo) == ["RegressionTests/a.txt"]
+
+
+# --- review findings --------------------------------------------------------------------------------------------
+
+
+def test_path_over_a_parent_of_the_baseline_directory_is_refused_even_before_it_exists(repo):
+    """The baseline would later contain its own output; this must fail at --create, not at --validate."""
+    write(repo / "RegressionTests" / "a.txt")
+    assert not (repo / "RegressionTests" / "baseline").exists()
+    with pytest.raises(BaselineError, match="baseline directory"):
+        baseline.enumerate_inputs(["--path", str(repo / "RegressionTests")], repo)
+    with pytest.raises(BaselineError, match="baseline directory"):
+        baseline.enumerate_inputs(["--path", str(repo)], repo)
+
+
+def test_file_equals_form_is_rewritten_and_enumerated(repo):
+    write(repo / "a.txt")
+    argument = "--file=" + str(repo / "a.txt")
+    assert baseline.rewrite_find_pan_args([argument], repo) == ["--file=a.txt"]
+    assert baseline.enumerate_inputs([argument], repo) == ["a.txt"]
+    write(repo / "b.txt")
+    assert baseline.enumerate_inputs([argument, "--file", str(repo / "b.txt")], repo) == ["a.txt", "b.txt"]
+
+
+def test_two_path_switches_are_refused_because_find_pan_keeps_only_the_last(repo):
+    write(repo / "a" / "x.txt")
+    write(repo / "b" / "y.txt")
+    with pytest.raises(BaselineError, match="only one --path"):
+        baseline.enumerate_inputs(["--path", str(repo / "a"), "--path", str(repo / "b")], repo)
+
+
+@pytest.mark.parametrize("argument", ["--pa", "--summ", "--rgx", "--verb", "--fil", "--lo", "--cs", "--de"])
+def test_abbreviated_switches_are_refused(argument, repo):
+    """find-pan accepts abbreviations; they would bypass the owned-switch check and path rewriting."""
+    with pytest.raises(BaselineError, match="full switch name"):
+        baseline.rewrite_find_pan_args([argument, "x"], repo)
+
+
+def test_full_switches_that_merely_share_a_prefix_are_accepted(repo):
+    args = ["--log-anti-pan", "--rgx-prefix", "--skip-binary", "--mask", "--line-limit", "3"]
+    assert baseline.rewrite_find_pan_args(args, repo) == args
+
+
+def test_read_rows_rejects_non_numeric_line_numbers(tmp_path):
+    path = tmp_path / "b.csv"
+    path.write_text("filename,line_number,offset,pattern_name,data_type,matched_data\na.txt,x,0,P,PAN,d\n",
+                    encoding="utf-8")
+    with pytest.raises(BaselineError, match="line"):
+        baseline.read_rows(path)

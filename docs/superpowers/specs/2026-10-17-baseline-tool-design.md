@@ -49,8 +49,15 @@ baseline.py --validate --all [--strict] [--max-diff N]
   optional `NAME`; exactly one of `NAME` or `--all` must be given.
 - In `--create`, every argument that `baseline.py` does not define is passed to find-pan
   (`parse_known_args`), for example
-  `baseline.py --create plain-text --description "13 plain fixtures" --path RegressionTests --skip-binary`.
-  A literal `--` separates the two when needed.
+  `baseline.py --create plain-text --description "13 plain fixtures" --file RegressionTests/*.txt`.
+  A literal `--` separates the two when needed. Abbreviated find-pan switches (`--pa`, `--summ`) are
+  refused: find-pan accepts them, but they would bypass the owned-switch check and path rewriting.
+- Only one `--path` is allowed (find-pan scans only the last), and a `--path` over `RegressionTests/baseline`
+  or any of its parents is refused even before the baseline directory exists, because the baseline
+  would otherwise contain its own output. Use `--file` for the fixtures that sit next to the baselines.
+- `--create` refuses to record a run that did not scan everything (find-pan exit status 1, a missing,
+  unreadable or failed archive, or an extractor tool that is not installed): such a baseline would never
+  really be checked.
 - `baseline.py` owns find-pan's `--csv`, `--log-dir`, `--summary-json`, `--version`, `--verbose` and
   `--debug`; passing any of them to `--create` is an error, not an override.
 - `--create` refuses to replace an existing baseline unless `--force` is given.
@@ -116,8 +123,8 @@ summary:                         # compared on validate
 - Hashes: **text files** (no NUL byte in the first 8 KiB) are hashed after `\r\n` is replaced by
   `\n`, so a CRLF checkout equals an LF checkout; **binary files and archives** are hashed as they
   are. `eol_normalized` records which rule applied.
-- `.gitattributes` already forces LF for text, which keeps the checked-in hashes stable on both
-  platforms; the normalization is a second line of defense for working trees that disagree.
+- The hash normalization is what keeps the checked-in hashes stable between a CRLF and an LF checkout
+  (some fixtures are still stored with CRLF in the repository, so `.gitattributes` alone is not enough).
 
 ## 6. Canonical CSV and comparison
 

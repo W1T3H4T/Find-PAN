@@ -50,6 +50,11 @@ CSV_FIELDS = ["filename", "line_number", "offset", "pattern_name", "data_type", 
 OWNED_SWITCHES = ("--csv", "--log-dir", "--summary-json", "--version", "--verbose", "--debug")
 #   find-pan switches whose values are paths and are stored repository-relative.
 _PATH_SWITCHES = ("--path", "--file", "--rgx-patterns")
+#   find-pan accepts unambiguous abbreviations of its switches; those two groups must be spelled out.
+_KNOWN_SWITCHES = OWNED_SWITCHES + _PATH_SWITCHES
+
+#   Skip reasons that mean requested content was not scanned; a baseline of such a run is useless.
+_INCOMPLETE_REASONS = ("NOT-FOUND", "NOT-A-FILE", "ARCHIVE-FAILED", "ARCHIVE-NO-TOOL", "UNREADABLE")
 
 _NAME_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 #   A file is text when its first bytes contain no NUL.
@@ -106,6 +111,10 @@ def rewrite_find_pan_args(args: Sequence[str], root: Path = REPO_ROOT) -> list[s
         owned = next((s for s in OWNED_SWITCHES if arg == s or arg.startswith(s + "=")), None)
         if owned:
             raise BaselineError(f"{owned} is managed by baseline.py and cannot be passed to find-pan")
+        switch_name = arg.partition("=")[0]
+        if (arg.startswith("--") and len(switch_name) > 2 and switch_name not in _KNOWN_SWITCHES
+                and any(known.startswith(switch_name) for known in _KNOWN_SWITCHES)):
+            raise BaselineError(f"{switch_name}: abbreviated switch; use the full switch name")
         if pending_path_value:
             rewritten.append(to_repo_relative(arg, root))
             pending_path_value = False
@@ -149,6 +158,9 @@ def _path_values(args: Sequence[str]) -> tuple[list[str], list[str]]:
             in_file_list = False
         elif arg == "--file":
             in_file_list = True
+        elif arg.startswith("--file="):
+            files.append(arg.partition("=")[2])
+            in_file_list = False
         elif arg.startswith("--"):
             in_file_list = False
         elif in_file_list:
@@ -164,6 +176,8 @@ def enumerate_inputs(args: Sequence[str], root: Path = REPO_ROOT) -> list[str]:
     ``--path`` directory are not listed; archives are listed once (their members are not).
     """
     directories, files = _path_values(args)
+    if len(directories) > 1:
+        raise BaselineError("only one --path is allowed (find-pan scans only the last one)")
     found: set[str] = set()
     baseline_dir = (root / "RegressionTests" / "baseline").resolve()
 
@@ -172,8 +186,9 @@ def enumerate_inputs(args: Sequence[str], root: Path = REPO_ROOT) -> list[str]:
         base = (root / relative).resolve()
         if not base.is_dir():
             raise BaselineError(f"{directory}: --path must be a directory")
-        if baseline_dir.exists() and (base == baseline_dir or baseline_dir in base.parents
-                                      or base in baseline_dir.parents):
+        #   Refused even when the baseline directory does not exist yet: the first baseline created
+        #   would put its own output inside the scanned tree and every later validate would fail.
+        if base == baseline_dir or baseline_dir in base.parents or base in baseline_dir.parents:
             raise BaselineError(f"{directory}: inputs must not include the baseline directory itself")
         for current, _, names in os.walk(base):
             for name in names:
@@ -231,6 +246,10 @@ def read_rows(path: Path) -> list[tuple[str, ...]]:
     for row in rows:
         if len(row) != len(CSV_FIELDS):
             raise BaselineError(f"{path}: malformed CSV row {row!r}")
+        try:
+            _row_key(row)
+        except ValueError:
+            raise BaselineError(f"{path}: the line number or offset is not a number in row {row!r}") from None
     return canonical_rows(rows)
 
 
@@ -363,11 +382,21 @@ def create(name: str, description: str, find_pan_args: Sequence[str], force: boo
 
     args = rewrite_find_pan_args(find_pan_args, root)
     manifest = inputs_manifest(args, root)
+    tools = required_tools([entry["path"] for entry in manifest], root)
+    absent = [tool for tool in tools if shutil.which(tool) is None]
+    if absent:
+        raise BaselineError(f"install {', '.join(absent)} first: expanding these inputs needs it")
     result = run_find_pan(args, root)
+    skipped = [f"[{reason}] {path}" for reason, path in result.summary.get("skipped", [])
+               if reason in _INCOMPLETE_REASONS]
+    if result.status != 0 or skipped or result.summary.get("archives_skipped"):
+        raise BaselineError("find-pan did not scan everything, so nothing was recorded: "
+                            + ("; ".join(skipped) or f"exit status {result.status}"))
 
     baseline_root.mkdir(parents=True, exist_ok=True)
     staging = Path(tempfile.mkdtemp(prefix=f".{name}.", dir=baseline_root))
     retired = None
+    committed = False
     try:
         write_canonical_csv(result.rows, staging / "baseline.csv")
         document = {
@@ -377,7 +406,7 @@ def create(name: str, description: str, find_pan_args: Sequence[str], force: boo
             "find_pan": {"version": find_pan_version, "command": list(args)},
             "python": platform.python_version(),
             "platform": sys.platform,
-            "requires_tools": required_tools([entry["path"] for entry in manifest], root),
+            "requires_tools": tools,
             "inputs": manifest,
             "summary": {key: value for key, value in result.summary.items()
                         if key in (*_SUMMARY_FIELDS, "skipped", "exit_status")},
@@ -387,16 +416,16 @@ def create(name: str, description: str, find_pan_args: Sequence[str], force: boo
         if target.exists():
             retired = Path(tempfile.mkdtemp(prefix=f".{name}.old.", dir=baseline_root))
             os.replace(target, retired / "old")
-        try:
-            os.replace(staging, target)
-        except OSError:
-            if retired is not None:
-                os.replace(retired / "old", target)       # put the old baseline back
-                retired = None
-            raise
+        os.replace(staging, target)
+        committed = True
+    except BaseException:
+        #   Whatever went wrong (including Ctrl-C), put the previous baseline back.
+        if retired is not None and (retired / "old").exists() and not target.exists():
+            os.replace(retired / "old", target)
+        raise
     finally:
         shutil.rmtree(staging, ignore_errors=True)
-        if retired is not None:
+        if retired is not None and (committed or not (retired / "old").exists()):
             shutil.rmtree(retired, ignore_errors=True)
     return target
 
@@ -455,8 +484,10 @@ def validate(name: str, strict: bool = False, max_diff: int = 50,
         summary_messages = diff_summary(document.get("summary", {}), result.summary)
     except BaselineError as error:
         return _error(name, str(error))
-    except (KeyError, TypeError) as error:
-        return _error(name, f"baseline.yaml is incomplete or malformed ({error!r})")
+    except Exception as error:  # pylint: disable=broad-exception-caught
+        #   Garbled files, permission errors and the like are that baseline's problem (status 2),
+        #   never an uncaught traceback with status 1 ("differs") that stops --all.
+        return _error(name, f"could not validate: {type(error).__name__}: {error}")
 
     output_differs = bool(missing or extra or summary_messages)
     if not input_messages and not output_differs:
@@ -480,6 +511,13 @@ def validate(name: str, strict: bool = False, max_diff: int = 50,
 # ===========================================================================
 # Command line
 # ===========================================================================
+def _positive_int(value: str) -> int:
+    number = int(value)
+    if number < 1:
+        raise argparse.ArgumentTypeError("must be at least 1")
+    return number
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="baseline.py",
@@ -496,7 +534,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--force", action="store_true", help="With --create: replace an existing baseline.")
     parser.add_argument("--strict", action="store_true",
                         help="With --validate: treat baselines skipped for a missing extractor as failures.")
-    parser.add_argument("--max-diff", type=int, default=50, metavar="N",
+    parser.add_argument("--max-diff", type=_positive_int, default=50, metavar="N",
                         help="With --validate: most differing rows to print per baseline.")
     return parser
 
@@ -554,7 +592,7 @@ def main(argv: Sequence[str] | None = None, root: Path = REPO_ROOT, baseline_roo
             return 1 if 1 in statuses else (2 if 2 in statuses else 0)
 
         raise BaselineError("give exactly one of --create NAME or --validate [NAME | --all]")
-    except BaselineError as error:
+    except (BaselineError, OSError) as error:
         print(f"Error: {error}", file=sys.stderr)
         return 2
 
