@@ -105,3 +105,43 @@ def test_set_explicit_version(tmp_path, capsys):
 
     assert main(["--version", "9.10.11", "--pyproject", str(pyproject)]) == 0
     assert read_pyproject_version(pyproject) == (9, 10, 11)
+
+
+def _make_project(tmp_path, with_module=True):
+    pyproject = tmp_path / "pyproject.toml"
+    pyproject.write_text('[project]\nversion = "1.2.3"\n', encoding="utf-8")
+    module = tmp_path / "src" / "find_pan" / "version.py"
+    if with_module:
+        module.parent.mkdir(parents=True)
+        module.write_text('"""Version."""\n\n__version__ = "1.2.3"\n', encoding="utf-8")
+    return pyproject, module
+
+
+def test_bump_updates_pyproject_and_version_module_together(tmp_path):
+    pyproject, module = _make_project(tmp_path)
+    assert main(["--minor", "--pyproject", str(pyproject)]) == 0
+    assert read_pyproject_version(pyproject) == (1, 3, 0)
+    assert '__version__ = "1.3.0"' in module.read_text(encoding="utf-8")
+    assert module.read_text(encoding="utf-8").startswith('"""Version."""')
+
+
+def test_version_module_skipped_when_absent(tmp_path):
+    pyproject, module = _make_project(tmp_path, with_module=False)
+    assert main(["--patch", "--pyproject", str(pyproject)]) == 0
+    assert read_pyproject_version(pyproject) == (1, 2, 4)
+    assert not module.exists()
+
+
+def test_explicit_version_file_option(tmp_path):
+    pyproject, _ = _make_project(tmp_path, with_module=False)
+    custom = tmp_path / "custom_version.py"
+    custom.write_text('__version__ = "0.0.1"\n', encoding="utf-8")
+    assert main(["--version", "9.8.7", "--pyproject", str(pyproject), "--version-file", str(custom)]) == 0
+    assert custom.read_text(encoding="utf-8") == '__version__ = "9.8.7"\n'
+
+
+def test_version_module_and_pyproject_agree():
+    from find_pan.version import __version__
+
+    expected = ".".join(str(part) for part in read_pyproject_version(ROOT / "pyproject.toml"))
+    assert __version__ == expected
