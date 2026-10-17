@@ -68,7 +68,7 @@ def find_json_regex_config() -> str:
         # Find the first valid config path
         for config_path in config_paths:
             find_pan_dir = os.path.join(config_path, "find-pan")
-            json_file_path = os.path.join(find_pan_dir, "find-pan.json")
+            json_file_path = os.path.join(find_pan_dir, "find-pan-regex.json")
 
             if os.path.exists(json_file_path):
                 print(f"Using configuration file: {json_file_path}\n")

@@ -1,0 +1,17 @@
+{
+  "version": "0.2.1",
+  "tasks": [
+    {
+      "taskLabel": "Pytest Regression Tests",
+      "appliesTo": "*",
+      "type": "launch",
+      "command": "uv",
+      "args": [
+        "run",
+        "python",
+        "bin/run-pytest-regression.py"
+      ],
+      "workingDirectory": "${workspaceRoot}"
+    }
+  ]
+}
