@@ -9,12 +9,14 @@ import json
 import os
 import re
 import shutil
+from dataclasses import asdict, fields
 from pathlib import Path
 from typing import Dict, List
 
 import yaml
 
 from find_pan.errors import ConfigError
+from find_pan.models import ExtractionLimits
 
 # - Default extractor configuration filename
 _EXTRACTOR_CONFIG_FILENAME = "find-pan-conf.yaml"
@@ -183,9 +185,33 @@ def build_extractor_config(config_path: str) -> None:
         }
 
 
-    config = {"extractors": extractors}
+    config = {"limits": asdict(ExtractionLimits()), "extractors": extractors}
     with open(config_path, "w", encoding="utf-8") as config_file:
         yaml.safe_dump(config, config_file, sort_keys=True)
+
+
+def load_extraction_limits(config_path: str) -> ExtractionLimits:
+    """Load the ``limits`` section of the extractor YAML (defaults for anything omitted).
+
+    Raises ``ConfigError`` for unknown keys or values that are not positive integers.
+    """
+    with open(config_path, "r", encoding="utf-8", errors="replace") as config_file:
+        try:
+            data = yaml.safe_load(config_file)
+        except yaml.YAMLError as error:
+            raise ConfigError(f"Invalid extractor configuration {config_path}: {error}") from error
+    section = (data or {}).get("limits") if isinstance(data, dict) else None
+    if section is None:
+        return ExtractionLimits()
+    if not isinstance(section, dict):
+        raise ConfigError(f"Invalid limits in {config_path}: expected a mapping")
+    allowed = {field.name for field in fields(ExtractionLimits)}
+    for key, value in section.items():
+        if key not in allowed:
+            raise ConfigError(f"Unknown limit '{key}' in {config_path}; expected one of {sorted(allowed)}")
+        if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+            raise ConfigError(f"Limit '{key}' in {config_path} must be a positive integer, got {value!r}")
+    return ExtractionLimits(**section)
 
 
 def load_extractor_config(config_path: str) -> Dict[str, Dict]:

@@ -16,7 +16,7 @@ from find_pan.detectors import scan_line
 from find_pan.errors import ConfigError, ExtractorUnavailable, ExtractorError
 from find_pan.filetypes import FileKind, classify
 from find_pan.logging_setup import Loggers
-from find_pan.models import SkipReason
+from find_pan.models import ExtractionLimits, SkipReason
 from find_pan.reporting import Reporter
 from find_pan.settings import Settings
 
@@ -44,6 +44,7 @@ class Scanner:
         reporter: Reporter,
         loggers: Loggers,
         load_extractors: Callable[[], dict] | None = None,
+        load_limits: Callable[[], ExtractionLimits] | None = None,
     ) -> None:
         self.settings = settings
         self.patterns = patterns
@@ -52,6 +53,8 @@ class Scanner:
         self.problems: list[Problem] = []
         self._load_extractors = load_extractors
         self._extractors: dict | None = None
+        self._load_limits = load_limits
+        self._limits: ExtractionLimits | None = None
         #   Content digests of the archives currently being expanded (outermost first).
         self._expanding: list[str] = []
 
@@ -140,6 +143,15 @@ class Scanner:
                 self._extractors = {}
         return self._extractors
 
+    def _limits_config(self) -> ExtractionLimits:
+        if self._limits is None:
+            try:
+                self._limits = self._load_limits() if self._load_limits else ExtractionLimits()
+            except (ConfigError, FileNotFoundError, ValueError, OSError) as error:
+                self.problems.append(Problem("warning", f"Extraction limits unavailable, using defaults: {error}"))
+                self._limits = ExtractionLimits()
+        return self._limits
+
     @staticmethod
     def _digest(path: str) -> str:
         sha = hashlib.sha256()
@@ -173,6 +185,7 @@ class Scanner:
                 self.loggers.trace,
                 archive_type=archive_type,
                 verbose=self.settings.verbose,
+                limits=self._limits_config(),
             ) as directory:
                 self.reporter.archive_expanded()
                 self._walk(directory, extracted=True)

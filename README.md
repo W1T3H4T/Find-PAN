@@ -312,6 +312,11 @@ makes the exit status 1 after the rest of the run has completed.
 
 Archives are treated as untrusted input:
 
+- **Decompression bombs:** while an extractor runs, find-pan watches its output directory and kills the tool
+  (and its child processes) if it writes more than 10 GiB, creates more than 100,000 files, runs longer than
+  10 minutes, or leaves less than 1 GiB of free disk space. Anything already extracted is still scanned, and the
+  archive is reported as `ARCHIVE-FAILED`. Change the limits in the `limits:` section of `find-pan-conf.yaml`, or
+  per extractor by adding the same keys to that extractor's entry.
 - If a tool extracts some members and then fails (for example on an unsafe `../` member), the members that were
   extracted are still scanned and the archive is reported as `ARCHIVE-FAILED` (partial).
 - Symbolic links inside an extracted archive are not followed (`SYMLINK`); `--path` still follows links in your own tree.

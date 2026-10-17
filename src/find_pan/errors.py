@@ -21,5 +21,9 @@ class ExtractorError(FindPanError):
     """An archive could not be extracted."""
 
 
+class LimitExceeded(ExtractorError):
+    """An extraction was stopped because it exceeded a size, file-count, time or disk-space limit."""
+
+
 class ExtractorUnavailable(ExtractorError):
     """No usable extractor exists for an archive (unknown type, no entry, tool not installed)."""

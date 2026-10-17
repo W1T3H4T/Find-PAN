@@ -244,3 +244,14 @@ def test_masking_also_applies_to_paths_and_details_in_skip_output(caplog):
 def test_reporter_clean_is_available_to_the_scanner():
     reporter = Reporter(Redactor(True), [], ScanStats(), LOGGER, 500)
     assert reporter.clean(f"a\nb {VALID_PAN}") == "a?b 455673******9855"
+
+
+def test_braces_in_extractor_arguments_and_paths_are_left_alone(tmp_path):
+    """Only {archive} and {tempdir} are substituted; other braces must not break (or be formatted)."""
+    runner = Runner()
+    odd = tmp_path / "we{ird} {name}.zip"
+    config = {"zip": {"command": "unzip", "args": ["-x", "{{literal}}", "{archive}", "{0}", "{tempdir}"]}}
+    with archives.extract_archive(str(odd), config, LOGGER, archive_type="zip", runner=runner) as directory:
+        command = runner.commands[0]
+    assert command[2:5] == ["{{literal}}", os.path.abspath(odd), "{0}"]
+    assert command[5] == directory

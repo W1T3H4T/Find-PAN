@@ -42,6 +42,20 @@ class Match:
     pan: str
 
 
+@dataclass(frozen=True)
+class ExtractionLimits:
+    """Bounds placed on one external extraction (decompression-bomb protection).
+
+    The defaults are generous so ordinary archives never reach them; they can
+    be raised or lowered in ``find-pan-conf.yaml``, globally or per extractor.
+    """
+
+    max_extracted_bytes: int = 10 * 1024 * 1024 * 1024
+    max_files: int = 100_000
+    timeout_seconds: int = 600
+    min_free_bytes: int = 1024 * 1024 * 1024
+
+
 class ScanStats:
     """Counters and timing for one scan."""
 

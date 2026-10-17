@@ -955,3 +955,24 @@ everything derived from untrusted input. Path traversal itself was checked again
 and tar archives and is neutralized by the tools. Covered by `tests/test_hardening.py`.
 
 ---
+
+## BUG-042: Decompression bombs and brace handling in extractor arguments
+
+**Status:** `done`
+
+**Severity:** Important
+
+**Description:**
+Nothing bounded what an external extractor could write, how long it could run, or how much disk it
+could fill, and `--path` extracts any archive it meets. Separately, extractor arguments were passed
+through `str.format`, so a literal `{` or `}` in a configured argument raised `KeyError`.
+
+**Fix applied:**
+`archives.run_limited` runs the tool under a watchdog that polls the output directory and kills the
+tool and its children when extracted bytes, entry count, elapsed time or free disk space cross the
+limits in `ExtractionLimits` (defaults: 10 GiB, 100,000 files, 600 s, 1 GiB free). Limits live in the
+`limits:` section of `find-pan-conf.yaml` and can be overridden per extractor. A breach is an
+`ARCHIVE-FAILED` skip (partial members are still scanned). Arguments now substitute only `{archive}`
+and `{tempdir}`. Covered by `tests/test_limits.py` and `tests/test_hardening.py`.
+
+---
