@@ -15,15 +15,33 @@
 Design: docs/superpowers/specs/2026-10-17-baseline-tool-design.md
 """
 
+import argparse
 import csv
 import hashlib
+import json
+import logging
 import os
+import platform
 import re
+import shutil
+import subprocess
+import sys
+import tempfile
 from collections import Counter
+from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable, Sequence
 
+import yaml
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(REPO_ROOT / "src"))
+
+from find_pan.config import find_extractor_config_path, load_extractor_config  # noqa: E402
+from find_pan.filetypes import FileKind, classify_head  # noqa: E402
+from find_pan.version import __version__ as find_pan_version  # noqa: E402
+
 BASELINE_ROOT = REPO_ROOT / "RegressionTests" / "baseline"
 
 CSV_FIELDS = ["filename", "line_number", "offset", "pattern_name", "data_type", "matched_data"]
@@ -57,12 +75,16 @@ def validate_name(name: str) -> str:
     return name
 
 
-def to_repo_relative(path: str, root: Path = REPO_ROOT) -> str:
+def to_repo_relative(path: str, root: Path = REPO_ROOT, base: Path | None = None) -> str:
     """Return *path* as a repository-relative path with ``/`` separators.
 
-    The path must exist and lie inside *root* (baselines must be reproducible from a checkout).
+    A relative *path* is taken from the current directory (what a user types), or from *base*
+    when given (what was stored: repository-relative).  It must exist and lie inside *root*
+    (baselines must be reproducible from a checkout).
     """
     candidate = Path(path)
+    if base is not None and not candidate.is_absolute():
+        candidate = base / candidate
     if not candidate.exists():
         raise BaselineError(f"{path}: does not exist")
     resolved = candidate.resolve()
@@ -146,7 +168,7 @@ def enumerate_inputs(args: Sequence[str], root: Path = REPO_ROOT) -> list[str]:
     baseline_dir = (root / "RegressionTests" / "baseline").resolve()
 
     for directory in directories:
-        relative = to_repo_relative(directory, root)
+        relative = to_repo_relative(directory, root, base=root)
         base = (root / relative).resolve()
         if not base.is_dir():
             raise BaselineError(f"{directory}: --path must be a directory")
@@ -161,7 +183,7 @@ def enumerate_inputs(args: Sequence[str], root: Path = REPO_ROOT) -> list[str]:
                 found.add(full.resolve().relative_to(root.resolve()).as_posix())
 
     for entry in files:
-        relative = to_repo_relative(entry, root)
+        relative = to_repo_relative(entry, root, base=root)
         if not (root / relative).is_file():
             raise BaselineError(f"{entry}: --file entries must be files")
         if baseline_dir in (root / relative).resolve().parents:
@@ -264,3 +286,278 @@ def format_row(row: Sequence[str]) -> str:
     """Format a CSV row as ``file:line:offset  type  pattern  data``."""
     filename, line, offset, pattern, data_type, data = row
     return f"{filename}:{line}:{offset}  {data_type}  {pattern}  {data}"
+
+# ===========================================================================
+# Running find-pan
+# ===========================================================================
+@dataclass
+class RunResult:
+    """What one find-pan run produced."""
+
+    rows: list[tuple[str, ...]]
+    summary: dict
+    status: int
+    stderr: str
+
+
+def run_find_pan(args: Sequence[str], root: Path = REPO_ROOT) -> RunResult:
+    """Run ``bin/find-pan.py`` (as a subprocess, in *root*) and collect its CSV and summary.
+
+    Exit statuses 0 and 1 are results (1 means a requested file was never scanned); anything
+    else, or missing output, raises ``BaselineError`` with find-pan's stderr.
+    """
+    with tempfile.TemporaryDirectory(prefix="baseline-") as scratch:
+        csv_path = Path(scratch) / "findings.csv"
+        json_path = Path(scratch) / "summary.json"
+        command = [sys.executable, str(root / "bin" / "find-pan.py"), *args,
+                   "--csv", str(csv_path), "--log-dir", str(Path(scratch) / "logs"),
+                   "--summary-json", str(json_path)]
+        completed = subprocess.run(command, cwd=root, capture_output=True, text=True,
+                                   encoding="utf-8", errors="replace", check=False)
+        if completed.returncode not in (0, 1) or not csv_path.exists() or not json_path.exists():
+            detail = (completed.stderr or completed.stdout).strip()[-1500:]
+            raise BaselineError(f"find-pan failed (exit status {completed.returncode}): {detail}")
+        rows = read_rows(csv_path)
+        summary = json.loads(json_path.read_text(encoding="utf-8"))
+    return RunResult(rows, summary, completed.returncode, completed.stderr)
+
+
+def required_tools(inputs: Iterable[str], root: Path = REPO_ROOT) -> list[str]:
+    """Return the extractor commands needed to expand the archives among *inputs* (sorted, unique)."""
+    extractors = load_extractor_config(find_extractor_config_path())
+    logger = logging.getLogger("baseline")
+    tools: set[str] = set()
+    for rel_path in inputs:
+        with open(root / rel_path, "rb") as handle:
+            head = handle.read(1024)
+        classification = classify_head(head, rel_path, False, logger)
+        if classification.kind is FileKind.ARCHIVE:
+            command = extractors.get(classification.archive_type, {}).get("command")
+            if command:
+                tools.add(Path(command).stem)
+    return sorted(tools)
+
+
+# ===========================================================================
+# --create
+# ===========================================================================
+def _has_input(args: Sequence[str]) -> bool:
+    directories, files = _path_values(args)
+    return bool(directories or files)
+
+
+def create(name: str, description: str, find_pan_args: Sequence[str], force: bool = False,
+           root: Path = REPO_ROOT, baseline_root: Path = BASELINE_ROOT) -> Path:
+    """Run find-pan with *find_pan_args* and archive the result as baseline *name*.
+
+    The baseline is built in a hidden staging directory and moved into place only when everything
+    succeeded, so a failure never leaves a partial baseline (and, with *force*, never damages the
+    existing one).
+    """
+    validate_name(name)
+    target = baseline_root / name
+    if target.exists() and not force:
+        raise BaselineError(f"baseline {name!r} already exists ({target}); use --force to replace it")
+    if not _has_input(find_pan_args):
+        raise BaselineError("give the files to scan with --path or --file")
+
+    args = rewrite_find_pan_args(find_pan_args, root)
+    manifest = inputs_manifest(args, root)
+    result = run_find_pan(args, root)
+
+    baseline_root.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(prefix=f".{name}.", dir=baseline_root))
+    retired = None
+    try:
+        write_canonical_csv(result.rows, staging / "baseline.csv")
+        document = {
+            "name": name,
+            "description": description,
+            "created": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "find_pan": {"version": find_pan_version, "command": list(args)},
+            "python": platform.python_version(),
+            "platform": sys.platform,
+            "requires_tools": required_tools([entry["path"] for entry in manifest], root),
+            "inputs": manifest,
+            "summary": {key: value for key, value in result.summary.items()
+                        if key in (*_SUMMARY_FIELDS, "skipped", "exit_status")},
+        }
+        with open(staging / "baseline.yaml", "w", encoding="utf-8", newline="\n") as handle:
+            yaml.safe_dump(document, handle, sort_keys=False, allow_unicode=True)
+        if target.exists():
+            retired = Path(tempfile.mkdtemp(prefix=f".{name}.old.", dir=baseline_root))
+            os.replace(target, retired / "old")
+        try:
+            os.replace(staging, target)
+        except OSError:
+            if retired is not None:
+                os.replace(retired / "old", target)       # put the old baseline back
+                retired = None
+            raise
+    finally:
+        shutil.rmtree(staging, ignore_errors=True)
+        if retired is not None:
+            shutil.rmtree(retired, ignore_errors=True)
+    return target
+
+
+# ===========================================================================
+# --validate
+# ===========================================================================
+@dataclass
+class Outcome:
+    """The result of validating one baseline."""
+
+    name: str
+    verdict: str          # PASS, FAIL (...), SKIPPED (environment) or ERROR
+    lines: list[str]
+    status: int           # 0 ok, 1 differs, 2 error
+
+
+def _error(name: str, message: str) -> Outcome:
+    return Outcome(name, "ERROR", [message], 2)
+
+
+def _limited(prefix: str, rows: list, max_diff: int, label: str) -> list[str]:
+    lines = [f"{prefix}: {format_row(row)}" for row in rows[:max_diff]]
+    lines.append(f"{len(rows)} {label} rows" + (f" ({max_diff} shown)" if len(rows) > max_diff else ""))
+    return lines
+
+
+def validate(name: str, strict: bool = False, max_diff: int = 50,
+             root: Path = REPO_ROOT, baseline_root: Path = BASELINE_ROOT) -> Outcome:
+    """Re-run find-pan exactly as recorded for baseline *name* and compare with the stored results."""
+    try:
+        validate_name(name)
+        directory = baseline_root / name
+        yaml_path, csv_path = directory / "baseline.yaml", directory / "baseline.csv"
+        if not yaml_path.is_file() or not csv_path.is_file():
+            return _error(name, f"no baseline named {name!r} (expected {yaml_path} and {csv_path.name})")
+        try:
+            document = yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
+        except yaml.YAMLError as error:
+            return _error(name, f"{yaml_path.name} is not valid YAML: {error}")
+        if not isinstance(document, dict) or document.get("name") != name:
+            return _error(name, f"{yaml_path.name} says name {document.get('name') if isinstance(document, dict) else None!r}, "
+                                f"but the directory is {name!r}")
+
+        missing_tools = [tool for tool in document.get("requires_tools", []) if shutil.which(tool) is None]
+        if missing_tools:
+            return Outcome(name, "SKIPPED (environment)",
+                           [f"required extractor not installed: {', '.join(missing_tools)}"], 1 if strict else 0)
+
+        command = list(document["find_pan"]["command"])
+        current_inputs = inputs_manifest(command, root)
+        result = run_find_pan(command, root)
+
+        input_messages = diff_inputs(document.get("inputs", []), current_inputs)
+        missing, extra = diff_rows(read_rows(csv_path), result.rows)
+        summary_messages = diff_summary(document.get("summary", {}), result.summary)
+    except BaselineError as error:
+        return _error(name, str(error))
+    except (KeyError, TypeError) as error:
+        return _error(name, f"baseline.yaml is incomplete or malformed ({error!r})")
+
+    output_differs = bool(missing or extra or summary_messages)
+    if not input_messages and not output_differs:
+        return Outcome(name, "PASS", [], 0)
+
+    lines = list(input_messages)
+    if missing:
+        lines += _limited("missing", missing, max_diff, "missing")
+    if extra:
+        lines += _limited("extra", extra, max_diff, "extra")
+    lines += summary_messages
+    if input_messages and output_differs:
+        verdict = "FAIL (inputs changed, output differs)"
+    elif input_messages:
+        verdict = "FAIL (inputs changed)"
+    else:
+        verdict = "FAIL (output differs)"
+    return Outcome(name, verdict, lines, 1)
+
+
+# ===========================================================================
+# Command line
+# ===========================================================================
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="baseline.py",
+        allow_abbrev=False,
+        description="Create and validate find-pan regression baselines.",
+        epilog="With --create, every other argument is passed to find-pan "
+               "(for example --path or --file); use -- to separate them if needed.",
+    )
+    parser.add_argument("--create", metavar="NAME", help="Run find-pan and archive the result as baseline NAME.")
+    parser.add_argument("--validate", metavar="NAME", nargs="?", const="",
+                        help="Re-run find-pan and compare with baseline NAME (or every baseline with --all).")
+    parser.add_argument("--all", action="store_true", help="With --validate: check every baseline.")
+    parser.add_argument("--description", default="", help="With --create: what the baseline covers.")
+    parser.add_argument("--force", action="store_true", help="With --create: replace an existing baseline.")
+    parser.add_argument("--strict", action="store_true",
+                        help="With --validate: treat baselines skipped for a missing extractor as failures.")
+    parser.add_argument("--max-diff", type=int, default=50, metavar="N",
+                        help="With --validate: most differing rows to print per baseline.")
+    return parser
+
+
+def _all_names(baseline_root: Path) -> list[str]:
+    if not baseline_root.is_dir():
+        return []
+    return sorted(entry.name for entry in baseline_root.iterdir()
+                  if entry.is_dir() and not entry.name.startswith(".") and (entry / "baseline.yaml").is_file())
+
+
+def _print_outcome(outcome: Outcome) -> None:
+    print(f"{outcome.name}: {outcome.verdict}")
+    for line in outcome.lines:
+        print(f"    {line}")
+
+
+def main(argv: Sequence[str] | None = None, root: Path = REPO_ROOT, baseline_root: Path = BASELINE_ROOT) -> int:
+    """Run the tool; return the exit status (0 ok, 1 differences, 2 usage or environment error)."""
+    parser = build_parser()
+    try:
+        args, rest = parser.parse_known_args(argv)
+    except SystemExit as exit_request:
+        return int(exit_request.code or 0)
+    rest = [item for item in rest if item != "--"]
+
+    try:
+        if args.create is not None and args.validate is None:
+            if args.all:
+                raise BaselineError("--all only applies to --validate")
+            target = create(args.create, args.description, rest, args.force, root, baseline_root)
+            print(f"created baseline {args.create}: {target}")
+            return 0
+
+        if args.validate is not None and args.create is None:
+            if rest:
+                raise BaselineError(f"unexpected arguments with --validate: {' '.join(rest)}")
+            if bool(args.validate) == args.all:
+                raise BaselineError("give exactly one of a baseline NAME or --all with --validate")
+            names = [args.validate] if args.validate else _all_names(baseline_root)
+            if not names:
+                raise BaselineError(f"no baselines found under {baseline_root}")
+            outcomes = []
+            for name in names:
+                outcome = validate(name, args.strict, args.max_diff, root, baseline_root)
+                _print_outcome(outcome)
+                outcomes.append(outcome)
+            passed = sum(o.verdict == "PASS" for o in outcomes)
+            failed = sum(o.verdict.startswith("FAIL") or (o.verdict.startswith("SKIPPED") and o.status == 1)
+                         for o in outcomes)
+            skipped = sum(o.verdict.startswith("SKIPPED") and o.status == 0 for o in outcomes)
+            errors = sum(o.verdict == "ERROR" for o in outcomes)
+            print(f"{passed} passed, {failed} failed, {skipped} skipped, {errors} errors")
+            statuses = {o.status for o in outcomes}
+            return 1 if 1 in statuses else (2 if 2 in statuses else 0)
+
+        raise BaselineError("give exactly one of --create NAME or --validate [NAME | --all]")
+    except BaselineError as error:
+        print(f"Error: {error}", file=sys.stderr)
+        return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main())
