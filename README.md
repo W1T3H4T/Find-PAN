@@ -266,7 +266,7 @@ Embedded PANs are generated to avoid the configured anti-PAN patterns, and the l
 # Example Usage for a File System Scan
 <pre>
 $ bin/find-pan.py --path test --report-delta 100 --skip-binary 
-find-pan.py v3.1.1
+find-pan.py v3.1.2
 Python 3.12.6 (main, Sep  6 2024, 19:03:47) [Clang 15.0.0 (clang-1500.3.9.4)]
 Command-line arguments: ['--path', 'test', '--report-delta', '100', '--skip-binary']
 2024-09-15 20:04:44,333 [INFO]: 
@@ -370,7 +370,7 @@ extractors:
 
 <pre>
 $ uv run python bin/find-pan.py --file test-archive.tar.gz notes.txt
-find-pan.py v3.1.1
+find-pan.py v3.1.2
 2024-09-15 20:04:44,333 [INFO]: -- Processing Summary --
 2024-09-15 20:04:44,333 [INFO]: PANs Matched  :    64704
 2024-09-15 20:04:44,333 [INFO]: TRACKs Matched:    15521
