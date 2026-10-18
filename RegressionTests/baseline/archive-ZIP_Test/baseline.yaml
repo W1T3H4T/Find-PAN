@@ -2,7 +2,7 @@ name: archive-ZIP_Test
 description: single fixture ZIP_Test.zip
 created: '2026-10-17T23:07:06Z'
 find_pan:
-  version: 3.2.0
+  version: 3.3.0
   command:
   - --file
   - RegressionTests/ZIP_Test.zip

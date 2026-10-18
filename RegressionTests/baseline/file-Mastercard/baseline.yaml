@@ -2,7 +2,7 @@ name: file-Mastercard
 description: single fixture Mastercard.txt
 created: '2026-10-17T23:07:03Z'
 find_pan:
-  version: 3.2.0
+  version: 3.3.0
   command:
   - --file
   - RegressionTests/Mastercard.txt
