@@ -14,11 +14,17 @@ line fails Luhn after separators are removed, and find-pan reports one Luhn chec
 import argparse
 import importlib.util
 import random
-import re
+import sys
 from collections.abc import Iterator
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "src"))
+
+from find_pan.config import compile_regex_patterns, load_json_data  # noqa: E402
+from find_pan.detectors import scan_line  # noqa: E402
+from find_pan.models import MatchKind  # noqa: E402
+
 DEFAULT_PATTERNS = ROOT / "config" / "find-pan-regex.json"
 MAX_ATTEMPTS = 1000
 
@@ -47,6 +53,16 @@ def corrupt(pan: str, rng: random.Random) -> str:
     return pan[:-1] + str((int(pan[-1]) + rng.randrange(1, 10)) % 10)
 
 
+def confirmed(text: str, patterns: list) -> bool:
+    """Whether find-pan reports *text*, alone on a line or with text around it, as exactly one Luhn failure.
+
+    This asks the scanner itself: a Luhn failure can contain a shorter number that another pattern accepts as
+    a PAN, and some anti-PAN patterns depend on how much of the line follows the number.
+    """
+    lines = [text] + [f"a {text} " + "x" * extra for extra in (0, 8, 16, 24)]
+    return all([m.kind for m in scan_line("f", 1, line, patterns)] == [MatchKind.BAD_LUHN] for line in lines)
+
+
 def generate(count: int, patterns_path: Path = DEFAULT_PATTERNS, rng: random.Random | None = None) -> Iterator[str]:
     """Yield exactly count values, each fitting a PAN pattern and having an intentionally wrong checksum."""
     if count < 0:
@@ -54,22 +70,21 @@ def generate(count: int, patterns_path: Path = DEFAULT_PATTERNS, rng: random.Ran
     rng = rng or random.SystemRandom()
     generator = load_generator()
     pan_patterns = generator.load_pan_patterns(patterns_path)
-    anti_pans = generator.collect_regexes(generator.load_optional_section(patterns_path, "Anti-PAN Pattern"))
-    brands = {name: [re.compile(regex) for regex in data["regex"]] for name, data in pan_patterns.items()}
+    patterns = compile_regex_patterns(load_json_data(str(patterns_path)))
     names = list(pan_patterns)
     separators = ("", " ", "-")
     for index in range(count):
         name = names[index % len(names)]
+        separator = separators[index % len(separators)]
         for _ in range(MAX_ATTEMPTS):
             valid = generator.generate_matching_luhn_pan(rng.choice(pan_patterns[name]["regex"]), rng)
             digits = corrupt(valid, rng)
-            if any(regex.fullmatch(digits) for regex in brands[name]) and not any(
-                    anti.search(digits) for anti in anti_pans):
+            text = separator.join(digits[start:start + 4] for start in range(0, len(digits), 4))
+            if confirmed(text, patterns):
                 break
         else:
             raise ValueError(f"Could not generate an invalid PAN for pattern: {name}")
-        separator = separators[index % len(separators)]
-        yield separator.join(digits[start:start + 4] for start in range(0, len(digits), 4))
+        yield text
 
 
 def main() -> None:

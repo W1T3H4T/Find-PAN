@@ -3,7 +3,7 @@ description: PANs written with spaces or hyphens are normalized, then matched by
   ordinary patterns; track data is unaffected
 created: '2026-10-18T14:06:21Z'
 find_pan:
-  version: 3.5.0
+  version: 3.5.1
   command:
   - --file
   - RegressionTests/Delimited-PAN.txt

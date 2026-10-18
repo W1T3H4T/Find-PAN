@@ -2,7 +2,7 @@ name: file-Diners-Club-International
 description: single fixture Diners-Club-International.txt
 created: '2026-10-17T23:07:00Z'
 find_pan:
-  version: 3.5.0
+  version: 3.5.1
   command:
   - --file
   - RegressionTests/Diners-Club-International.txt

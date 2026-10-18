@@ -2,6 +2,7 @@
 
 import importlib.util
 import json
+import time
 from collections import Counter
 from pathlib import Path
 
@@ -57,8 +58,11 @@ def test_every_kind_of_hit_is_planted_by_the_default_mix(tmp_path):
     assert all(expected[key] > 0 for key in KEYS)
 
 
-def test_the_same_seed_gives_the_same_tree(tmp_path):
+def test_the_same_seed_gives_the_same_tree_whatever_the_time(tmp_path, monkeypatch):
+    """Archive members carry no timestamp, so the bytes depend on the seed alone."""
+    monkeypatch.setattr(time, "time", lambda: 1_000_000_000.0)
     first, first_answers = generate(tmp_path, "--archives", "10", name="one")
+    monkeypatch.setattr(time, "time", lambda: 1_700_000_000.0)
     second, second_answers = generate(tmp_path, "--archives", "10", name="two")
     listing = lambda root: sorted((p.relative_to(root).as_posix(), p.read_bytes()) for p in root.rglob("*") if p.is_file())
     assert listing(first) == listing(second)

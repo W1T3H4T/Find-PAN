@@ -243,7 +243,10 @@ def _zip(members: list[tuple[str, bytes]]) -> bytes:
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
         for name, data in members:
-            archive.writestr(name, data)
+            #   A fixed timestamp keeps the bytes (and so the tree) dependent on the seed alone.
+            info = zipfile.ZipInfo(name, date_time=(2000, 1, 1, 0, 0, 0))
+            info.compress_type = zipfile.ZIP_DEFLATED
+            archive.writestr(info, data)
     return buffer.getvalue()
 
 

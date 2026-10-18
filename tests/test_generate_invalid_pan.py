@@ -40,3 +40,11 @@ def test_the_shipped_regression_file_has_5000_lines_that_all_fail_luhn(compiled_
         [m.kind for m in detectors.scan_line("f", n, line, compiled_patterns)] == [MatchKind.BAD_LUHN]
         for n, line in enumerate(lines, 1))
     assert failures == 5000
+
+
+def test_a_value_that_another_pattern_reports_as_a_pan_is_rejected(compiled_patterns):
+    """A Luhn failure can contain a shorter number that is a PAN; such a value is not a clean invalid PAN."""
+    generator = load()
+    for value in ("356390065567496961", "3063 9373 9271 6039 90", "6226-3949-3248-0903-215"):
+        assert not generator.confirmed(value, compiled_patterns)
+    assert generator.confirmed("4556737586899850", compiled_patterns)

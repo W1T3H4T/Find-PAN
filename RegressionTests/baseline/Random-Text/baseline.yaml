@@ -2,7 +2,7 @@ name: Random-Text
 description: ''
 created: '2026-10-18T02:59:38Z'
 find_pan:
-  version: 3.5.0
+  version: 3.5.1
   command:
   - --file
   - RegressionTests/Random-Text.txt
