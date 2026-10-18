@@ -3,6 +3,7 @@
 
 Examples:
     python generate-test-data.py --out data --files 100000 --seed 1
+    python generate-test-data.py --out big --files 900 --min-size 50000 --max-size 55000 --seed 1
     python generate-test-data.py --out data --files 5000 --archives 5 --binary 5 \\
         --mix clean=40,pan=30,delimited=10,track=10,bad-luhn=5,anti-pan=5
 
@@ -129,7 +130,7 @@ class Maker:
     """Builds hits and files from the configured patterns."""
 
     def __init__(self, patterns_path: Path, mix: dict[str, float], rng: random.Random, max_hits: int,
-                 max_size: int, crlf: float) -> None:
+                 max_size: int, crlf: float, min_size: int = 0) -> None:
         self.pan_tool = load("generate-pan")
         self.invalid_tool = load("generate-invalid-pan")
         self.rng = rng
@@ -139,6 +140,7 @@ class Maker:
         self.hit_weights = [mix[kind] for kind in self.hit_kinds]
         self.clean_share = mix.get("clean", 0) / sum(mix.values())
         self.max_hits, self.max_size, self.crlf = max_hits, max_size, crlf
+        self.min_size = min_size
         self.pans: dict[str, None] = {}
         self.track_values: dict[str, None] = {}
 
@@ -207,6 +209,10 @@ class Maker:
         hits = 0 if (not self.hit_kinds or rng.random() < self.clean_share) else rng.randint(1, self.max_hits)
         wanted = rng.randint(0, max(1, self.max_size // AVERAGE_LINE))
         text = [self.pan_tool.filler(rng) for _ in range(max(wanted, 1 if hits else wanted))]
+        size = sum(len(row) + 1 for row in text)
+        while size < self.min_size:                                      # pad with filler up to the minimum size
+            text.append(self.pan_tool.filler(rng))
+            size += len(text[-1]) + 1
         for _ in range(hits):
             kind = rng.choices(self.hit_kinds, self.hit_weights)[0]
             index = rng.randrange(len(text))
@@ -231,7 +237,7 @@ class Maker:
         return Made(stem + extension, self.render(self.lines(counts), extension), counts)
 
     def binary_file(self, stem: str) -> Made:
-        size = self.rng.randint(64, max(65, self.max_size))
+        size = self.rng.randint(max(64, self.min_size), max(65, self.min_size, self.max_size))
         noise = bytes(self.rng.randrange(256) for _ in range(size))
         return Made(stem + self.rng.choice((".bin", ".dat")), b"\x00\x01" + noise.replace(b"\x00\x01", b"\x02"), kind="binary")
 
@@ -328,7 +334,7 @@ def write_answers(answers: Path, totals: Counts, entries: list[dict], maker: Mak
     (answers / "expected.json").write_text(json.dumps(expected, indent=2) + "\n", encoding="utf-8")
     manifest = {"seed": seed, "files": len(entries), "binary_files": binary_files, "totals": expected,
                 "options": {"mix": args.mix, "per_dir": args.per_dir, "depth": args.depth,
-                            "max_size": args.max_size, "binary": args.binary, "archives": args.archives},
+                            "max_size": args.max_size, "min_size": args.min_size, "binary": args.binary, "archives": args.archives},
                 "entries": entries}
     (answers / "manifest.json").write_text(json.dumps(manifest, indent=1) + "\n", encoding="utf-8")
     (answers / "pans.txt").write_text("".join(f"{pan}\n" for pan in maker.pans), encoding="utf-8")
@@ -364,6 +370,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                         help=f"relative weights of {', '.join(KINDS)} (default: {DEFAULT_MIX})")
     parser.add_argument("--max-hits", type=positive, default=3, metavar="N", help="most hits in one file (default: 3)")
     parser.add_argument("--max-size", type=positive, default=4096, metavar="BYTES", help="approximate largest text file (default: 4096)")
+    parser.add_argument("--min-size", type=positive, default=None, metavar="BYTES",
+                        help="smallest text or binary file; --max-size is raised to at least this (default: no minimum)")
     parser.add_argument("--per-dir", type=positive, default=100, metavar="N", help="files per directory (default: 100)")
     parser.add_argument("--depth", type=int, default=2, metavar="N", help="directory levels (default: 2; 0 for one flat directory)")
     parser.add_argument("--binary", type=percentage, default=0.0, metavar="PCT", help="percent of files that are binary noise (default: 0)")
@@ -384,11 +392,12 @@ def main(argv: list[str] | None = None) -> int:
         if args.binary + args.archives > 1:
             raise ValueError("--binary and --archives together must not exceed 100%")
         mix = parse_mix(args.mix)
+        args.max_size = max(args.max_size, args.min_size or 0)
         if args.out.exists() and (not args.out.is_dir() or any(args.out.iterdir())):
             raise ValueError(f"{args.out} exists and is not empty")
         seed = args.seed if args.seed is not None else random.SystemRandom().randrange(2 ** 32)
         rng = random.Random(seed)
-        maker = Maker(args.patterns, mix, rng, args.max_hits, args.max_size, args.crlf)
+        maker = Maker(args.patterns, mix, rng, args.max_hits, args.max_size, args.crlf, args.min_size or 0)
         args.out.mkdir(parents=True, exist_ok=True)
         totals, entries = generate(args.out, args.files, maker, rng, args.per_dir, args.depth,
                                    args.binary, args.archives, args.nest)

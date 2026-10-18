@@ -397,7 +397,7 @@ uv run python bin/generate-test-data.py --out data --files 100000 --seed 1 --bin
 uv run python bin/find-pan.py --path data --summary-json summary.json
 ```
 
-Files are spread over nested directories (`--per-dir`, `--depth`), vary in extension (`.txt`, `.log`, `.csv`, `.json`, `.xml` or none), size (`--max-size`) and line ending (`--crlf`), and some are empty or clean. Each holds lorem-ipsum text with zero or more planted hits, chosen by `--mix` (relative weights, default `clean=40,pan=30,delimited=10,track=10,bad-luhn=5,anti-pan=5`):
+Files are spread over nested directories (`--per-dir`, `--depth`), vary in extension (`.txt`, `.log`, `.csv`, `.json`, `.xml` or none), size (`--max-size`, and `--min-size` to pad every file up to at least that many bytes, e.g. `--files 900 --min-size 50000 --max-size 52000` for about 45 MB) and line ending (`--crlf`), and some are empty or clean. Each holds lorem-ipsum text with zero or more planted hits, chosen by `--mix` (relative weights, default `clean=40,pan=30,delimited=10,track=10,bad-luhn=5,anti-pan=5`):
 
 | Kind | What is planted | find-pan reports |
 | --- | --- | --- |
