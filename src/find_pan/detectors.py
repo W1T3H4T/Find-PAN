@@ -5,6 +5,7 @@ returned ``Match`` records.
 """
 
 import re
+from bisect import bisect_left, insort
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -107,8 +108,35 @@ def normalize(line: str, patterns: list[tuple[str, str, re.Pattern]]) -> Normali
     return Normalized("".join(text), tuple(positions))
 
 
-def _overlaps(span: tuple[int, int], spans: list[tuple[int, int]]) -> bool:
-    return any(span[0] < other[1] and other[0] < span[1] for other in spans)
+#   A line longer than this is reported with only the text around each match, not in full: otherwise a
+#   long line holding many matches would be written out once per match.
+MAX_SOURCE_LINE = 1000
+_SOURCE_CONTEXT = 200
+
+
+def _source_line(line: str, span: tuple[int, int]) -> str:
+    if len(line) <= MAX_SOURCE_LINE:
+        return line
+    return line[max(0, span[0] - _SOURCE_CONTEXT):span[1] + _SOURCE_CONTEXT]
+
+
+class _Spans:
+    """Non-overlapping ``(start, end)`` spans, sorted, so that an overlap is found by bisection.
+
+    The scanner only adds a span after finding that it overlaps none, which keeps the list disjoint (and
+    its ends sorted too).  Testing each candidate against every earlier span made a line holding many
+    matches take quadratic time.
+    """
+
+    def __init__(self) -> None:
+        self._spans: list[tuple[int, int]] = []
+
+    def overlaps(self, span: tuple[int, int]) -> bool:
+        index = bisect_left(self._spans, (span[1],))        # first span starting at or after span's end
+        return index > 0 and self._spans[index - 1][1] > span[0]
+
+    def add(self, span: tuple[int, int]) -> None:
+        insort(self._spans, span)
 
 
 def scan_line(
@@ -128,8 +156,7 @@ def scan_line(
     """
     normalized = normalize(line, patterns)
     matches: list[Match] = []
-    excluded: list[tuple[int, int]] = []
-    failed: list[tuple[int, int]] = []
+    excluded, failed = _Spans(), _Spans()
 
     def original(found: re.Match, text_is_normalized: bool) -> tuple[int, int]:
         if not text_is_normalized:
@@ -143,12 +170,12 @@ def scan_line(
             if pattern_name == "Timestamp" and not valid_timestamp(found.group(0)):
                 continue
             span = original(found, True)
-            if _overlaps(span, excluded):
+            if excluded.overlaps(span):
                 continue
-            excluded.append(span)
+            excluded.add(span)
             matches.append(Match(
                 file_path, line_number, span[0], MatchKind.ANTI_PAN,
-                pattern_name, compiled.pattern, line[span[0]:span[1]], line, "",
+                pattern_name, compiled.pattern, line[span[0]:span[1]], _source_line(line, span), "",
             ))
 
     for category, pattern_name, compiled in patterns:
@@ -163,19 +190,19 @@ def scan_line(
         is_pan = category == PAN_CATEGORY
         for found in compiled.finditer(normalized.text if is_pan else line):
             span = original(found, is_pan)
-            if _overlaps(span, excluded):
+            if excluded.overlaps(span):
                 continue
             pan = extract_pan(found.group(0))
             if pan and luhn_check(pan):
-                excluded.append(span)
+                excluded.add(span)
                 kind = accepted_kind
             else:
-                if _overlaps(span, failed):
+                if failed.overlaps(span):
                     continue
-                failed.append(span)
+                failed.add(span)
                 kind = MatchKind.BAD_LUHN
             matches.append(Match(
                 file_path, line_number, span[0], kind,
-                pattern_name, compiled.pattern, line[span[0]:span[1]], line, pan,
+                pattern_name, compiled.pattern, line[span[0]:span[1]], _source_line(line, span), pan,
             ))
     return matches

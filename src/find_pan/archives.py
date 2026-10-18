@@ -58,20 +58,48 @@ def _tree_usage(directory: str) -> tuple[int, int]:
     return total, count
 
 
-def _make_writable_and_retry(function, path, _error) -> None:
-    """rmtree error handler: clear read-only flags (extracted members keep their permissions) and retry."""
-    parent = os.path.dirname(path)
-    os.chmod(parent, stat.S_IRWXU)
-    os.chmod(path, stat.S_IRWXU)
-    function(path)
+def _make_user_accessible(path: str) -> None:
+    """Give the owner full access to *path*, never through a symbolic link.
+
+    An archive can hold a link to any file the user owns; changing the mode of its target would change a
+    file that has nothing to do with the extraction.
+    """
+    if stat.S_ISLNK(os.lstat(path).st_mode):
+        return
+    if os.chmod in os.supports_follow_symlinks:
+        os.chmod(path, stat.S_IRWXU, follow_symlinks=False)
+    else:
+        os.chmod(path, stat.S_IRWXU)
+
+
+def _inside(path: str, root: str) -> bool:
+    """Whether *path* is *root* or lies under it (by name; nothing is resolved)."""
+    path, root = os.path.normcase(os.path.abspath(path)), os.path.normcase(os.path.abspath(root))
+    return path == root or path.startswith(root.rstrip(os.sep) + os.sep)
+
+
+def _make_writable_and_retry(root: str):
+    """rmtree error handler for the tree at *root*: clear read-only flags (extracted members keep their
+    permissions) and retry.  Only *root* and what is under it is ever touched; its parent, the system
+    temporary directory, is not.
+    """
+    def handler(function, path, _error) -> None:
+        parent = os.path.dirname(path)
+        if _inside(parent, root):
+            _make_user_accessible(parent)
+        if _inside(path, root):
+            _make_user_accessible(path)
+        function(path)
+    return handler
 
 
 def _remove_tree(directory: str) -> None:
     """Delete an extraction directory even when it holds read-only files or directories."""
+    handler = _make_writable_and_retry(directory)
     if sys.version_info >= (3, 12):
-        shutil.rmtree(directory, onexc=_make_writable_and_retry)
+        shutil.rmtree(directory, onexc=handler)
     else:
-        shutil.rmtree(directory, onerror=_make_writable_and_retry)
+        shutil.rmtree(directory, onerror=handler)
 
 
 def _kill_tree(process: subprocess.Popen) -> None:

@@ -76,7 +76,7 @@ class Scanner:
             elif not os.path.isfile(path):
                 self._skip(path, SkipReason.NOT_A_FILE, "not a file (directories need --path)", "error")
             else:
-                self.process_file(path)
+                self._process_safely(path)
 
     def scan_path(self, path: str) -> None:
         """Walk a directory tree, processing every file in it."""
@@ -133,7 +133,18 @@ class Scanner:
                 if extracted and os.path.islink(path):
                     self._skip(path, SkipReason.SYMLINK, "symbolic link inside an archive is not followed")
                     continue
-                self.process_file(path)
+                self._process_safely(path)
+
+    def _process_safely(self, path: str) -> None:
+        """Process one file; whatever goes wrong with it is reported and the scan goes on.
+
+        A hostile file (for instance a very deeply nested archive) must not be able to end the run, because
+        the files after it would then silently never be scanned.
+        """
+        try:
+            self.process_file(path)
+        except Exception as error:  # pylint: disable=broad-exception-caught
+            self._skip(path, SkipReason.UNREADABLE, f"scan failed: {type(error).__name__}: {error}", "error")
 
     def _note(self, file_path: str, classification: FileClassification) -> None:
         if classification.note:
@@ -200,6 +211,11 @@ class Scanner:
             #   An archive found inside its own expansion would recurse forever.
             self._skip(archive_path, SkipReason.ARCHIVE_FAILED,
                        "archive contains itself (recursive archive)", "error")
+            return
+        limit = self._limits_config().max_depth
+        if len(self._expanding) >= limit:
+            self._skip(archive_path, SkipReason.ARCHIVE_FAILED,
+                       f"archives are nested more than {limit} levels deep; not expanded", "error")
             return
         self._expanding.append(digest)
         try:

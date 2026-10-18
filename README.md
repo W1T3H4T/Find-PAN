@@ -131,7 +131,7 @@ uv run python bin/find-pan.py [--path PATH] [--file FILE [FILE ...]]
 | `--log-anti-pan`          | Write anti-PAN hits to their own log and include its path and entry count in the console summary. Default off. |
 | `--verbose`               | Also show each PAN and TRACK match on stdout over several lines (type and pattern, then `File`, `Location`, `Pattern` and `Data`, each on its own line, with an empty line between matches), plus extractor commands. The PAN log file keeps its single-line format. |
 | `--debug`                 | Enable debug messages on stdout and in the trace log, including failed Luhn candidates and compiled configuration details. |
-| `--mask`                  | Keep the first six and last four PAN digits and replace intervening digits with `*`. Track matches have all digits masked; other characters remain. Default off. |
+| `--mask`                  | Keep the first six and last four PAN digits and replace intervening digits with `*`. Track matches have all digits masked; other characters remain. PANs written in groups (`4556 7375 8689 9855`, `3056-930902-5904`, `4556.7375.8689.9855`) are masked wherever they appear in a reported line. A line longer than 1,000 characters is reported as the text around each match. Default off. |
 | `--version`               | Print application and Python versions without loading configuration or scanning. |
 
 Scan several files, including archives:
@@ -170,7 +170,7 @@ CSV uses this header:
 filename,line_number,offset,pattern_name,data_type,matched_data
 ```
 
-`filename` is the base name, not the complete path. `data_type` is `PAN` or `TRACK`. Non-ASCII characters in CSV text fields are replaced with `?`. Line numbers start at 1; offsets start at 0 and count decoded characters, not bytes. With `--raw`, `line_number` is `0` and `offset` is the absolute byte offset in the file.
+`filename` is the base name, not the complete path. `data_type` is `PAN` or `TRACK`. Non-ASCII characters in CSV text fields are replaced with `?`, and a field that starts with `=`, `+`, `-` or `@` (a file name can) gets a leading `'` so a spreadsheet shows it as text instead of running it as a formula. Line numbers start at 1; offsets start at 0 and count decoded characters, not bytes. With `--raw`, `line_number` is `0` and `offset` is the absolute byte offset in the file.
 
 JSON contains `pans`, `tracks`, `bad_luhn`, `anti_pans`, `files_scanned`, `archives_expanded`, `archives_skipped`, `skipped`, `total_time`, `average_time`, and `exit_status`; with `--pan-list` or `--track-list` also `expected` (see [Raw scans and expected values](#raw-scans-and-expected-values)). Each `skipped` entry is `[reason, path]`; detailed reasons remain in the trace log. Skipped archive members use stable paths such as `backup.zip!/nested/file.txt`, chained for nested archives. Finding logs use extraction paths, and CSV uses base names.
 
@@ -213,7 +213,7 @@ The anti-PAN configuration includes timestamps, sequential-number patterns, and 
 - ZIP-based containers, including `.jar`, `.war`, `.ear`, and ZIP-based Office files, can be expanded by the ZIP extractor.
 - Standalone bzip2 and xz streams are recognized, but the shipped configuration has no `bzip2` or `xz` extractor entry. Add one to scan these streams.
 - A text file named `notes.zip` is scanned as text, with a note about the misleading extension.
-- Extracted members go back through the processor, allowing nested archives. SHA-256 digests of active archives prevent an archive from recursively expanding itself. There is no configured archive-depth limit.
+- Extracted members go back through the processor, allowing nested archives. SHA-256 digests of active archives prevent an archive from recursively expanding itself, and `max_depth` (default 10, outermost archive included) stops deeper nesting: the archive that would exceed it is recorded as `ARCHIVE-FAILED` and not expanded. A file that cannot be processed for any other reason is reported and skipped; it never ends the scan.
 
 Extractors write into a unique system temporary directory, which is removed after processing. If extraction fails after producing files, those members are still scanned and the archive is recorded as `ARCHIVE-FAILED`. Cleanup failures generate a warning.
 
@@ -225,6 +225,7 @@ The extraction watchdog checks these defaults **per extraction**:
 | `max_files` | 100,000 filesystem entries, including directories |
 | `timeout_seconds` | 600 seconds |
 | `min_free_bytes` | 1 GiB |
+| `max_depth` | 10 levels of archives inside archives |
 
 When a limit is exceeded, the extractor and its children are stopped. Monitoring uses periodic checks rather than a filesystem quota. Set global limits or per-extractor overrides in the YAML configuration.
 
@@ -307,6 +308,7 @@ limits:
   max_files: 100000
   timeout_seconds: 600
   min_free_bytes: 1073741824
+  max_depth: 10
 extractors:
   tar:
     windows:

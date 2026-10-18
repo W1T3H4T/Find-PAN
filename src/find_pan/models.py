@@ -56,6 +56,8 @@ class ExtractionLimits:
     max_files: int = 100_000
     timeout_seconds: int = 600
     min_free_bytes: int = 1024 * 1024 * 1024
+    #   Archives nested inside archives, counting the outermost one; deeper ones are reported, not expanded.
+    max_depth: int = 10
 
 
 class ScanStats:
