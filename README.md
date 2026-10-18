@@ -357,6 +357,8 @@ Baseline exit statuses are `0` for matching results, `1` for differences, and `2
 | --- | --- |
 | `bin/baseline.py` | Create and validate regression baselines. |
 | `bin/generate-pan.py` | Generate synthetic PANs and noisy text with embedded PAN/track records. |
+| `bin/generate-invalid-pan.py` | Generate brand-conformant PANs that fail the Luhn check (space, hyphen or no grouping). |
+| `bin/generate-test-data.py` | Generate a directory tree of many small files with known PAN, track, Luhn-failure and anti-PAN content, plus the answers to check a scan against. |
 | `bin/purge-log-files.py` | Remove old logs using `--path`, `--age`, and optional `--prefix`; uses a secure-deletion tool when available. |
 | `bin/check-json-regex.py` | Validate regex JSON patterns against project rules. |
 | `bin/obfuscate-pan.py` | Obfuscate PANs in text files. |
@@ -375,6 +377,37 @@ uv run python bin/generate-pan.py --random-text 100 --max-hits 4 --seed 42 --out
 The generator uses the configured PAN expressions and Luhn validation. Omit `--pan-pattern` in an interactive terminal to choose a pattern from a menu. Use `--patterns FILE` for alternate configuration.
 
 In random-text mode, `--random-text LINES` requires at least one line, and `--max-hits N` sets the maximum embedded hits per line (default `3`). `--pan-pattern NAME` limits the PAN pattern selection; `--seed NUMBER` makes generation reproducible. Output defaults to `Random-Text.txt`. Generated values are synthetic scanner fixtures, not account-status checks.
+
+### Generate many test files
+
+`bin/generate-test-data.py` builds a directory tree of many small files whose content is known exactly:
+
+```console
+uv run python bin/generate-test-data.py --out data --files 100000 --seed 1 --binary 3 --archives 5
+uv run python bin/find-pan.py --path data --summary-json summary.json
+```
+
+Files are spread over nested directories (`--per-dir`, `--depth`), vary in extension (`.txt`, `.log`, `.csv`, `.json`, `.xml` or none), size (`--max-size`) and line ending (`--crlf`), and some are empty or clean. Each holds lorem-ipsum text with zero or more planted hits, chosen by `--mix` (relative weights, default `clean=40,pan=30,delimited=10,track=10,bad-luhn=5,anti-pan=5`):
+
+| Kind | What is planted | find-pan reports |
+| --- | --- | --- |
+| `pan` | a Luhn-valid PAN | a PAN |
+| `delimited` | a Luhn-valid PAN written with spaces or hyphens | a PAN |
+| `track` | Track 1 or Track 2 data | a TRACK |
+| `bad-luhn` | a brand-conformant number that fails Luhn (sometimes grouped) | a Luhn check failure |
+| `anti-pan` | a timestamp or sequential number | an anti-PAN |
+
+`--binary PCT` makes that share of the files binary noise with no hits, and `--archives PCT` collects that share into `.zip`, `.tar` and `.gz` archives (`--nest PCT` of them holding an inner zip), whose members hold the hits. Find-PAN needs the extractors from `config/find-pan-conf.yaml` to read them.
+
+Every planted value is checked with Find-PAN's own detector before it is written, in several line contexts, so interactions between patterns cannot make the answers wrong. The answers go next to the tree, in `data.expected` (or `--answers DIR`), so scanning the tree never reads them:
+
+| File | Contents |
+| --- | --- |
+| `expected.json` | The totals a scan of the tree must report: `pans`, `tracks`, `bad_luhn`, `anti_pans` (the same keys as `--summary-json`). |
+| `manifest.json` | The seed, the options used, and every file with its planted counts. |
+| `pans.txt`, `tracks.txt` | The planted PANs and tracks, ready for `--pan-list` and `--track-list`. |
+
+`--seed` makes the whole tree reproducible. The output directory must not exist or must be empty. Generating 100,000 files takes a few minutes.
 
 ## Source layout and development
 

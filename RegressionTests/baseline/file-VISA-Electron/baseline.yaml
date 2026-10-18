@@ -2,7 +2,7 @@ name: file-VISA-Electron
 description: single fixture VISA-Electron.txt
 created: '2026-10-17T23:07:05Z'
 find_pan:
-  version: 3.4.0
+  version: 3.5.0
   command:
   - --file
   - RegressionTests/VISA-Electron.txt
