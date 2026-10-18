@@ -22,10 +22,13 @@ from find_pan.config import (
 from find_pan.errors import FindPanError
 from find_pan.logging_setup import build_loggers
 from find_pan.models import ScanStats
+from find_pan.rawscan import DEFAULT_ENCODINGS as DEFAULT_RAW_ENCODINGS
+from find_pan.rawscan import ENCODINGS as RAW_ENCODINGS
 from find_pan.redact import Redactor
 from find_pan.reporting import AntiPanSink, CsvSink, LogSink, Reporter, TraceSink
 from find_pan.scanner import Scanner
 from find_pan.settings import Settings
+from find_pan.targets import TargetLedger, Targets, load_pan_list, load_track_list
 from find_pan.version import format_version
 
 PROGRAM_NAME = "find-pan.py"
@@ -66,6 +69,15 @@ def _positive_int(value: str) -> int:
     return number
 
 
+def _raw_encodings(value: str) -> str:
+    names = [name.strip().lower() for name in value.split(",") if name.strip()]
+    unknown = [name for name in names if name not in RAW_ENCODINGS]
+    if not names or unknown:
+        raise argparse.ArgumentTypeError(
+            f"unknown encoding {', '.join(unknown) or value!r}; choose from {', '.join(RAW_ENCODINGS)}")
+    return ",".join(dict.fromkeys(names))
+
+
 # autopep8: off
 def build_parser() -> argparse.ArgumentParser:
     log_dir = os.path.join(os.path.expanduser("~"), "Find-PAN-Logs")
@@ -94,6 +106,16 @@ def build_parser() -> argparse.ArgumentParser:
                         type=str, default=None)
     parser.add_argument( "--summary-json", help="Write the run summary (counts and skipped files) to this JSON file.",
                         type=str, default=None, metavar="PATH")
+    parser.add_argument( "--raw", default=False, action="store_true",
+                        help="Scan every file as raw bytes (memory dumps, disk images): no line splitting, no binary "
+                        "skipping, no archive expansion. Matches are reported by byte offset.")
+    parser.add_argument( "--raw-encodings", type=_raw_encodings, default=",".join(DEFAULT_RAW_ENCODINGS), metavar="LIST",
+                        help=f"With --raw: comma-separated encodings to read text as ({', '.join(RAW_ENCODINGS)}). "
+                        "utf-16 covers both byte orders.")
+    parser.add_argument( "--pan-list", metavar="FILE", default=None,
+                        help="File of expected PANs, one per line. The summary lists each as found (how often, where) or not found.")
+    parser.add_argument( "--track-list", metavar="FILE", default=None,
+                        help="File of expected track 1 / track 2 data, one per line; reported like --pan-list.")
     parser.add_argument( "--log-anti-pan", default=False, action="store_true",
                         help="Write anti-PAN hits to a separate log file (Find-PAN-anti-pan-<date>.log) and report it in the summary.")
 
@@ -123,6 +145,10 @@ def _settings_from(namespace: argparse.Namespace) -> Settings:
         mask=namespace.mask,
         log_anti_pan=namespace.log_anti_pan,
         summary_json=namespace.summary_json,
+        raw=namespace.raw,
+        raw_encodings=tuple(namespace.raw_encodings.split(",")),
+        pan_list=namespace.pan_list,
+        track_list=namespace.track_list,
     )
 
 
@@ -152,6 +178,16 @@ def _load_patterns(settings: Settings, loggers) -> list:
     if settings.rgx_prefix:
         return compile_regex_patterns_with_prefix(json_data)
     return compile_regex_patterns(json_data)
+
+
+def _load_targets(settings: Settings) -> Targets | None:
+    """Read --pan-list and --track-list; None when neither was given."""
+    if not (settings.pan_list or settings.track_list):
+        return None
+    return Targets(
+        pans=load_pan_list(settings.pan_list) if settings.pan_list else (),
+        tracks=load_track_list(settings.track_list) if settings.track_list else (),
+    )
 
 
 def _error(message: object) -> int:
@@ -216,6 +252,7 @@ def _run(namespace: argparse.Namespace, settings: Settings, argv: Sequence[str])
 
     loggers = build_loggers(settings)
     patterns = _load_patterns(settings, loggers)
+    targets = _load_targets(settings)
 
     _print_version_header(namespace, argv)
     loggers.trace.info("%s", _describe(namespace))
@@ -229,11 +266,13 @@ def _run(namespace: argparse.Namespace, settings: Settings, argv: Sequence[str])
     if settings.csv:
         sinks.append(CsvSink(settings.csv))
     stats = ScanStats()
-    reporter = Reporter(Redactor(settings.mask), sinks, stats, loggers.trace, settings.report_delta)
+    reporter = Reporter(Redactor(settings.mask), sinks, stats, loggers.trace, settings.report_delta,
+                        expected=TargetLedger(targets) if targets else None)
     scanner = Scanner(
         settings, patterns, reporter, loggers,
         lambda: load_extractor_config(find_extractor_config_path()),
         lambda: load_extraction_limits(find_extractor_config_path()),
+        targets=targets,
     )
 
     status = 0

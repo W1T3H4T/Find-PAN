@@ -29,7 +29,8 @@ class VerboseFormatter(logging.Formatter):
         lines = [
             f"{self.formatTime(record)} [{record.levelname}]: {view.kind.value} match: {view.pattern_name}",
             f"    File    : {view.file_path}",
-            f"    Location: line {view.line_number}, offset {view.offset}",
+            f"    Location: byte {view.offset} (0x{view.offset:X}, {view.encoding})" if view.encoding
+            else f"    Location: line {view.line_number}, offset {view.offset}",
             f"    Pattern : {view.pattern}",
             f"    Data    : {view.source_line.rstrip(chr(13) + chr(10))}",
         ]

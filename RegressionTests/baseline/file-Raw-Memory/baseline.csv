@@ -1,0 +1,6 @@
+filename,line_number,offset,pattern_name,data_type,matched_data
+Raw-Memory.bin,0,4107,VISA,PAN,4556737586899855
+Raw-Memory.bin,0,4638,VISA,PAN,4012888888881881
+Raw-Memory.bin,0,5453,American Express,PAN,378282246310005
+Raw-Memory.bin,0,6515,Track 2,TRACK,;4556737586899855=25121010000012345678?
+Raw-Memory.bin,0,6857,Track 1,TRACK,%B4012888888881881^DOE/JOHN^25121010000012345678?

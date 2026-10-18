@@ -12,6 +12,7 @@ The illustration is a conceptual overview; the detection order and supported tex
 - [Outputs and exit status](#outputs-and-exit-status)
 - [Detection behavior](#detection-behavior)
 - [Archives and file handling](#archives-and-file-handling)
+- [Raw scans and expected values](#raw-scans-and-expected-values)
 - [Configuration](#configuration)
 - [Regression baselines](#regression-baselines)
 - [Supporting tools](#supporting-tools)
@@ -96,7 +97,8 @@ The native libmagic dependency and archive extractors still need to be supplied 
 uv run python bin/find-pan.py [--path PATH] [--file FILE [FILE ...]]
     [--log-dir LOG_DIR] [--rgx-patterns RGX_PATTERNS] [--rgx-prefix]
     [--skip-binary] [--line-limit LINE_LIMIT] [--report-delta REPORT_DELTA]
-    [--csv CSV] [--summary-json PATH] [--log-anti-pan]
+    [--csv CSV] [--summary-json PATH] [--raw] [--raw-encodings LIST]
+    [--pan-list FILE] [--track-list FILE] [--log-anti-pan]
     [--verbose] [--debug] [--mask] [--version]
 ```
 
@@ -107,14 +109,18 @@ uv run python bin/find-pan.py [--path PATH] [--file FILE [FILE ...]]
 | `--file FILE [FILE ...]`  | Scan explicit files or archives. Repeat the flag to add more files. Missing files and directories are reported and skipped; use `--path` for directories. |
 | `--log-dir DIR`           | Log directory; defaults to `Find-PAN-Logs` in the user's home directory. Created if necessary. |
 | `--rgx-patterns FILE`     | Use this regex JSON file instead of searching the standard locations. |
-| `--rgx-prefix`            | Prepend the character class `[ '"{]` to every configured expression, including anti-PAN and track expressions. A match must have one of these preceding characters; the prefix becomes part of the match. Default off.<br>*DO NOT utilize* unless you specifically know that it is required for your dataset. |
+| `--rgx-prefix`            | Prepend the character class `[ '"{]` to every configured PAN expression (anti-PAN and track expressions are left as written). A match must have one of these preceding characters; the prefix becomes part of the match. Default off.<br>*DO NOT utilize* unless you specifically know that it is required for your dataset. |
 | `--skip-binary`           | Skip executables and files classified as binary. Archives are still expanded. Default off. |
 | `--line-limit N`          | Scan at most N lines per text file. Zero or a negative value scans all lines; default `0`. |
 | `--report-delta N`        | Report progress every N scanned files. Must be at least `1`; default `500`. |
 | `--csv FILE`              | Write PAN and TRACK findings to a CSV file. Replaces existing contents. |
 | `--summary-json FILE`     | Write counts, timings, skipped files, and exit status to JSON. Replaces existing contents. |
+| `--raw`                   | Scan every file as raw bytes (memory dumps, disk images): no line splitting, binary skipping or archive expansion. Matches are reported by byte offset. See [Raw scans and expected values](#raw-scans-and-expected-values). Default off. |
+| `--raw-encodings LIST`    | With `--raw`: comma-separated text encodings to look for, from `ascii` and `utf-16` (both byte orders). Default `ascii,utf-16`. |
+| `--pan-list FILE`         | File of expected PANs, one per line. The summary lists each as found (how often, and where first) or not found. Works with or without `--raw`. |
+| `--track-list FILE`       | File of expected track 1 or track 2 strings, one per line; reported like `--pan-list`. |
 | `--log-anti-pan`          | Write anti-PAN hits to their own log and include its path and entry count in the console summary. Default off. |
-| `--verbose`               | Also show PAN-log messages and extractor commands on stdout. |
+| `--verbose`               | Also show each PAN and TRACK match on stdout over several lines (type and pattern, then `File`, `Location`, `Pattern` and `Data`, each on its own line, with an empty line between matches), plus extractor commands. The PAN log file keeps its single-line format. |
 | `--debug`                 | Enable debug messages on stdout and in the trace log, including failed Luhn candidates and compiled configuration details. |
 | `--mask`                  | Keep the first six and last four PAN digits and replace intervening digits with `*`. Track matches have all digits masked; other characters remain. Default off. |
 | `--version`               | Print application and Python versions without loading configuration or scanning. |
@@ -155,9 +161,9 @@ CSV uses this header:
 filename,line_number,offset,pattern_name,data_type,matched_data
 ```
 
-`filename` is the base name, not the complete path. `data_type` is `PAN` or `TRACK`. Non-ASCII characters in CSV text fields are replaced with `?`. Line numbers start at 1; offsets start at 0 and count decoded characters, not bytes.
+`filename` is the base name, not the complete path. `data_type` is `PAN` or `TRACK`. Non-ASCII characters in CSV text fields are replaced with `?`. Line numbers start at 1; offsets start at 0 and count decoded characters, not bytes. With `--raw`, `line_number` is `0` and `offset` is the absolute byte offset in the file.
 
-JSON contains `pans`, `tracks`, `bad_luhn`, `anti_pans`, `files_scanned`, `archives_expanded`, `archives_skipped`, `skipped`, `total_time`, `average_time`, and `exit_status`. Each `skipped` entry is `[reason, path]`; detailed reasons remain in the trace log. Skipped archive members use stable paths such as `backup.zip!/nested/file.txt`, chained for nested archives. Finding logs use extraction paths, and CSV uses base names.
+JSON contains `pans`, `tracks`, `bad_luhn`, `anti_pans`, `files_scanned`, `archives_expanded`, `archives_skipped`, `skipped`, `total_time`, `average_time`, and `exit_status`; with `--pan-list` or `--track-list` also `expected` (see [Raw scans and expected values](#raw-scans-and-expected-values)). Each `skipped` entry is `[reason, path]`; detailed reasons remain in the trace log. Skipped archive members use stable paths such as `backup.zip!/nested/file.txt`, chained for nested archives. Finding logs use extraction paths, and CSV uses base names.
 
 ### Exit status
 
@@ -214,11 +220,50 @@ Inside extracted trees, file symbolic links are recorded as `SYMLINK` and skippe
 
 ### Binary detection and text encoding
 
-With `--skip-binary`, libmagic checks executable MIME types. A fallback heuristic treats a NUL byte or more than 30% non-text control bytes in the initial sample as binary, with exceptions for recognized text byte-order marks. If libmagic cannot load or fails, a warning is logged and the heuristic still applies. Recognized archives take precedence over binary checks.
+With `--skip-binary`, libmagic checks executable MIME types. A fallback heuristic treats a NUL byte or more than 30% non-text control bytes in the initial sample as binary, with exceptions for recognized text byte-order marks. If libmagic cannot load or fails, a warning is logged and the heuristic still applies. Before python-magic is imported for real, libmagic is test-loaded in a child process, because a wrong libmagic crashes the interpreter that loads it (on Windows, python-magic takes the first `*magic*` DLL on `PATH`, which can be Git's MSYS DLL). If that test load crashes or hangs, the run continues on the heuristic alone and logs one warning; install `file-windows` (see [Windows](#windows-powershell)) to get libmagic detection. Recognized archives take precedence over binary checks.
 
 Text is always decoded as **UTF-8 with replacement for invalid bytes**. A UTF-16/32 byte-order mark can prevent a binary classification, but does not enable UTF-16/32 decoding; convert those files before scanning. Find-PAN does not render documents or perform OCR. Searching extracted Office files means searching their member text/XML, not reconstructing the visible document.
 
 Skip codes are `NOT-FOUND`, `NOT-A-FILE`, `ARCHIVE-NO-TOOL`, `ARCHIVE-FAILED`, `BINARY`, `EXEC`, `UNREADABLE`, and `SYMLINK`.
+
+## Raw scans and expected values
+
+### Scanning memory dumps and other non-text files
+
+Find-PAN scans files, not live memory. To inspect memory, dump it with a tool built for that (WinPmem, ProcDump, `gcore`, LiME) and scan the dump with `--raw`:
+
+```console
+uv run python bin/find-pan.py --file memory.dmp --raw --csv hits.csv --mask
+```
+
+`--raw` treats each file as an opaque byte stream. It reads the file in 8 MiB chunks with 512 bytes of overlap, so a PAN or track record on a chunk boundary is found once, whole. Within each chunk, every byte (or UTF-16 two-byte unit) that is not printable ASCII acts as a line break, and the ordinary detectors (patterns, Luhn check, anti-PAN filters), `--mask`, and all outputs apply to what remains.
+
+- **Encodings.** ASCII text and UTF-16 text (little- and big-endian, at any byte alignment) are read; `--raw-encodings ascii` restricts the scan to ASCII. Each encoding reports only what it can read, so nothing is counted twice. Other encodings, packed BCD, encrypted values and tokens are not found.
+- **Locations.** CSV `line_number` is `0` and `offset` is the absolute byte offset; `--verbose` shows `Location: byte 4107 (0x100B, ascii)`. The log's source text is a short context window around the match.
+- **What `--raw` skips.** Binary and executable classification, `--skip-binary`, `--line-limit`, and archive expansion do not apply: archives are scanned as bytes, so compressed content is not seen. Expand them first if you need their contents.
+- **Expect more false positives.** Random digit runs pass the Luhn check about one time in ten; the anti-PAN filters matter more here. A PAN split across non-contiguous pages, or interrupted by a non-printable byte, is not found.
+- **Handle the dump as cardholder data.** A memory dump holds every PAN in memory in clear text. Protect it and delete it securely when finished.
+
+### Expected values: `--pan-list` and `--track-list`
+
+When investigating payment software you often know which PANs or track records you expect to find, or expect *not* to find, after a transaction. List them, one per line, in plain text files (`#` starts a comment; blank lines are ignored; spaces and dashes in a PAN are removed; a PAN is 12 to 19 digits; track data is `%B...^...^...?` or `;...=...?`):
+
+```console
+uv run python bin/find-pan.py --file memory.dmp --raw --pan-list test-pans.txt --track-list test-tracks.txt
+```
+
+Every occurrence of a listed value is counted wherever it appears, whether or not a configured pattern or the Luhn check would have recognized it. A listed PAN is matched only between non-digits, never inside a longer number, and as contiguous digits (a PAN written with separators in the data is not matched). A listed PAN inside listed track data is counted too. A listed value that no pattern recognized is reported as a PAN or TRACK named `Expected PAN` or `Expected TRACK`, so it appears in the logs and CSV; a value that a pattern also matched is reported once.
+
+The end-of-run summary then has an `-- Expected Values --` section, and `--summary-json` gets an `expected` object holding, per value, `found` (the exact count) and up to three `locations`:
+
+```text
+-- Expected Values --
+Expected PANs found  : 1 of 2
+PAN   4556737586899855  FOUND  2 times, first at memory.dmp@0x5 (ascii)
+PAN   5500000000000004  NOT FOUND
+```
+
+With `--mask` the values in the summary and JSON are masked too. The tool reports presence only: it does not decide whether a value *should* have been found, and finding or not finding one does not change the exit status.
 
 ## Configuration
 

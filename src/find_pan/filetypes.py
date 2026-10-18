@@ -1,7 +1,10 @@
 """File-type checks used to decide whether a file is worth scanning."""
 
+import importlib
 import logging
 import os
+import subprocess
+import sys
 from dataclasses import dataclass
 from enum import Enum
 from functools import lru_cache
@@ -22,6 +25,54 @@ EXECUTABLE_MIME_TYPES = (
 
 _SAMPLE_SIZE = 1024
 _TAR_HEADER_SIZE = 512
+
+
+_import_module = importlib.import_module
+#   Warnings already given in this run (one per message, not one per file).
+_warned: set[str] = set()
+_PROBE_TIMEOUT_SECONDS = 30
+_PROBE_CODE = "import magic; magic.Magic(mime=True).from_buffer(b'probe text')"
+
+
+def _warn_once(logger: logging.Logger, message: str, *args) -> None:
+    key = message % args
+    if key not in _warned:
+        _warned.add(key)
+        logger.warning("%s", key)
+
+
+def _run_probe() -> bool:
+    """Load libmagic in a child process; True only if that child exits cleanly."""
+    try:
+        completed = subprocess.run(
+            [sys.executable, "-I", "-c", _PROBE_CODE],
+            capture_output=True, timeout=_PROBE_TIMEOUT_SECONDS, check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return completed.returncode == 0
+
+
+@lru_cache(maxsize=1)
+def _libmagic_loads() -> bool:
+    """Whether python-magic can be imported and used without killing the interpreter.
+
+    A wrong libmagic crashes the process that loads it: on Windows python-magic takes the first
+    ``*magic*`` DLL on PATH, which can be Git's MSYS runtime DLL, and loading that into a native Python
+    is an access violation, not an ``OSError``.  Nothing in-process can catch that, so the load is tried
+    once in a child process first.  The result is remembered for the run.
+    """
+    return _run_probe()
+
+
+def _load_magic():
+    """Import python-magic, but only after the probe showed that doing so is safe.
+
+    A module already in ``sys.modules`` (imported earlier, or a stand-in) is used as it is.
+    """
+    if "magic" not in sys.modules and not _libmagic_loads():
+        raise ImportError("libmagic failed to load safely (it crashed or hung in a test load)")
+    return _import_module("magic")
 
 
 @lru_cache(maxsize=4)
@@ -49,12 +100,12 @@ def is_executable(
     to the content heuristic in ``looks_binary``.
     """
     try:
-        import magic  # pylint: disable=import-outside-toplevel
+        magic = _load_magic()
     except ImportError:
-        logger.warning(
-            "python-magic is not available; install the platform libmagic "
-            "dependency to enable MIME-based binary skipping for %s",
-            file_path,
+        _warn_once(
+            logger,
+            "python-magic is not available; install the platform libmagic dependency "
+            "to enable MIME-based executable detection (falling back to the content heuristic)",
         )
         return False
 

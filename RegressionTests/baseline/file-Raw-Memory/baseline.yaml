@@ -1,0 +1,27 @@
+name: file-Raw-Memory
+description: 'Raw scan of a binary file: ASCII and UTF-16 PANs and tracks'
+created: '2026-10-18T03:52:07Z'
+find_pan:
+  version: 3.3.0
+  command:
+  - --file
+  - RegressionTests/Raw-Memory.bin
+  - --raw
+python: 3.14.5
+platform: win32
+requires_tools: []
+inputs:
+- path: RegressionTests/Raw-Memory.bin
+  size: 13656
+  sha256: e486b941e87654acd2fa3328b7486c09c05c2f5cdd2762a6ba847cd3f83147d8
+  eol_normalized: false
+summary:
+  anti_pans: 1
+  archives_expanded: 0
+  archives_skipped: 0
+  bad_luhn: 0
+  exit_status: 0
+  files_scanned: 1
+  pans: 3
+  skipped: []
+  tracks: 2

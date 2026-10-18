@@ -40,6 +40,8 @@ class Match:
     matched_data: str
     source_line: str
     pan: str
+    #   Raw scans only: how the bytes were read ("ascii", "utf-16le", ...); then offset is a byte offset.
+    encoding: str = ""
 
 
 @dataclass(frozen=True)

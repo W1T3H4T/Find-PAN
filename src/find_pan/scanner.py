@@ -18,8 +18,10 @@ from find_pan.errors import ConfigError, ExtractorUnavailable, ExtractorError
 from find_pan.filetypes import FileClassification, FileKind, classify_head
 from find_pan.logging_setup import Loggers
 from find_pan.models import ExtractionLimits, SkipReason
+from find_pan.rawscan import RawScanner
 from find_pan.reporting import Reporter
 from find_pan.settings import Settings
+from find_pan.targets import Targets, report_hits
 
 #   Bytes read from the start of a file to classify it.
 _SAMPLE_BYTES = 1024
@@ -49,6 +51,7 @@ class Scanner:
         loggers: Loggers,
         load_extractors: Callable[[], dict] | None = None,
         load_limits: Callable[[], ExtractionLimits] | None = None,
+        targets: Targets | None = None,
     ) -> None:
         self.settings = settings
         self.patterns = patterns
@@ -58,6 +61,8 @@ class Scanner:
         self._load_extractors = load_extractors
         self._extractors: dict | None = None
         self._load_limits = load_limits
+        self.targets = targets
+        self._raw = RawScanner(patterns, reporter, targets, settings.raw_encodings) if settings.raw else None
         self._limits: ExtractionLimits | None = None
         #   Content digests of the archives currently being expanded (outermost first).
         self._expanding: list[str] = []
@@ -86,6 +91,9 @@ class Scanner:
     def process_file(self, file_path: str) -> None:
         """Classify *file_path* by content and skip, expand or scan it."""
         if not os.path.isfile(file_path):
+            return
+        if self._raw is not None:
+            self._scan_raw(file_path)
             return
         try:
             #   One open serves classification and the text scan, so the file cannot
@@ -134,6 +142,15 @@ class Scanner:
         if classification.note:
             self.loggers.pan.info("%s: %s", file_path, classification.note)
 
+    def _scan_raw(self, file_path: str) -> None:
+        """Scan *file_path* as raw bytes (--raw): no classification, no archive expansion."""
+        try:
+            self.loggers.pan.info("Scanning %s (raw)", os.path.basename(file_path))
+            self._raw.scan_file(file_path, self.display_path(file_path))
+        except OSError as error:
+            self.loggers.trace.warning("Skipping file due to error: %s - %s", file_path, error)
+            self._skip(file_path, SkipReason.UNREADABLE, str(error))
+
     def _scan_text(self, file_path: str, handle) -> None:
         try:
             with handle:
@@ -143,8 +160,12 @@ class Scanner:
                 for line_number, line in enumerate(handle, 1):
                     if limit > 0 and line_number > limit:
                         break
-                    for match in scan_line(file_path, line_number, line, self.patterns):
+                    matches = scan_line(file_path, line_number, line, self.patterns)
+                    for match in matches:
                         self.reporter.report(match)
+                    if self.targets is not None:
+                        report_hits(self.targets, self.reporter, line, matches, file_path, line_number,
+                                    lambda index, n=line_number: (index, f"{file_path}:{n}:{index}"))
         except OSError as error:
             self.loggers.trace.warning("Skipping file due to error: %s - %s", file_path, error)
             self._skip(file_path, SkipReason.UNREADABLE, str(error))
