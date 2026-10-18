@@ -2,7 +2,7 @@ name: file-JCB
 description: single fixture JCB.txt
 created: '2026-10-17T23:07:01Z'
 find_pan:
-  version: 3.4.0
+  version: 3.5.0
   command:
   - --file
   - RegressionTests/JCB.txt
