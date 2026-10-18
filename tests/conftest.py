@@ -58,3 +58,13 @@ def pattern_configuration(configuration_path) -> dict:
 def compiled_patterns(pattern_configuration) -> list:
     """Scanner patterns compiled from the real configuration (no prefix)."""
     return compile_regex_patterns(pattern_configuration)
+
+
+@pytest.fixture(autouse=True)
+def fresh_filetypes_state():
+    """Warnings and the libmagic probe are remembered per process; each test starts clean."""
+    from find_pan import filetypes
+
+    filetypes._warned.clear()
+    yield
+    filetypes._warned.clear()
