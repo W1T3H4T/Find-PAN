@@ -2,6 +2,7 @@
 
 import gzip
 import logging
+import os
 import subprocess
 import tempfile
 from pathlib import Path
@@ -145,10 +146,11 @@ def run_tar(tmp_path, monkeypatch, windows, gnu, command="tar"):
     return runner.commands[0]
 
 
-def test_gnu_tar_on_windows_gets_force_local(tmp_path, monkeypatch):
-    """GNU tar treats a drive letter as a remote host; --force-local makes drive paths work."""
+def test_gnu_tar_on_windows_gets_force_local_and_a_dot_destination(tmp_path, monkeypatch):
+    """GNU tar treats a drive letter as a remote host (--force-local); it runs in the extraction directory."""
     command = run_tar(tmp_path, monkeypatch, windows=True, gnu=True)
     assert command[1] == "--force-local"
+    assert command[3] == "."                         # destination: the working directory
 
 
 def test_force_local_not_added_for_other_tars_or_platforms(tmp_path, monkeypatch):
@@ -178,7 +180,57 @@ def test_non_tar_command_is_never_probed(tmp_path, monkeypatch):
         pass
 
 
-def test_gnu_tar_on_windows_receives_forward_slash_paths(tmp_path, monkeypatch):
+def test_gnu_tar_on_windows_receives_an_absolute_forward_slash_archive_path(tmp_path, monkeypatch):
     command = run_tar(tmp_path, monkeypatch, windows=True, gnu=True)
     assert "\\" not in " ".join(command[1:])
-    assert command[2].endswith("/a.tar")
+    assert command[2].endswith("/a.tar") and not command[2].startswith("..")
+
+
+def test_gnu_tar_on_windows_runs_inside_the_extraction_directory(tmp_path, monkeypatch):
+    calls = []
+
+    def fake_run_limited(cmd, directory, limits, cwd=None):
+        calls.append((cmd, directory, cwd))
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+
+    monkeypatch.setattr(archives, "_IS_WINDOWS", True)
+    monkeypatch.setattr(archives, "_is_gnu_tar", lambda path: True)
+    monkeypatch.setattr(archives, "run_limited", fake_run_limited)
+    with archives.extract_archive(str(tmp_path / "a.tar"), tar_config(command="tar"), LOGGER) as directory:
+        assert calls[0][1] == directory and calls[0][2] == directory
+
+
+def test_other_extractors_keep_the_default_working_directory(tmp_path, monkeypatch):
+    calls = []
+
+    def fake_run_limited(cmd, directory, limits, cwd=None):
+        calls.append(cwd)
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+
+    monkeypatch.setattr(archives, "_IS_WINDOWS", True)
+    monkeypatch.setattr(archives, "run_limited", fake_run_limited)
+    config = {"zip": {"command": "unzip", "args": ["{archive}", "-d", "{tempdir}"]}}
+    with archives.extract_archive(str(tmp_path / "a.zip"), config, LOGGER):
+        pass
+    assert calls == [None]
+
+
+# --- cleanup of read-only members ------------------------------------------------------------------------
+
+
+def test_read_only_extracted_members_do_not_leave_the_temp_directory_behind(tmp_path, system_temp):
+    """Windows cannot delete read-only files (and POSIX cannot delete inside a read-only directory)."""
+    import stat
+
+    def effect(cmd):
+        locked = Path(cmd[-1]) / "locked"
+        locked.mkdir()
+        member = locked / "member.txt"
+        member.write_text("read only", encoding="utf-8")
+        os.chmod(member, stat.S_IREAD)
+        os.chmod(locked, stat.S_IREAD | stat.S_IEXEC)
+
+    runner = Runner(effect)
+    with archives.extract_archive(str(tmp_path / "a.tar"), tar_config(command="fake"), LOGGER, runner=runner):
+        pass
+    assert list(system_temp.iterdir()) == []

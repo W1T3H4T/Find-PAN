@@ -19,6 +19,9 @@ import pytest
 from find_pan.config import compile_regex_patterns
 
 ROOT = Path(__file__).resolve().parents[1]
+
+#   Modules that only make sense on one platform are not collected elsewhere (so they never skip).
+collect_ignore = [] if sys.platform == "win32" else ["test_tar_flavors.py"]
 PAN_GENERATOR_PATH = ROOT / "bin" / "generate-pan.py"
 CONFIGURATION_PATH = ROOT / "config" / "find-pan-regex.json"
 

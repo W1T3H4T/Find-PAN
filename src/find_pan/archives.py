@@ -7,6 +7,7 @@ Python archive library (and none of its path-traversal pitfalls) is involved.
 import logging
 import os
 import signal
+import stat
 import shutil
 import subprocess
 import sys
@@ -56,6 +57,22 @@ def _tree_usage(directory: str) -> tuple[int, int]:
     return total, count
 
 
+def _make_writable_and_retry(function, path, _error) -> None:
+    """rmtree error handler: clear read-only flags (extracted members keep their permissions) and retry."""
+    parent = os.path.dirname(path)
+    os.chmod(parent, stat.S_IRWXU)
+    os.chmod(path, stat.S_IRWXU)
+    function(path)
+
+
+def _remove_tree(directory: str) -> None:
+    """Delete an extraction directory even when it holds read-only files or directories."""
+    if sys.version_info >= (3, 12):
+        shutil.rmtree(directory, onexc=_make_writable_and_retry)
+    else:
+        shutil.rmtree(directory, onerror=_make_writable_and_retry)
+
+
 def _kill_tree(process: subprocess.Popen) -> None:
     """Kill the extractor and everything it started."""
     try:
@@ -97,7 +114,8 @@ def _next_poll_delay(
     return max(_MIN_POLL_SECONDS, delay)
 
 
-def run_limited(cmd: list[str], directory: str, limits: ExtractionLimits) -> subprocess.CompletedProcess:
+def run_limited(cmd: list[str], directory: str, limits: ExtractionLimits,
+                cwd: str | None = None) -> subprocess.CompletedProcess:
     """Run an extractor, stopping it if it exceeds *limits* on what it writes to *directory*.
 
     A watchdog polls the directory size, entry count, elapsed time and free
@@ -111,7 +129,7 @@ def run_limited(cmd: list[str], directory: str, limits: ExtractionLimits) -> sub
 
     with tempfile.TemporaryFile() as out_file, tempfile.TemporaryFile() as err_file:
         options = {"start_new_session": True} if not _IS_WINDOWS else {}
-        process = subprocess.Popen(cmd, stdout=out_file, stderr=err_file, **options)
+        process = subprocess.Popen(cmd, stdout=out_file, stderr=err_file, cwd=cwd, **options)
         started = time.monotonic()
         previous = None
         try:
@@ -207,8 +225,6 @@ def extract_archive(
         **{field.name: extractor[field.name] for field in fields(ExtractionLimits) if field.name in extractor},
     )
     temp_dir = tempfile.mkdtemp(prefix="find-pan-")
-    if runner is None:
-        runner = lambda cmd, **_: run_limited(cmd, temp_dir, limits)    # noqa: E731
     try:
         logger.info("Archive Scan: extracting %s as %s into %s ...", archive_path, archive_type, temp_dir)
 
@@ -226,15 +242,23 @@ def extract_archive(
 
         command_path = shutil.which(command) or command
         archive_arg, tempdir_arg = archive_for_extractor, temp_dir
+        work_dir = None
         force_local = _needs_force_local(command_path, args_template)
         if force_local:
-            #   MSYS-based GNU tar also rejects backslashes in these paths.
-            archive_arg, tempdir_arg = archive_arg.replace("\\", "/"), tempdir_arg.replace("\\", "/")
+            #   GNU tar on Windows reads "C:" as a host name (--force-local), and the builds disagree on
+            #   path syntax: Git's MSYS tar rejects backslashes, GnuWin32's native tar rejects a
+            #   forward-slash drive path for -C.  Relative paths are no answer either (MSYS resolves
+            #   ".." through its /tmp mount).  So run tar inside the extraction directory, where the
+            #   destination is ".", and give the archive as an absolute forward-slash path.
+            archive_arg, tempdir_arg = archive_arg.replace("\\", "/"), "."
+            work_dir = temp_dir
         #   Plain substitution, not str.format: other braces in an argument are literal text.
         args = [arg.replace("{archive}", archive_arg).replace("{tempdir}", tempdir_arg) for arg in args_template]
         if force_local:
             args.insert(0, "--force-local")
         cmd = [command_path] + args
+        if runner is None:
+            runner = lambda cmd, **_: run_limited(cmd, temp_dir, limits, cwd=work_dir)    # noqa: E731
         if verbose:
             logger.info("Extractor command: %s", " ".join(cmd))
 
@@ -269,7 +293,7 @@ def extract_archive(
             raise partial_failure
     finally:
         try:
-            shutil.rmtree(temp_dir)
+            _remove_tree(temp_dir)
             logger.info("Cleaned up temporary extraction directory: %s", temp_dir)
         except OSError as error:
             logger.warning("Could not remove temporary extraction directory %s: %s", temp_dir, error)
