@@ -30,6 +30,15 @@ def sanitize_for_ascii(value: str) -> str:
     return "".join(char if 32 <= ord(char) <= 126 else "?" for char in value)
 
 
+def neutralize_formula(value: str) -> str:
+    """Stop a spreadsheet from running *value* as a formula (CSV injection).
+
+    A cell that starts with ``=``, ``+``, ``-`` or ``@`` is a formula to Excel and its relatives, and file
+    names come from whoever controls the scanned files.  A leading apostrophe makes the cell plain text.
+    """
+    return "'" + value if value[:1] in ("=", "+", "-", "@") else value
+
+
 class Sink(Protocol):
     """Where redacted matches go."""
 
@@ -81,12 +90,12 @@ class CsvSink:
 
     def emit(self, view: RedactedMatch) -> None:
         self._writer.writerow({
-            "filename": sanitize_for_ascii(os.path.basename(view.file_path)),
+            "filename": neutralize_formula(sanitize_for_ascii(os.path.basename(view.file_path))),
             "line_number": view.line_number,
             "offset": view.offset,
-            "pattern_name": sanitize_for_ascii(view.pattern_name),
-            "data_type": sanitize_for_ascii(view.kind.value),
-            "matched_data": sanitize_for_ascii(view.matched_data),
+            "pattern_name": neutralize_formula(sanitize_for_ascii(view.pattern_name)),
+            "data_type": neutralize_formula(sanitize_for_ascii(view.kind.value)),
+            "matched_data": neutralize_formula(sanitize_for_ascii(view.matched_data)),
         })
         self._file.flush()
 

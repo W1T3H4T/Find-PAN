@@ -13,10 +13,10 @@ from find_pan.models import Match, MatchKind
 _KEEP_FIRST = 6
 _KEEP_LAST = 4
 _LONG_DIGIT_RUN = re.compile(r"(?<!\d)\d{12,19}(?!\d)")
-#   Cards written with single spaces or dashes: 4-4-4-4(-3) and the Amex 4-6-5 layout.
-_SEPARATED_CARD = re.compile(
-    r"(?<![\d-])(?:\d{4}([ -])\d{4}\1\d{4}\1\d{4}(?:\1\d{1,3})?|\d{4}([ -])\d{6}\2\d{5})(?![\d-])"
-)
+#   Numbers written in groups joined by one repeated space, dot or hyphen, the first group of four digits:
+#   4-4-4-4, the Amex 4-6-5, the Diners 4-6-4, 13-digit 4-4-4-1 and so on.  Whether the groups hold a
+#   PAN-length number is decided by counting the digits, so a version number or an address is left alone.
+_SEPARATED_CARD = re.compile(r"(?<![\d-])\d{4}([ .-])\d{1,7}(?:\1\d{1,7}){1,3}(?![\d-])")
 #   Track 1 (%B<pan>^<name>^<data>?) and Track 2 (;<pan>=<data>?) shapes.
 _TRACK_SHAPE = re.compile(r"%[BM]\d{12,19}\^[^^\n]*\^\d*\??|;\d{12,19}=\d*\??")
 
@@ -49,6 +49,13 @@ def mask_matched_data(matched: str, pan: str) -> str:
     return "".join(masked)
 
 
+def _mask_separated(found: re.Match) -> str:
+    digits = re.sub(r"\D", "", found.group(0))
+    if not 12 <= len(digits) <= 19:                                 # PAN length
+        return found.group(0)
+    return mask_matched_data(found.group(0), digits)
+
+
 def mask_text(text: str) -> str:
     """Mask track data and PAN-length (12-19 digit) runs in free text.
 
@@ -56,9 +63,7 @@ def mask_text(text: str) -> str:
     because expiry, service code and discretionary data are sensitive too.
     """
     text = _TRACK_SHAPE.sub(lambda found: re.sub(r"\d", "*", found.group(0)), text)
-    text = _SEPARATED_CARD.sub(
-        lambda found: mask_matched_data(found.group(0), re.sub(r"\D", "", found.group(0))), text
-    )
+    text = _SEPARATED_CARD.sub(_mask_separated, text)
     return _LONG_DIGIT_RUN.sub(lambda found: mask_pan(found.group(0)), text)
 
 

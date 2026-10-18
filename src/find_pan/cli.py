@@ -93,7 +93,9 @@ def build_parser() -> argparse.ArgumentParser:
                         "Archives are detected by content, expanded with the configured tools, and scanned.",
                         nargs="+", action="extend", metavar="FILE", default=[])
     parser.add_argument( "--log-dir", help="Directory for log files.", default=log_dir)
-    parser.add_argument( "--rgx-patterns", help="JSON file containing PAN and TRACK regular expressions.",
+    parser.add_argument( "--rgx-patterns", help="JSON file containing PAN and TRACK regular expressions "
+                        "(default: the first find-pan-regex.json found in the configuration directories, "
+                        "ending with <appRoot>/config).",
                         type=str, default=None)
     parser.add_argument( "--rgx-prefix", help=f"Apply prefixes ({REGEX_PATTERN_PREFIX}) to regular expressions.",
                         default=False, action="store_true")
@@ -250,6 +252,8 @@ def _run(namespace: argparse.Namespace, settings: Settings, argv: Sequence[str])
     """Load configuration, build the reporting pipeline and scan."""
     if settings.rgx_patterns is None:
         settings = replace(settings, rgx_patterns=find_json_regex_config())
+        #   Report the file actually used, not the None the parser defaulted to.
+        namespace.rgx_patterns = settings.rgx_patterns
 
     loggers = build_loggers(settings)
     patterns = _load_patterns(settings, loggers)

@@ -103,6 +103,13 @@ def test_find_pan_agrees_for_other_mixes_and_larger_files(tmp_path):
     assert {key: scan(tmp_path, tree)[key] for key in KEYS} == expected
 
 
+def test_min_size_makes_every_file_at_least_that_big_and_find_pan_still_agrees(tmp_path):
+    tree, expected_dir = generate(tmp_path, "--min-size", "50000", "--max-size", "52000", "--binary", "10", files=12, seed=5)
+    assert all(path.stat().st_size >= 50000 for path in tree.rglob("*") if path.is_file())
+    expected, _ = answers(expected_dir)
+    assert {key: scan(tmp_path, tree)[key] for key in KEYS} == expected
+
+
 def test_find_pan_reports_what_was_planted_inside_archives(tmp_path):
     tree, expected_dir = generate(tmp_path, "--archives", "30", "--nest", "50", files=200)
     expected, manifest = answers(expected_dir)

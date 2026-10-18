@@ -56,6 +56,7 @@
 #   max_files            number of extracted files and folders    (default 100000)
 #   timeout_seconds      wall-clock time for one extraction       (default 600)
 #   min_free_bytes       stop if free disk space falls below this (default 1 GiB)
+#   max_depth            archives nested inside archives, outermost included (default 10)
 #
 
 extractors:
@@ -161,6 +162,7 @@ extractors:
     - args: *id001
       command: 7z
 limits:
+  max_depth: 10
   max_extracted_bytes: 10737418240
   max_files: 100000
   min_free_bytes: 1073741824
