@@ -2,7 +2,7 @@ name: archive-7z_Test
 description: single fixture 7z_Test.7z
 created: '2026-10-17T23:06:58Z'
 find_pan:
-  version: 3.6.0
+  version: 3.5.1
   command:
   - --file
   - RegressionTests/7z_Test.7z
