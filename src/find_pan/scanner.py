@@ -21,7 +21,6 @@ from find_pan.models import ExtractionLimits, SkipReason
 from find_pan.rawscan import RawScanner
 from find_pan.reporting import Reporter
 from find_pan.settings import Settings
-from find_pan.targets import Targets, report_hits
 
 #   Bytes read from the start of a file to classify it.
 _SAMPLE_BYTES = 1024
@@ -51,7 +50,6 @@ class Scanner:
         loggers: Loggers,
         load_extractors: Callable[[], dict] | None = None,
         load_limits: Callable[[], ExtractionLimits] | None = None,
-        targets: Targets | None = None,
     ) -> None:
         self.settings = settings
         self.patterns = patterns
@@ -61,8 +59,7 @@ class Scanner:
         self._load_extractors = load_extractors
         self._extractors: dict | None = None
         self._load_limits = load_limits
-        self.targets = targets
-        self._raw = RawScanner(patterns, reporter, targets, settings.raw_encodings) if settings.raw else None
+        self._raw = RawScanner(patterns, reporter, settings.raw_encodings) if settings.raw else None
         self._limits: ExtractionLimits | None = None
         #   Content digests of the archives currently being expanded (outermost first).
         self._expanding: list[str] = []
@@ -163,9 +160,6 @@ class Scanner:
                     matches = scan_line(file_path, line_number, line, self.patterns)
                     for match in matches:
                         self.reporter.report(match)
-                    if self.targets is not None:
-                        report_hits(self.targets, self.reporter, line, matches, file_path, line_number,
-                                    lambda index, n=line_number: (index, f"{file_path}:{n}:{index}"))
         except OSError as error:
             self.loggers.trace.warning("Skipping file due to error: %s - %s", file_path, error)
             self._skip(file_path, SkipReason.UNREADABLE, str(error))

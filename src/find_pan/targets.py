@@ -1,32 +1,19 @@
-"""Expected values: PAN and track data an inspector wants to find (or confirm is absent).
+"""Report filters: the PAN and track data an inspector wants reported (``--pan-list``, ``--track-list``).
 
-``--pan-list`` and ``--track-list`` name files holding the values.  Every occurrence of a listed value is
-counted wherever it is found, whether or not a configured pattern would have recognised it, and the end of
-the run lists each value as found (how often, and where first) or not found.
+The lists are not a source of PAN or track data.  Only what the configured patterns accepted can ever be
+reported; with a list, a PAN or track that is not on it is dropped, and the end of the run says which listed
+values were found (how often, and where first) and which were not.
 """
 
 import re
 from dataclasses import dataclass
 
-from find_pan.detectors import extract_pan
+from find_pan.detectors import TRACK_CATEGORY
 from find_pan.errors import ConfigError
-from find_pan.models import Match, MatchKind
+from find_pan.models import MatchKind
 
 #   How many locations are remembered per value; the count is exact.
 MAX_LOCATIONS = 3
-
-_PAN_RUN = re.compile(r"(?<![0-9])[0-9]{12,19}(?![0-9])")
-_TRACK = re.compile(r"%[BM][0-9]{12,19}\^[^^]*\^[0-9]*\??|;[0-9]{12,19}=[0-9]*\??")
-
-
-@dataclass(frozen=True)
-class TargetHit:
-    """One occurrence of a listed value in a piece of text."""
-
-    kind: MatchKind
-    value: str
-    start: int
-    end: int
 
 
 def _read_values(path: str) -> list[tuple[int, str]]:
@@ -54,41 +41,26 @@ def load_pan_list(path: str) -> tuple[str, ...]:
     return tuple(pans)
 
 
-def load_track_list(path: str) -> tuple[str, ...]:
-    """Read track 1 or track 2 strings, one per line; duplicates are dropped, order is kept."""
+def load_track_list(path: str, patterns: list) -> tuple[str, ...]:
+    """Read track 1 or track 2 strings, one per line; duplicates are dropped, order is kept.
+
+    A line must be whole track data by one of the configured TRACK patterns.
+    """
     tracks: dict[str, None] = {}
+    track_patterns = [compiled for category, _, compiled in patterns if category == TRACK_CATEGORY]
     for number, text in _read_values(path):
-        if not _TRACK.fullmatch(text):
-            raise ConfigError(f"{path}:{number}: not track 1 (%B...^...^...?) or track 2 (;...=...?) data")
+        if not any(compiled.fullmatch(text) for compiled in track_patterns):
+            raise ConfigError(f"{path}:{number}: not track data by any configured TRACK pattern")
         tracks[text] = None
     return tuple(tracks)
 
 
+@dataclass(frozen=True)
 class Targets:
-    """The listed values, and a way to find them in text."""
+    """The listed values; an empty tuple means that kind is not filtered."""
 
-    def __init__(self, pans: tuple[str, ...] = (), tracks: tuple[str, ...] = ()) -> None:
-        self.pans = tuple(pans)
-        self.tracks = tuple(tracks)
-        self._pan_set = frozenset(self.pans)
-        ordered = sorted(self.tracks, key=len, reverse=True)
-        self._track_regex = re.compile("|".join(re.escape(track) for track in ordered)) if ordered else None
-
-    def find(self, text: str) -> list[TargetHit]:
-        """Return every occurrence of a listed value in *text*, in text order.
-
-        A PAN counts only between non-digits, so it is never taken from the middle of a longer number.  A
-        listed PAN inside listed track data is found too: the PAN is present either way.
-        """
-        hits = []
-        if self._pan_set:
-            for found in _PAN_RUN.finditer(text):
-                if found.group(0) in self._pan_set:
-                    hits.append(TargetHit(MatchKind.PAN, found.group(0), found.start(), found.end()))
-        if self._track_regex:
-            for found in self._track_regex.finditer(text):
-                hits.append(TargetHit(MatchKind.TRACK, found.group(0), found.start(), found.end()))
-        return sorted(hits, key=lambda hit: hit.start)
+    pans: tuple[str, ...] = ()
+    tracks: tuple[str, ...] = ()
 
 
 @dataclass
@@ -112,11 +84,30 @@ class TargetLedger:
         self._entries.update({(MatchKind.TRACK, value): LedgerEntry(MatchKind.TRACK, value)
                               for value in targets.tracks})
 
-    def record(self, kind: MatchKind, value: str, location: str) -> None:
-        entry = self._entries[(kind, value)]
+class TargetLedger:
+    """Filters matches by the lists and tallies, per listed value, how often it was found and where first."""
+
+    def __init__(self, targets: Targets) -> None:
+        self._entries = {(MatchKind.PAN, value): LedgerEntry(MatchKind.PAN, value) for value in targets.pans}
+        self._entries.update({(MatchKind.TRACK, value): LedgerEntry(MatchKind.TRACK, value)
+                              for value in targets.tracks})
+        self._filtered = {MatchKind.PAN: bool(targets.pans), MatchKind.TRACK: bool(targets.tracks)}
+
+    def admit(self, match) -> bool:
+        """Whether *match* may be reported; a listed PAN or track that is admitted is tallied.
+
+        Only accepted PAN and TRACK matches are filtered, each by its own list.
+        """
+        if match.kind not in (MatchKind.PAN, MatchKind.TRACK):
+            return True
+        value = match.pan if match.kind is MatchKind.PAN else match.matched_data
+        entry = self._entries.get((match.kind, value))
+        if entry is None:
+            return not self._filtered[match.kind]
         entry.count += 1
         if len(entry.locations) < MAX_LOCATIONS:
-            entry.locations.append(location)
+            entry.locations.append(_location(match))
+        return True
 
     def entries(self) -> list[LedgerEntry]:
         return list(self._entries.values())
@@ -128,28 +119,8 @@ class TargetLedger:
         return sum(entry.kind is kind and entry.count > 0 for entry in self._entries.values())
 
 
-def report_hits(targets: Targets, reporter, text: str, matches: list, file_path: str, line_number: int,
-                place, encoding: str = "", context=None) -> None:
-    """Tally the listed values found in *text* and report those no pattern already reported.
-
-    *place(index)* turns a position in *text* into ``(reported offset, location label)``, or ``None`` for a
-    position that belongs to a neighbouring chunk.  A hit overlapping a PAN or track that the patterns
-    accepted is only tallied: it is already in the results.  Any other hit is reported as a PAN or TRACK
-    named "Expected PAN" or "Expected TRACK", since the inspector said it is one.
-    """
-    covered = [(m.offset, m.offset + len(m.matched_data)) for m in matches
-               if m.kind in (MatchKind.PAN, MatchKind.TRACK)]
-    for hit in targets.find(text):
-        placed = place(hit.start)
-        if placed is None:
-            continue
-        offset, location = placed
-        reporter.expected.record(hit.kind, hit.value, location)
-        if any(start < hit.end and hit.start < end for start, end in covered):
-            continue
-        pan = hit.value if hit.kind is MatchKind.PAN else extract_pan(hit.value)
-        reporter.report(Match(
-            file_path, line_number, offset, hit.kind, f"Expected {hit.kind.value}",
-            "--pan-list" if hit.kind is MatchKind.PAN else "--track-list", hit.value,
-            context(hit) if context else text, pan, encoding,
-        ))
+def _location(match) -> str:
+    """Where a match was found: ``file:line:column`` in text, ``file@0xOFFSET (encoding)`` in raw scans."""
+    if match.encoding:
+        return f"{match.file_path}@0x{match.offset:X} ({match.encoding})"
+    return f"{match.file_path}:{match.line_number}:{match.offset}"

@@ -15,7 +15,6 @@ from dataclasses import replace
 from typing import Sequence
 
 from find_pan.detectors import scan_line
-from find_pan.targets import Targets, report_hits
 
 CHUNK_SIZE = 8 * 1024 * 1024
 #   Bytes read before and after each chunk so that a match on a boundary is seen whole.  A track record
@@ -54,7 +53,7 @@ def _views(window: bytes, encodings: Sequence[str]):
 class RawScanner:
     """Scans files as raw bytes, reporting through a ``Reporter``."""
 
-    def __init__(self, patterns: list, reporter, targets: Targets | None = None,
+    def __init__(self, patterns: list, reporter,
                  encodings: Sequence[str] = DEFAULT_ENCODINGS, chunk_size: int = CHUNK_SIZE,
                  overlap: int = OVERLAP) -> None:
         unknown = [name for name in encodings if name not in ENCODINGS]
@@ -62,7 +61,6 @@ class RawScanner:
             raise ValueError(f"unknown raw encoding(s): {', '.join(unknown)}")
         self.patterns = patterns
         self.reporter = reporter
-        self.targets = targets
         self.encodings = tuple(encodings)
         self.chunk_size = chunk_size - chunk_size % 2          # even, so UTF-16 alignment is the same in every chunk
         self.overlap = overlap + overlap % 2
@@ -109,6 +107,3 @@ class RawScanner:
                         match, offset=placed[0], encoding=encoding,
                         source_line=context(match.offset, end),
                     ))
-                if self.targets is not None:
-                    report_hits(self.targets, self.reporter, segment, matches, file_path, 0, place, encoding,
-                                context=lambda hit, context=context: context(hit.start, hit.end))

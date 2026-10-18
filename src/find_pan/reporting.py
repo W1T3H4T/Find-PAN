@@ -157,7 +157,13 @@ class Reporter:
         self._skipped: list[tuple[str, SkipReason, str]] = []
 
     def report(self, match) -> None:
-        """Count *match*, redact it once, and emit it to the sinks that accept it."""
+        """Count *match*, redact it once, and emit it to the sinks that accept it.
+
+        With ``--pan-list`` / ``--track-list`` a PAN or track that is not listed is dropped here, before it is
+        counted or redacted.
+        """
+        if self.expected is not None and not self.expected.admit(match):
+            return
         self.stats.record(match.kind)
         view = self.redactor.apply(match)
         for sink in self.sinks:

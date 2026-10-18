@@ -2,7 +2,7 @@ name: masked
 description: the 13 plain fixtures with --mask (pins redaction)
 created: '2026-10-17T22:41:33Z'
 find_pan:
-  version: 3.3.0
+  version: 3.4.0
   command:
   - --mask
   - --file
