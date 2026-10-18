@@ -139,6 +139,30 @@ def test_the_windows_tar_candidates_name_each_tar_build_with_its_own_arguments()
     assert "--force-local" not in candidates[0]["args"] and "cwd" not in candidates[0]
 
 
+@pytest.mark.parametrize("platform", ["windows", "linux", "macos"])
+def test_zip_falls_back_to_7z_after_the_other_tools(platform):
+    """7-Zip reads zip archives, so a machine without unzip can still expand them."""
+    commands = [c["command"].lower() for c in config.extractor_candidates(config.DEFAULT_EXTRACTORS["zip"], platform)]
+    sevens = [i for i, command in enumerate(commands) if "7z" in command]
+    assert sevens and commands.index("unzip") < min(sevens)                  # tried only after unzip
+    assert sevens[-1] == len(commands) - 1                                   # appended: existing order kept
+
+
+def test_a_zip_is_extracted_by_the_7z_candidate_alone(tmp_path):
+    import shutil
+    import zipfile
+
+    candidates = [c for c in config.extractor_candidates(config.DEFAULT_EXTRACTORS["zip"])
+                  if "7z" in c["command"].lower() and shutil.which(os.path.expandvars(c["command"]))]
+    assert candidates, "7-Zip is not installed on this machine"
+    archive = tmp_path / "sample.zip"
+    with zipfile.ZipFile(archive, "w") as handle:
+        handle.writestr("a/member.txt", "card 4556737586899855")
+    with archives.extract_archive(str(archive), {"zip": {config.platform_key(): [candidates[0]]}},
+                                  LOGGER) as directory:
+        assert (Path(directory) / "a" / "member.txt").read_text(encoding="utf-8").startswith("card 4556")
+
+
 def test_build_extractor_config_writes_the_defaults(tmp_path):
     path = tmp_path / "conf.yaml"
     config.build_extractor_config(str(path))

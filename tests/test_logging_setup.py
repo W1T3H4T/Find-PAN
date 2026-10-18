@@ -98,3 +98,42 @@ def test_log_files_are_written_as_utf8(tmp_path):
     logs = tmp_path / "logs"
     for log_file in logs.glob("*.log"):
         assert text in log_file.read_text(encoding="utf-8"), log_file.name
+
+
+def _console_text(tmp_path, capsys, **settings):
+    from find_pan import reporting
+    from find_pan.models import Match, MatchKind
+    from find_pan.redact import Redactor
+
+    loggers = logging_setup.build_loggers(make_settings(tmp_path, **settings))
+    match = Match("/data/a.txt", 3, 6, MatchKind.PAN, "VISA", "4[0-9]{15}", "4556737586899855",
+                  "Card: 4556737586899855\n", "4556737586899855")
+    reporting.LogSink(loggers.pan).emit(Redactor(False).apply(match))
+    out = capsys.readouterr().out
+    for handler in list(loggers.pan.handlers):
+        handler.close()
+    return out, (tmp_path / "logs")
+
+
+def test_verbose_console_puts_each_class_of_item_on_its_own_line(tmp_path, capsys):
+    out, _ = _console_text(tmp_path, capsys, verbose=True)
+    lines = out.rstrip("\n").splitlines()
+    assert lines[0].endswith("[INFO]: PAN match: VISA")
+    assert [line.strip() for line in lines[1:]] == [
+        "File    : /data/a.txt",
+        "Location: line 3, offset 6",
+        "Pattern : 4[0-9]{15}",
+        "Data    : Card: 4556737586899855",
+    ]
+
+
+def test_verbose_console_separates_matches_with_one_empty_line(tmp_path, capsys):
+    out, _ = _console_text(tmp_path, capsys, verbose=True)
+    assert out.endswith("\n\n") and not out.endswith("\n\n\n")
+
+
+def test_pan_log_file_keeps_the_single_line_format(tmp_path, capsys):
+    _, logs = _console_text(tmp_path, capsys, verbose=True)
+    text = next(logs.glob("Find-PAN-[0-9]*.log")).read_text(encoding="utf-8")
+    assert "/data/a.txt:3:6->VISA (PAN), 4[0-9]{15}: Card: 4556737586899855" in text
+    assert "File    :" not in text

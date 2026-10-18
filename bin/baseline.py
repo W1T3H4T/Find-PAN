@@ -35,6 +35,7 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
+from find_pan import config  # noqa: E402
 from find_pan.archives import select_candidate  # noqa: E402
 from find_pan.config import extractor_candidates, find_extractor_config_path, load_extractor_config  # noqa: E402
 from find_pan.filetypes import FileKind, classify_head  # noqa: E402
@@ -359,6 +360,22 @@ def required_tools(inputs: Iterable[str], root: Path = REPO_ROOT) -> list[str]:
     return sorted(tools)
 
 
+def tool_available(tool: str, extractors: dict) -> bool:
+    """Is *tool* usable here: on PATH, or replaceable by another installed candidate for the same archive type?
+
+    A baseline records the tool that expanded its archives where it was created (say ``unzip``).  Where
+    that tool is missing, any other configured candidate of the same type (say 7-Zip for zip) does the job.
+    """
+    if shutil.which(tool):
+        return True
+    for entry in extractors.values():
+        candidates = [c for c in extractor_candidates(entry) if c.get("command")]
+        if any(Path(os.path.expandvars(c["command"])).stem == tool for c in candidates):
+            if any(shutil.which(os.path.expandvars(c["command"])) for c in candidates):
+                return True
+    return False
+
+
 # ===========================================================================
 # --create
 # ===========================================================================
@@ -472,7 +489,9 @@ def validate(name: str, strict: bool = False, max_diff: int = 50,
             return _error(name, f"{yaml_path.name} says name {document.get('name') if isinstance(document, dict) else None!r}, "
                                 f"but the directory is {name!r}")
 
-        missing_tools = [tool for tool in document.get("requires_tools", []) if shutil.which(tool) is None]
+        required = document.get("requires_tools", [])
+        extractors = load_extractor_config(find_extractor_config_path()) if required else {}
+        missing_tools = [tool for tool in required if not tool_available(tool, extractors)]
         if missing_tools:
             return Outcome(name, "SKIPPED (environment)",
                            [f"required extractor not installed: {', '.join(missing_tools)}"], 1 if strict else 0)
@@ -548,10 +567,27 @@ def _all_names(baseline_root: Path) -> list[str]:
                   if entry.is_dir() and not entry.name.startswith(".") and (entry / "baseline.yaml").is_file())
 
 
-def _print_outcome(outcome: Outcome) -> None:
-    print(f"{outcome.name}: {outcome.verdict}")
-    for line in outcome.lines:
-        print(f"    {line}")
+_LABELS = {"PASS": "PASS", "FAIL": "FAIL", "SKIPPED": "SKIP", "ERROR": "ERROR"}
+
+
+def format_outcome(outcome: Outcome, width: int) -> str:
+    """One report row (status, name padded to *width*, reason) followed by its indented detail lines."""
+    word, _, reason = outcome.verdict.partition(" ")
+    label = _LABELS.get(word, word)
+    row = f"{label:<5}  {outcome.name:<{width}}  {reason.strip('()')}".rstrip()
+    if not outcome.lines:
+        return row
+    return "\n".join([row, *(f"    {line}" for line in outcome.lines), ""])
+
+
+def format_totals(outcomes: Sequence[Outcome]) -> str:
+    passed = sum(o.verdict == "PASS" for o in outcomes)
+    failed = sum(o.verdict.startswith("FAIL") or (o.verdict.startswith("SKIPPED") and o.status == 1)
+                 for o in outcomes)
+    skipped = sum(o.verdict.startswith("SKIPPED") and o.status == 0 for o in outcomes)
+    errors = sum(o.verdict == "ERROR" for o in outcomes)
+    noun = "baseline" if len(outcomes) == 1 else "baselines"
+    return f"{len(outcomes)} {noun}: {passed} passed, {failed} failed, {skipped} skipped, {errors} errors"
 
 
 def main(argv: Sequence[str] | None = None, root: Path = REPO_ROOT, baseline_root: Path = BASELINE_ROOT) -> int:
@@ -579,17 +615,14 @@ def main(argv: Sequence[str] | None = None, root: Path = REPO_ROOT, baseline_roo
             names = [args.validate] if args.validate else _all_names(baseline_root)
             if not names:
                 raise BaselineError(f"no baselines found under {baseline_root}")
+            print(f"Validating {len(names)} baseline{'' if len(names) == 1 else 's'}\n")
+            width = max(len(name) for name in names)
             outcomes = []
             for name in names:
                 outcome = validate(name, args.strict, args.max_diff, root, baseline_root)
-                _print_outcome(outcome)
+                print(format_outcome(outcome, width))
                 outcomes.append(outcome)
-            passed = sum(o.verdict == "PASS" for o in outcomes)
-            failed = sum(o.verdict.startswith("FAIL") or (o.verdict.startswith("SKIPPED") and o.status == 1)
-                         for o in outcomes)
-            skipped = sum(o.verdict.startswith("SKIPPED") and o.status == 0 for o in outcomes)
-            errors = sum(o.verdict == "ERROR" for o in outcomes)
-            print(f"{passed} passed, {failed} failed, {skipped} skipped, {errors} errors")
+            print(f"\n{format_totals(outcomes)}")
             statuses = {o.status for o in outcomes}
             return 1 if 1 in statuses else (2 if 2 in statuses else 0)
 

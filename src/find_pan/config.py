@@ -35,6 +35,7 @@ def _application_root() -> str:
 
 # - Regex Pattern Prefix
 _REGEX_PATTERN_PREFIX = r"[ '\"{]"
+_PAN_CATEGORY = "PAN Pattern"
 
 # - Archive type detection table
 _ARCHIVE_TYPE_MAP: Dict[str, str] = {
@@ -223,8 +224,16 @@ DEFAULT_EXTRACTORS: Dict[str, Dict] = {
             {"command": "unzip", "args": _UNZIP},
             {"command": r"%ProgramFiles%\Git\usr\bin\unzip.exe", "args": _UNZIP},
             {"command": _BSDTAR, "args": _TAR},
+            #   7-Zip reads zip archives too: the last resort when none of the above is installed.
+            {"command": r"%ProgramFiles%\7-Zip\7z.exe", "args": _SEVEN_ZIP},
+            {"command": "7z", "args": _SEVEN_ZIP},
         ],
-        "posix": [{"command": "unzip", "args": _UNZIP}],
+        "posix": [
+            {"command": "unzip", "args": _UNZIP},
+            {"command": "7zz", "args": _SEVEN_ZIP},
+            {"command": "7z", "args": _SEVEN_ZIP},
+            {"command": "7za", "args": _SEVEN_ZIP},
+        ],
     },
     "7z": {
         "compression": ["store", "lzma", "lzma2", "bzip2", "deflate", "ppmd", "bcj2"],
@@ -424,7 +433,11 @@ def _compile(pattern: str, category: str, pattern_name: str) -> re.Pattern:
 
 
 def compile_regex_patterns_with_prefix(json_data: dict) -> list:
-    """Compile configured regexes, each prefixed with a boundary character class."""
+    """Compile configured regexes; the PAN patterns (only) get a boundary character class prefix.
+
+    Anti-PAN and TRACK patterns are compiled as they are: their own syntax (``%B``, ``;``, anchors and
+    look-aheads) must not be altered by a prefix.
+    """
     compiled_patterns = []
 
     for category, patterns in json_data.items():
@@ -432,7 +445,7 @@ def compile_regex_patterns_with_prefix(json_data: dict) -> list:
             for pattern_name, details in patterns.items():
                 if "regex" in details:
                     for pattern in details["regex"]:
-                        prefix_pattern = f"{_REGEX_PATTERN_PREFIX}{pattern}"
+                        prefix_pattern = f"{_REGEX_PATTERN_PREFIX}{pattern}" if category == _PAN_CATEGORY else pattern
                         compiled_patterns.append(
                             (category, pattern_name, _compile(prefix_pattern, category, pattern_name))
                         )

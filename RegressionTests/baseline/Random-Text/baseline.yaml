@@ -1,0 +1,26 @@
+name: Random-Text
+description: ''
+created: '2026-10-18T02:59:38Z'
+find_pan:
+  version: 3.1.2
+  command:
+  - --file
+  - RegressionTests/Random-Text.txt
+python: 3.14.5
+platform: win32
+requires_tools: []
+inputs:
+- path: RegressionTests/Random-Text.txt
+  size: 168327
+  sha256: 605325a07b2076ac3ae7812795054521e99b7530ddb199d149ba81b8209fcfa4
+  eol_normalized: true
+summary:
+  anti_pans: 0
+  archives_expanded: 0
+  archives_skipped: 0
+  bad_luhn: 1
+  exit_status: 0
+  files_scanned: 1
+  pans: 1190
+  skipped: []
+  tracks: 797

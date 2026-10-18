@@ -1,14 +1,16 @@
 """Regression tests against the real archive fixtures in RegressionTests/.
 
-ZIP_Test.zip, TAR_Test.tar and 7z_Test.7z each contain the same 13 text files
-that sit next to them, so scanning an archive must find exactly as many PANs as
-scanning the plain files.  The tests use the real extraction tools from the
+ZIP_Test.zip, TAR_Test.tar and 7z_Test.7z each contain the same text files, and
+the same files sit next to them, so scanning an archive must find exactly as many
+PANs as scanning those plain files.  Other fixtures in RegressionTests/ (added at
+any time) are not in the archives and are left out of the comparison.  The tests use the real extraction tools from the
 default extractor configuration and skip when a tool is not installed.
 """
 
 import os
 import re
 import shutil
+import tarfile
 from pathlib import Path
 
 import pytest
@@ -18,6 +20,13 @@ from find_pan.config import detect_archive_type, extractor_candidates, find_extr
 
 FIXTURES = Path(__file__).resolve().parents[1] / "RegressionTests"
 ARCHIVES = ["ZIP_Test.zip", "TAR_Test.tar", "7z_Test.7z"]
+
+
+def archived_fixtures() -> list[Path]:
+    """The plain fixtures that the archives contain, named by TAR_Test.tar (readable without any tool)."""
+    with tarfile.open(FIXTURES / "TAR_Test.tar") as handle:
+        names = {Path(member.name).name for member in handle.getmembers() if member.isfile()}
+    return sorted(FIXTURES / name for name in names if (FIXTURES / name).is_file())
 
 
 def pans_matched(output: str) -> int:
@@ -41,7 +50,7 @@ def plain_count(tmp_path, capsys):
     """PANs found in the plain text fixtures (no archives)."""
     plain = tmp_path / "plain"
     plain.mkdir()
-    for source in FIXTURES.glob("*.txt"):
+    for source in archived_fixtures():
         shutil.copy(source, plain / source.name)
     status, output = run(tmp_path, capsys, "--path", str(plain))
     assert status == 0
@@ -67,7 +76,7 @@ def test_path_scan_expands_every_archive_found(tmp_path, capsys, plain_count):
     #   Scan a copy: RegressionTests/ also holds the baseline CSVs, which contain card numbers too.
     fixtures = tmp_path / "fixtures"
     fixtures.mkdir()
-    for source in [*FIXTURES.glob("*.txt"), *(FIXTURES / name for name in ARCHIVES)]:
+    for source in [*archived_fixtures(), *(FIXTURES / name for name in ARCHIVES)]:
         shutil.copy(source, fixtures / source.name)
     status, output = run(tmp_path, capsys, "--path", str(fixtures))
     assert status == 0

@@ -43,6 +43,7 @@ def _log_line(logger: logging.Logger, view: RedactedMatch) -> None:
     logger.info(
         _LOG_FORMAT, view.file_path, view.line_number, view.offset,
         view.pattern_name, view.kind.value, view.pattern, view.source_line,
+        extra={"match": view},      # lets the --verbose console show the same match over several lines
     )
 
 

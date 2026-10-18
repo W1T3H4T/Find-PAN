@@ -143,6 +143,12 @@ extractors:
       - -d
       - '{tempdir}'
       command: unzip
+    - args: *id001
+      command: 7zz
+    - args: *id001
+      command: 7z
+    - args: *id001
+      command: 7za
     windows:
     - args: *id004
       command: unzip
@@ -150,6 +156,10 @@ extractors:
       command: '%ProgramFiles%\Git\usr\bin\unzip.exe'
     - args: *id002
       command: '%SystemRoot%\System32\tar.exe'
+    - args: *id001
+      command: '%ProgramFiles%\7-Zip\7z.exe'
+    - args: *id001
+      command: 7z
 limits:
   max_extracted_bytes: 10737418240
   max_files: 100000
