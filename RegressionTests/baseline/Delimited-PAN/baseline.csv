@@ -1,0 +1,9 @@
+filename,line_number,offset,pattern_name,data_type,matched_data
+Delimited-PAN.txt,1,11,VISA,PAN,4556737586899855
+Delimited-PAN.txt,2,11,VISA,PAN,4556-7375-8689-9855
+Delimited-PAN.txt,3,11,VISA,PAN,4012 8888 8888 1881
+Delimited-PAN.txt,4,11,American Express,PAN,3714-496353-98431
+Delimited-PAN.txt,5,11,Diners Club Carte Blanche,PAN,3056 930902 5904
+Delimited-PAN.txt,6,11,VISA,PAN,4556-7375-8689-9855-006
+Delimited-PAN.txt,11,11,Track 2,TRACK,;4556737586899855=25121010000012345678?
+Delimited-PAN.txt,12,12,VISA,PAN,4556-7375-8689-9855

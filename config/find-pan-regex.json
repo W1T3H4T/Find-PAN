@@ -11,7 +11,39 @@
             "",
             "Use the 'Length': NN keyword to describe all lengths of the PAN being matched ",
             "by all of the patterns in the 'regex': [ array ]"
+        ],
+        "Delimited PAN Info": [
+            "'Delimited PAN Pattern' entries are not matchers.  They only find PANs written in groups",
+            "joined by one repeated space or hyphen (4556-7375-8689-9855).  Each found group is",
+            "compacted (separators removed) BEFORE the Anti-PAN and PAN patterns run, so those patterns",
+            "decide what is a PAN.  TRACK patterns always see the original text."
         ]
+    },
+    "Delimited PAN Pattern": {
+        "4-4-4-n": {
+            "regex": [
+                "(?<![0-9])[0-9]{4}([ -])[0-9]{4}\\1[0-9]{4}\\1[0-9]{1,7}(?![0-9])"
+            ],
+            "length": "13-19"
+        },
+        "4-4-4-4-n": {
+            "regex": [
+                "(?<![0-9])[0-9]{4}([ -])[0-9]{4}\\1[0-9]{4}\\1[0-9]{4}\\1[0-9]{1,3}(?![0-9])"
+            ],
+            "length": "17-19"
+        },
+        "4-6-5": {
+            "regex": [
+                "(?<![0-9])[0-9]{4}([ -])[0-9]{6}\\1[0-9]{5}(?![0-9])"
+            ],
+            "length": "15"
+        },
+        "4-6-4": {
+            "regex": [
+                "(?<![0-9])[0-9]{4}([ -])[0-9]{6}\\1[0-9]{4}(?![0-9])"
+            ],
+            "length": "14"
+        }
     },
     "Anti-PAN Pattern": {
         "Timestamp": {

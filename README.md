@@ -117,8 +117,8 @@ uv run python bin/find-pan.py [--path PATH] [--file FILE [FILE ...]]
 | `--summary-json FILE`     | Write counts, timings, skipped files, and exit status to JSON. Replaces existing contents. |
 | `--raw`                   | Scan every file as raw bytes (memory dumps, disk images): no line splitting, binary skipping or archive expansion. Matches are reported by byte offset. See [Raw scans and expected values](#raw-scans-and-expected-values). Default off. |
 | `--raw-encodings LIST`    | With `--raw`: comma-separated text encodings to look for, from `ascii` and `utf-16` (both byte orders). Default `ascii,utf-16`. |
-| `--pan-list FILE`         | File of expected PANs, one per line. The summary lists each as found (how often, and where first) or not found. Works with or without `--raw`. |
-| `--track-list FILE`       | File of expected track 1 or track 2 strings, one per line; reported like `--pan-list`. |
+| `--pan-list FILE`         | Report only the PANs listed in FILE (one per line; spaces and hyphens allowed). A report filter on what the configured patterns found, never a source of PANs; the summary lists each value as found (how often, and where first) or not found. Works with or without `--raw`. |
+| `--track-list FILE`       | Report only the track 1 or track 2 strings listed in FILE, one per line; works like `--pan-list`. |
 | `--log-anti-pan`          | Write anti-PAN hits to their own log and include its path and entry count in the console summary. Default off. |
 | `--verbose`               | Also show each PAN and TRACK match on stdout over several lines (type and pattern, then `File`, `Location`, `Pattern` and `Data`, each on its own line, with an empty line between matches), plus extractor commands. The PAN log file keeps its single-line format. |
 | `--debug`                 | Enable debug messages on stdout and in the trace log, including failed Luhn candidates and compiled configuration details. |
@@ -179,15 +179,18 @@ A zero status does **not** guarantee complete coverage: missing extractors (`ARC
 
 For each decoded line, [detectors.py](src/find_pan/detectors.py):
 
-1. Finds anti-PAN matches and excludes their character spans. Timestamp matches must also be real calendar dates with a year from 1900 through the current year.
-2. Evaluates the remaining configured TRACK and PAN expressions in configuration order. A candidate overlapping an excluded or already accepted span is skipped.
-3. Extracts the PAN digits, including the PAN portion of a track record, and applies the Luhn checksum. Valid candidates become findings; invalid candidates are counted as Luhn failures and appear only in debug output.
+1. Normalizes delimited PANs: groups of digits joined by one repeated space or hyphen (`4556-7375-8689-9855`), found by the `Delimited PAN Pattern` entries of the regex file, are compacted to plain digits. Only the anti-PAN and PAN expressions see the compacted text; TRACK expressions always see the original line.
+2. Finds anti-PAN matches and excludes their character spans. Timestamp matches must also be real calendar dates with a year from 1900 through the current year.
+3. Evaluates the remaining configured TRACK and PAN expressions in configuration order. A candidate overlapping an excluded or already accepted span is skipped, so no PAN is taken from accepted track data.
+4. Extracts the PAN digits, including the PAN portion of a track record, and applies the Luhn checksum. Valid candidates become findings; invalid candidates are counted as Luhn failures and appear only in debug output.
+
+Findings are reported against the original line: a delimited PAN appears as written, at its original position, with the same pattern name a contiguous PAN would have.
 
 The scanner can report multiple non-overlapping findings per line. An anti-PAN or failed candidate does not suppress unrelated candidates elsewhere on that line. Anti-PAN counts represent anti-pattern matches, not necessarily rejected Luhn-valid PANs.
 
 The shipped [regex configuration](config/find-pan-regex.json) includes American Express, Diners Club Carte Blanche, Diners Club International, Diners Club US and Canada, Discover Card, InstaPayment, JCB, Laser, Maestro, Mastercard, VISA, VISA Electron, and UnionPay, plus Track 1 and Track 2 patterns.
 
-These expressions define the actual coverage. The shipped PAN expressions match contiguous digits; numbers separated by spaces or hyphens are not generally detected, even though output redaction recognizes some separated-number formats. Several expressions use numeric boundaries, but this is not universal. Overlapping issuer ranges are resolved by configured pattern order. Luhn validation does not establish account status or issuer ownership.
+These expressions define the actual coverage. The shipped PAN expressions match contiguous digits; delimited PANs are handled by the normalization step, whose candidate shapes (4-4-4-n, 4-4-4-4-n, 4-6-5 and 4-6-4 groups) are configured in the `Delimited PAN Pattern` section and never decide what is a PAN by themselves. Several expressions use numeric boundaries, but this is not universal. Overlapping issuer ranges are resolved by configured pattern order. Luhn validation does not establish account status or issuer ownership.
 
 The anti-PAN configuration includes timestamps, sequential-number patterns, and repeated-digit groups. Customize these filters carefully because overlapping spans are excluded before PAN/track validation.
 
@@ -252,7 +255,7 @@ When investigating payment software you often know which PANs or track records y
 uv run python bin/find-pan.py --file memory.dmp --raw --pan-list test-pans.txt --track-list test-tracks.txt
 ```
 
-Every occurrence of a listed value is counted wherever it appears, whether or not a configured pattern or the Luhn check would have recognized it. A listed PAN is matched only between non-digits, never inside a longer number, and as contiguous digits (a PAN written with separators in the data is not matched). A listed PAN inside listed track data is counted too. A listed value that no pattern recognized is reported as a PAN or TRACK named `Expected PAN` or `Expected TRACK`, so it appears in the logs and CSV; a value that a pattern also matched is reported once.
+`--pan-list` and `--track-list` are report filters, not sources of data. A PAN or track is found only by the configured expressions of `find-pan-regex.json` (and the Luhn check); a list then limits which of those findings are reported. With `--pan-list`, a PAN whose compact digits are not on the list is dropped, so is a delimited PAN not on it; with `--track-list`, a track that is not on the list is dropped. Each list filters its own kind only. Findings are reported once, counted once, and a listed value that no expression accepts (an unusual number, a failed Luhn check, a PAN inside track data) is simply `NOT FOUND`: the tool never reports a number just because it was listed. Track-list lines must be whole track data by a configured `TRACK Pattern`.
 
 The end-of-run summary then has an `-- Expected Values --` section, and `--summary-json` gets an `expected` object holding, per value, `found` (the exact count) and up to three `locations`:
 
@@ -280,7 +283,7 @@ $HOME/.local/share/find-pan
 <checkout>/config
 ```
 
-The recognized categories are `Anti-PAN Pattern`, `TRACK Pattern`, and `PAN Pattern`. Named entries contain a `regex` array; see the [shipped file](config/find-pan-regex.json). Add boundary and regression cases when changing patterns.
+The recognized categories are `Anti-PAN Pattern`, `TRACK Pattern`, `PAN Pattern` and `Delimited PAN Pattern`. Named entries contain a `regex` array; see the [shipped file](config/find-pan-regex.json). `Delimited PAN Pattern` entries only locate PANs written in groups (a capture group holding the separator, repeated by a back-reference); they are compacted before the anti-PAN and PAN expressions run. Add boundary and regression cases when changing patterns.
 
 ### Archive extractors
 

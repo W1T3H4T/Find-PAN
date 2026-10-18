@@ -11,6 +11,7 @@ from find_pan.reporting import Reporter
 
 PAN = "4556737586899855"
 SECOND = "4012888888881881"
+UNLISTED = "5500000000000004"
 TRACK2 = ";4556737586899855=25121010000012345678?"
 FF = bytes([0xFF])                      # a byte that is not printable text in any encoding
 
@@ -36,7 +37,7 @@ def make(patterns, mask=False, expected=None, **options):
     if expected is not None:
         ledger = targets.TargetLedger(expected)
         reporter.expected = ledger
-    scanner = rawscan.RawScanner(patterns, reporter, expected, **options)
+    scanner = rawscan.RawScanner(patterns, reporter, **options)
     return scanner, sink, ledger
 
 
@@ -147,47 +148,53 @@ def test_context_around_a_match_is_short(compiled_patterns, tmp_path):
     assert PAN in found[0].source_line and len(found[0].source_line) < 120
 
 
-# --- expected values ---------------------------------------------------------------------------------------------
+# --- report filters ----------------------------------------------------------------------------------------------
 
 
-def test_expected_pans_are_tallied_in_both_encodings_with_locations(compiled_patterns, tmp_path):
-    expected = targets.Targets(pans=(PAN, SECOND))
+def test_a_pan_list_reports_only_listed_pans_found_in_both_encodings_with_locations(compiled_patterns, tmp_path):
+    expected = targets.Targets(pans=(PAN, UNLISTED))
     wide = (" " + PAN + " ").encode("utf-16-le")
-    data = b"\xff" * 8 + PAN.encode() + b"\xff" * 8 + wide + b"\xff" * 8
-    _, _, ledger = scan(compiled_patterns, tmp_path, data, expected=expected)
-    pan_entry, second_entry = ledger.entries()
-    assert pan_entry.count == 2 and second_entry.count == 0
+    data = FF * 8 + PAN.encode() + FF * 8 + wide + FF * 8 + SECOND.encode() + FF * 8
+    found, _, ledger = scan(compiled_patterns, tmp_path, data, expected=expected)
+    assert [v.pan for v in found] == [PAN, PAN]
+    pan_entry, absent_entry = ledger.entries()
+    assert pan_entry.count == 2 and absent_entry.count == 0
     assert "dump.bin@0x8 (ascii)" in pan_entry.locations[0]
 
 
-def test_an_expected_pan_that_no_pattern_matches_is_still_reported_as_a_pan(compiled_patterns, tmp_path):
+def test_a_listed_value_no_pattern_matches_is_never_reported(compiled_patterns, tmp_path):
     unusual = "9999999999999995"
-    found, _, ledger = scan(compiled_patterns, tmp_path, b"\xff" * 4 + unusual.encode() + b"\xff" * 4,
+    found, _, ledger = scan(compiled_patterns, tmp_path, FF * 4 + unusual.encode() + FF * 4,
                             expected=targets.Targets(pans=(unusual,)))
-    assert [(v.pan, v.pattern_name) for v in found] == [(unusual, "Expected PAN")]
-    assert ledger.entries()[0].count == 1
+    assert found == [] and ledger.entries()[0].count == 0
 
 
-def test_an_expected_pan_that_a_pattern_also_matches_is_reported_once(compiled_patterns, tmp_path):
-    found, _, ledger = scan(compiled_patterns, tmp_path, b"\xff" * 4 + PAN.encode() + b"\xff" * 4,
-                            expected=targets.Targets(pans=(PAN,)))
-    assert len(found) == 1 and found[0].pattern_name != "Expected PAN"
-    assert ledger.entries()[0].count == 1
+def test_a_listed_pan_that_fails_luhn_is_not_reported_as_a_pan(compiled_patterns, tmp_path):
+    bad = PAN[:-1] + "0"
+    found, _, ledger = scan(compiled_patterns, tmp_path, FF * 4 + bad.encode() + FF * 4,
+                            expected=targets.Targets(pans=(bad,)))
+    assert found == [] and ledger.entries()[0].count == 0
 
 
-def test_an_expected_track_is_tallied_and_reported_once(compiled_patterns, tmp_path):
-    expected = targets.Targets(tracks=(TRACK2,))
+def test_a_track_list_reports_only_listed_tracks(compiled_patterns, tmp_path):
+    other = TRACK2.replace("4556737586899855", SECOND)
     path = tmp_path / "dump.bin"
-    path.write_bytes(b"\xff" * 6 + TRACK2.encode() + b"\xff" * 6)
-    scanner, sink, ledger = make(compiled_patterns, expected=expected)
+    path.write_bytes(FF * 6 + TRACK2.encode() + FF * 6 + other.encode() + FF * 6)
+    scanner, sink, ledger = make(compiled_patterns, expected=targets.Targets(tracks=(TRACK2,)))
     scanner.scan_file(str(path))
     tracks = [v for v in sink.views if v.kind is MatchKind.TRACK]
-    assert len(tracks) == 1 and ledger.entries()[0].count == 1
+    assert [v.matched_data for v in tracks] == [TRACK2] and ledger.entries()[0].count == 1
+
+
+def test_a_listed_pan_inside_listed_track_data_is_not_a_pan_report(compiled_patterns, tmp_path):
+    found, _, ledger = scan(compiled_patterns, tmp_path, FF * 4 + TRACK2.encode() + FF * 4,
+                            expected=targets.Targets(pans=(PAN,)))
+    assert found == [] and ledger.entries()[0].count == 0
 
 
 def test_hits_in_the_overlap_are_tallied_once(compiled_patterns, tmp_path):
     chunk = 1024
-    data = bytearray(b"\xff" * (4 * chunk))
+    data = bytearray(FF * (4 * chunk))
     data[chunk - 8:chunk + 8] = PAN.encode()
     _, _, ledger = scan(compiled_patterns, tmp_path, bytes(data), chunk_size=chunk, overlap=64,
                         expected=targets.Targets(pans=(PAN,)))

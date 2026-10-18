@@ -113,9 +113,10 @@ def build_parser() -> argparse.ArgumentParser:
                         help=f"With --raw: comma-separated encodings to read text as ({', '.join(RAW_ENCODINGS)}). "
                         "utf-16 covers both byte orders.")
     parser.add_argument( "--pan-list", metavar="FILE", default=None,
-                        help="File of expected PANs, one per line. The summary lists each as found (how often, where) or not found.")
+                        help="Report only the PANs listed in FILE (one per line; spaces and hyphens allowed). A filter on what the patterns "
+                        "found, never a source: the summary lists each value as found (how often, where) or not found.")
     parser.add_argument( "--track-list", metavar="FILE", default=None,
-                        help="File of expected track 1 / track 2 data, one per line; reported like --pan-list.")
+                        help="Report only the track 1 / track 2 data listed in FILE, one per line; works like --pan-list.")
     parser.add_argument( "--log-anti-pan", default=False, action="store_true",
                         help="Write anti-PAN hits to a separate log file (Find-PAN-anti-pan-<date>.log) and report it in the summary.")
 
@@ -180,13 +181,13 @@ def _load_patterns(settings: Settings, loggers) -> list:
     return compile_regex_patterns(json_data)
 
 
-def _load_targets(settings: Settings) -> Targets | None:
+def _load_targets(settings: Settings, patterns: list) -> Targets | None:
     """Read --pan-list and --track-list; None when neither was given."""
     if not (settings.pan_list or settings.track_list):
         return None
     return Targets(
         pans=load_pan_list(settings.pan_list) if settings.pan_list else (),
-        tracks=load_track_list(settings.track_list) if settings.track_list else (),
+        tracks=load_track_list(settings.track_list, patterns) if settings.track_list else (),
     )
 
 
@@ -252,7 +253,7 @@ def _run(namespace: argparse.Namespace, settings: Settings, argv: Sequence[str])
 
     loggers = build_loggers(settings)
     patterns = _load_patterns(settings, loggers)
-    targets = _load_targets(settings)
+    targets = _load_targets(settings, patterns)
 
     _print_version_header(namespace, argv)
     loggers.trace.info("%s", _describe(namespace))
@@ -272,7 +273,6 @@ def _run(namespace: argparse.Namespace, settings: Settings, argv: Sequence[str])
         settings, patterns, reporter, loggers,
         lambda: load_extractor_config(find_extractor_config_path()),
         lambda: load_extraction_limits(find_extractor_config_path()),
-        targets=targets,
     )
 
     status = 0

@@ -135,12 +135,44 @@ def test_lists_also_work_on_ordinary_text_files(tmp_path, capsys):
     assert "2 times" in found and "log.txt:2:9" in found
 
 
-def test_a_listed_value_no_pattern_recognises_is_reported_as_a_pan(tmp_path, capsys):
+def test_a_listed_value_no_pattern_recognises_is_never_reported(tmp_path, capsys):
     unusual = "9999999999999995"
     text = tmp_path / "log.txt"
     text.write_text(f"id {unusual}\n", encoding="utf-8")
     _, out, _ = run(tmp_path, capsys, "--file", str(text), "--pan-list", list_file(tmp_path, "p.txt", unusual))
-    assert "PANs Matched  :        1" in out
+    assert "PANs Matched  :        0" in out
+    assert next(line for line in out.splitlines() if unusual in line).endswith("NOT FOUND")
+
+
+def test_a_pan_list_drops_pans_that_are_not_listed(tmp_path, capsys):
+    text = tmp_path / "log.txt"
+    text.write_text(f"one {PAN}\ntwo {OTHER}\n", encoding="utf-8")
+    status, out, _ = run(tmp_path, capsys, "--file", str(text), "--pan-list", list_file(tmp_path, "p.txt", PAN))
+    assert status == 0 and "PANs Matched  :        1" in out and "Expected PANs found  : 1 of 1" in out
+    assert OTHER not in out
+
+
+def test_a_track_list_drops_tracks_that_are_not_listed(tmp_path, capsys):
+    other = TRACK2.replace("4556737586899855", OTHER)
+    text = tmp_path / "log.txt"
+    text.write_text(f"{TRACK2}\n{other}\n", encoding="utf-8")
+    _, out, _ = run(tmp_path, capsys, "--file", str(text), "--track-list", list_file(tmp_path, "t.txt", other))
+    assert "TRACKs Matched:        1" in out and "Expected TRACKs found: 1 of 1" in out
+
+
+def test_a_delimited_pan_satisfies_the_pan_list(tmp_path, capsys):
+    text = tmp_path / "log.txt"
+    text.write_text("card 4556-7375-8689-9855 on file\n", encoding="utf-8")
+    _, out, _ = run(tmp_path, capsys, "--file", str(text), "--pan-list", list_file(tmp_path, "p.txt", PAN))
+    assert "PANs Matched  :        1" in out and "Expected PANs found  : 1 of 1" in out
+
+
+def test_a_listed_track_the_patterns_do_not_accept_stops_the_run(tmp_path, capsys):
+    text = tmp_path / "log.txt"
+    text.write_text(f"{TRACK2}\n", encoding="utf-8")
+    status, _, err = run(tmp_path, capsys, "--file", str(text), "--track-list",
+                         list_file(tmp_path, "t.txt", ";4556=ab?"))
+    assert status == 1 and "t.txt:1" in err
 
 
 def test_mask_applies_to_the_expected_value_report(tmp_path, capsys):

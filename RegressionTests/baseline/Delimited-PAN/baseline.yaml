@@ -1,0 +1,27 @@
+name: Delimited-PAN
+description: PANs written with spaces or hyphens are normalized, then matched by the
+  ordinary patterns; track data is unaffected
+created: '2026-10-18T14:06:21Z'
+find_pan:
+  version: 3.4.0
+  command:
+  - --file
+  - RegressionTests/Delimited-PAN.txt
+python: 3.14.5
+platform: win32
+requires_tools: []
+inputs:
+- path: RegressionTests/Delimited-PAN.txt
+  size: 415
+  sha256: 132f2330b6c27c741cf9042fdea13591f9d921770c5af0a9ade7b3073f75bc6a
+  eol_normalized: true
+summary:
+  anti_pans: 2
+  archives_expanded: 0
+  archives_skipped: 0
+  bad_luhn: 1
+  exit_status: 0
+  files_scanned: 1
+  pans: 7
+  skipped: []
+  tracks: 1
