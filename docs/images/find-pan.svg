@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="640" viewBox="0 0 1200 640" font-family="DejaVu Sans,Arial,sans-serif" role="img" aria-labelledby="title desc">
+<title id="title">Find-PAN</title><desc id="desc">Files, directory trees and archives pass through a scanner using regex matching, Luhn validation and anti-PAN filtering, producing log, CSV and JSON outputs.</desc>
+<defs><linearGradient id="bg" x2="1" y2="1"><stop stop-color="#0f172a"/><stop offset="1" stop-color="#18263b"/></linearGradient><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0 8 4 0 8" fill="#38bdf8"/></marker></defs>
+<rect width="1200" height="640" rx="24" fill="url(#bg)"/>
+<text x="600" y="64" text-anchor="middle" font-size="36" font-weight="700" fill="#f8fafc">Find-PAN</text>
+<text x="600" y="96" text-anchor="middle" font-size="16" fill="#b5c3d7">Find card numbers and track data in files, folders and archives</text>
+
+<text x="48" y="151" font-size="12" fill="#8fa6c2" font-weight="700" letter-spacing="2">01   INPUTS</text>
+<text x="370" y="151" font-size="12" fill="#8fa6c2" font-weight="700" letter-spacing="2">02   SCANNER</text>
+<text x="910" y="151" font-size="12" fill="#8fa6c2" font-weight="700" letter-spacing="2">03   OUTPUTS</text>
+<rect x="48" y="182" width="245" height="92" rx="12" fill="#142238" stroke="#33465f"/>
+<path d="M68 213 v35 h48 v-40 h-24 l-6 -7 h-18 z" fill="#fbbf24"/>
+<text x="132" y="221" font-size="17" fill="#f1f5f9" font-family="DejaVu Sans Mono,monospace" font-weight="700">--path</text>
+<text x="132" y="246" font-size="12" fill="#b5c3d7" >Directory tree</text>
+<rect x="48" y="294" width="245" height="92" rx="12" fill="#142238" stroke="#33465f"/>
+<rect x="71" y="314" width="37" height="51" rx="5" fill="#cbd5e1"/>
+<path d="M79 327 h21 M79 336 h21 M79 345 h15" stroke="#52647d" stroke-width="3"/>
+<text x="132" y="333" font-size="17" fill="#f1f5f9" font-family="DejaVu Sans Mono,monospace" font-weight="700">--file</text>
+<text x="132" y="358" font-size="12" fill="#b5c3d7" >Individual file</text>
+<rect x="48" y="406" width="245" height="92" rx="12" fill="#142238" stroke="#33465f"/>
+<rect x="71" y="426" width="37" height="51" rx="5" fill="#a78bfa"/>
+<path d="M89 427 v49" stroke="#6d46bd" stroke-width="6" stroke-dasharray="4 3"/>
+<text x="132" y="445" font-size="17" fill="#f1f5f9" font-family="DejaVu Sans Mono,monospace" font-weight="700">.zip  .tar  .7z</text>
+<text x="132" y="470" font-size="12" fill="#b5c3d7" >Expanded with local tools</text>
+<path d="M307 228 H330 V452 H307 M330 340 H355" fill="none" stroke="#38bdf8" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<rect x="370" y="182" width="476" height="316" rx="16" fill="#0a1323" stroke="#38bdf8" stroke-width="1.5"/><path d="M370 238 H846" stroke="#26374e"/>
+<text x="391" y="217" font-size="12" fill="#e2e8f0" font-weight="700" letter-spacing="1.5">CONTENT SCAN · TEST DATA</text>
+<circle cx="805" cy="207" r="10" fill="none" stroke="#fbbf24" stroke-width="3"/><path d="M813 215 l9 9" stroke="#fbbf24" stroke-width="4" stroke-linecap="round"/>
+<text x="391" y="271" font-size="15" fill="#71849f" font-family="DejaVu Sans Mono,monospace">lorem ipsum dolor sit amet</text>
+<text x="391" y="306" font-size="15" fill="#71849f" font-family="DejaVu Sans Mono,monospace">card <tspan fill="#fb7185" font-weight="700">4111 1111 1111 1111</tspan> ok</text>
+<text x="391" y="341" font-size="15" fill="#71849f" font-family="DejaVu Sans Mono,monospace">consectetur adipiscing elit</text>
+<text x="391" y="376" font-size="15" fill="#71849f" font-family="DejaVu Sans Mono,monospace">%B<tspan fill="#fb7185" font-weight="700">4111111111111111</tspan>^DOE/J^25</text>
+<text x="391" y="411" font-size="15" fill="#71849f" font-family="DejaVu Sans Mono,monospace">20240131235959 <tspan fill="#94a3b8">(anti-PAN)</tspan></text>
+<text x="391" y="446" font-size="15" fill="#71849f" font-family="DejaVu Sans Mono,monospace">sed do eiusmod tempor</text>
+<text x="608" y="530" font-size="13" fill="#b5c3d7" text-anchor="middle">Regex match → Luhn check → anti-PAN filter</text>
+<path d="M858 340 H880 M880 228 V452 M880 228 H898 M880 340 H898 M880 452 H898" fill="none" stroke="#38bdf8" stroke-width="2.5" stroke-linecap="round"/>
+<rect x="910" y="182" width="242" height="92" rx="12" fill="#112e2b" stroke="#34d399" stroke-opacity=".6"/>
+<text x="926" y="217" font-size="16" fill="#34d399" font-weight="700">Find-PAN-&lt;date&gt;.log</text>
+<text x="926" y="246" font-size="13" fill="#c4d0e0" >411111••••••1111</text>
+<rect x="910" y="294" width="242" height="92" rx="12" fill="#142b48" stroke="#60a5fa" stroke-opacity=".6"/>
+<text x="926" y="329" font-size="16" fill="#60a5fa" font-weight="700">matches.csv</text>
+<text x="926" y="358" font-size="13" fill="#c4d0e0" >file, line, offset, pattern</text>
+<rect x="910" y="406" width="242" height="92" rx="12" fill="#29213e" stroke="#b899fa" stroke-opacity=".6"/>
+<text x="926" y="441" font-size="16" fill="#b899fa" font-weight="700">summary.json</text>
+<text x="926" y="470" font-size="13" fill="#c4d0e0" >counts + skipped files</text>
+<text x="1031" y="530" font-size="12" fill="#b5c3d7" text-anchor="middle">--mask hides digits in every output</text>
+<path d="M48 566 H1152" stroke="#304158"/>
+<text x="600" y="602" font-size="13" fill="#94a3b8" text-anchor="middle">Visa · Mastercard · Amex · Discover · Diners · JCB · UnionPay · Track 1 &amp; 2</text>
+</svg>

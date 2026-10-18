@@ -1,6 +1,6 @@
 """Single source of the Find-PAN version (kept in sync with pyproject.toml)."""
 
-__version__ = "3.1.2"
+__version__ = "3.2.0"
 
 
 def format_version(prog: str) -> str:

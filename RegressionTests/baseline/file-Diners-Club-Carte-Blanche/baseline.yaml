@@ -2,7 +2,7 @@ name: file-Diners-Club-Carte-Blanche
 description: single fixture Diners-Club-Carte-Blanche.txt
 created: '2026-10-17T23:06:59Z'
 find_pan:
-  version: 3.1.2
+  version: 3.2.0
   command:
   - --file
   - RegressionTests/Diners-Club-Carte-Blanche.txt

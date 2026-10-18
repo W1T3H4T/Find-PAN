@@ -359,6 +359,19 @@ def test_invalid_regex_raises_config_error():
         find_pan_config.compile_regex_patterns_with_prefix(data)
 
 
+def test_prefix_is_applied_to_pan_patterns_only():
+    data = {
+        "PAN Pattern": {"Card": {"regex": ["4[0-9]{3}"], "length": "4"}},
+        "Anti-PAN Pattern": {"Seq": {"regex": ["1234"], "length": "4"}},
+        "TRACK Pattern": {"Track 2": {"regex": [";[0-9]+="], "length": "4"}},
+    }
+    compiled = {category: regex for category, _, regex in find_pan_config.compile_regex_patterns_with_prefix(data)}
+    assert compiled["PAN Pattern"].pattern.startswith(find_pan_config._REGEX_PATTERN_PREFIX)
+    assert compiled["Anti-PAN Pattern"].pattern == "1234"
+    assert compiled["TRACK Pattern"].pattern == ";[0-9]+="
+    assert compiled["PAN Pattern"].search(" 4123") and not compiled["PAN Pattern"].search("4123")
+
+
 def test_malformed_extractor_yaml_raises_config_error(tmp_path):
     from find_pan.errors import ConfigError
 

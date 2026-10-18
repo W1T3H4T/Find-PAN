@@ -15,6 +15,28 @@ PAN_LOGGER_NAME = "_DefaultLogObj"
 ANTI_PAN_LOGGER_NAME = "_AntiPanLogObj"
 
 
+class VerboseFormatter(logging.Formatter):
+    """Console format for ``--verbose``: a match is shown over several lines, one class of item per line.
+
+    The PAN log file keeps its single greppable line; only records that carry the redacted match
+    (see ``reporting._log_line``) are laid out this way, anything else is formatted as usual.
+    """
+
+    def format(self, record: logging.LogRecord) -> str:
+        view = getattr(record, "match", None)
+        if view is None:
+            return super().format(record)
+        lines = [
+            f"{self.formatTime(record)} [{record.levelname}]: {view.kind.value} match: {view.pattern_name}",
+            f"    File    : {view.file_path}",
+            f"    Location: line {view.line_number}, offset {view.offset}",
+            f"    Pattern : {view.pattern}",
+            f"    Data    : {view.source_line.rstrip(chr(13) + chr(10))}",
+        ]
+        #   The handler adds the final newline, so the trailing one here leaves one empty line between matches.
+        return "\n".join(lines) + "\n"
+
+
 @dataclass
 class Loggers:
     """The loggers a scan writes to."""
@@ -82,7 +104,7 @@ def build_loggers(settings: Settings) -> Loggers:
         if settings.verbose:
             pan_console = logging.StreamHandler(sys.stdout)
             pan_console.setLevel(logging.DEBUG)
-            pan_console.setFormatter(formatter)
+            pan_console.setFormatter(VerboseFormatter(_FORMAT))
             pan.addHandler(pan_console)
 
         anti_pan = None

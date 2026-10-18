@@ -254,6 +254,15 @@ def run_main(repo, bl_root, *argv):
     return baseline.main(list(argv), root=repo, baseline_root=bl_root)
 
 
+def report_status(out, name):
+    """The status label (PASS, FAIL, SKIP, ERROR) on the report line for baseline *name*."""
+    for line in out.splitlines():
+        parts = line.split()
+        if len(parts) >= 2 and parts[1] == name and not line.startswith(" " * 4):
+            return parts[0]
+    return None
+
+
 def test_validate_all_mixes_pass_and_fail_and_returns_1(repo, bl_root, capsys):
     create(repo, bl_root, "good")
     create(repo, bl_root, "bad")
@@ -261,7 +270,8 @@ def test_validate_all_mixes_pass_and_fail_and_returns_1(repo, bl_root, capsys):
     csv_path.write_text("\n".join(csv_path.read_text(encoding="utf-8").splitlines()[:-1]) + "\n", encoding="utf-8")
     assert run_main(repo, bl_root, "--validate", "--all") == 1
     out = capsys.readouterr().out
-    assert "bad: FAIL" in out and "good: PASS" in out and "1 passed, 1 failed" in out
+    assert report_status(out, "bad") == "FAIL" and report_status(out, "good") == "PASS"
+    assert "1 passed, 1 failed" in out
 
 
 def test_validate_all_continues_after_a_broken_baseline(repo, bl_root, capsys):
@@ -270,7 +280,7 @@ def test_validate_all_continues_after_a_broken_baseline(repo, bl_root, capsys):
     create(repo, bl_root, "broken")
     (bl_root / "broken" / "baseline.yaml").write_text("name: [unclosed", encoding="utf-8")
     assert run_main(repo, bl_root, "--validate", "--all") == 2             # broken + pass
-    assert "good: PASS" in capsys.readouterr().out
+    assert report_status(capsys.readouterr().out, "good") == "PASS"
     create(repo, bl_root, "fails")
     csv_path = bl_root / "fails" / "baseline.csv"
     csv_path.write_text("\n".join(csv_path.read_text(encoding="utf-8").splitlines()[:-1]) + "\n", encoding="utf-8")
@@ -331,7 +341,7 @@ def test_validate_all_survives_garbled_baseline_files(repo, bl_root, capsys):
     csv_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     assert run_main(repo, bl_root, "--validate", "--all") == 2
     out = capsys.readouterr().out
-    assert "good: PASS" in out and "garbled: ERROR" in out and "badrow: ERROR" in out
+    assert [report_status(out, n) for n in ("good", "garbled", "badrow")] == ["PASS", "ERROR", "ERROR"]
 
 
 @pytest.mark.parametrize("failure", [OSError("disk full"), KeyboardInterrupt()], ids=["oserror", "interrupt"])
@@ -358,3 +368,42 @@ def test_max_diff_must_be_a_positive_number(repo, bl_root, value, capsys):
     create(repo, bl_root)
     assert run_main(repo, bl_root, "--validate", "plain", "--max-diff", value) == 2
     capsys.readouterr()
+
+
+def test_validate_all_report_is_laid_out_in_columns_with_a_header_and_totals(repo, bl_root, capsys):
+    create(repo, bl_root, "good")
+    create(repo, bl_root, "a-much-longer-name")
+    csv_path = bl_root / "a-much-longer-name" / "baseline.csv"
+    rows_kept = csv_path.read_text(encoding="utf-8").splitlines()[:-1]
+    csv_path.write_text("\n".join(rows_kept) + "\n", encoding="utf-8")
+    run_main(repo, bl_root, "--validate", "--all")
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[0] == "Validating 2 baselines" and lines[1] == ""
+    rows = [line for line in lines if line.startswith(("PASS", "FAIL"))]
+    assert len(rows) == 2
+    #   The names start in the same column, so the verdict text after them lines up as well.
+    assert rows[0].index("a-much-longer-name") == rows[1].index("good")
+    failing = next(line for line in rows if line.startswith("FAIL"))
+    assert failing.rstrip().endswith("output differs")
+    detail = lines[lines.index(failing) + 1]
+    assert detail.startswith("    extra: ")      # a row the baseline no longer has
+    assert lines[-1] == "2 baselines: 1 passed, 1 failed, 0 skipped, 0 errors"
+    assert lines[-2] == ""
+
+
+# --- a recorded tool may be replaced by another candidate for the same archive type -------------------------------------------------
+
+
+def test_a_recorded_tool_counts_as_available_when_another_candidate_for_its_type_is_installed(monkeypatch):
+    """The baseline was made where `unzip` was installed; here only 7-Zip is, and it expands zip as well."""
+    installed = {"7z"}
+    monkeypatch.setattr(baseline.shutil, "which", lambda command: command if command in installed else None)
+    extractors = {
+        "zip": {"posix": [{"command": "unzip", "args": []}, {"command": "7z", "args": []}]},
+        "tar": {"posix": [{"command": "tar", "args": []}]},
+    }
+    monkeypatch.setattr(baseline.config, "platform_key", lambda system=None: "linux")
+    assert baseline.tool_available("unzip", extractors)
+    assert baseline.tool_available("7z", extractors)
+    assert not baseline.tool_available("tar", extractors)              # nothing for tar is installed
+    assert not baseline.tool_available("definitely-not-installed-tool", extractors)

@@ -33,7 +33,7 @@ def main(arguments: list[str] | None = None) -> int:
         )
         return 1
 
-    command = [sys.executable, "-m", "pytest", "-q"]
+    command = [sys.executable, "-m", "pytest", "-q", "-v"]
     if arguments:
         command.extend(arguments)
     completed_process = subprocess.run(command, cwd=PROJECT_ROOT, check=False)
