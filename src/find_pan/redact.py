@@ -75,6 +75,7 @@ class RedactedMatch:
     matched_data: str
     source_line: str
     pan: str
+    encoding: str = ""
 
 
 class Redactor:

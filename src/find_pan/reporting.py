@@ -11,7 +11,8 @@ from typing import Protocol
 
 from find_pan.errors import ConfigError
 from find_pan.models import MatchKind, ScanStats, SkipReason
-from find_pan.redact import RedactedMatch, Redactor
+from find_pan.targets import TargetLedger
+from find_pan.redact import RedactedMatch, Redactor, mask_matched_data, mask_pan
 
 CSV_FIELDS = ["filename", "line_number", "offset", "pattern_name", "data_type", "matched_data"]
 _LOG_FORMAT = "%s:%s:%s->%s (%s), %s: %s"
@@ -143,7 +144,10 @@ class Reporter:
         stats: ScanStats,
         trace_logger: logging.Logger,
         report_delta: int,
+        expected: TargetLedger | None = None,
     ) -> None:
+        #   The ledger of --pan-list / --track-list values, or None when no list was given.
+        self.expected = expected
         self.redactor = redactor
         self.sinks = sinks
         self.stats = stats
@@ -193,10 +197,43 @@ class Reporter:
         """Record that an archive was extracted and its contents processed."""
         self.stats.archive_expanded()
 
+    def _expected_value(self, kind: MatchKind, value: str) -> str:
+        """A listed value as it may be shown: masked under --mask."""
+        if not self.redactor.enabled:
+            return value
+        return mask_pan(value) if kind is MatchKind.PAN else mask_matched_data(value, "")
+
+    def expected_data(self) -> dict:
+        """The expected-value results as plain data."""
+        def entries(kind: MatchKind) -> list[dict]:
+            return [{"value": self._expected_value(kind, entry.value), "found": entry.count,
+                     "locations": [self.clean(location) for location in entry.locations]}
+                    for entry in self.expected.entries() if entry.kind is kind]
+        return {"pans": entries(MatchKind.PAN), "tracks": entries(MatchKind.TRACK)}
+
+    def expected_lines(self) -> list[str]:
+        """The ``-- Expected Values --`` section: every listed value, found or not."""
+        ledger = self.expected
+        lines = ["", "-- Expected Values --"]
+        for kind, label in ((MatchKind.PAN, "PANs"), (MatchKind.TRACK, "TRACKs")):
+            if ledger.total(kind):
+                lines.append(f"Expected {label} found{' ' * (6 - len(label))}: "
+                             f"{ledger.found(kind)} of {ledger.total(kind)}")
+        for entry in ledger.entries():
+            value = self._expected_value(entry.kind, entry.value)
+            if entry.count:
+                times = f"{entry.count} time{'' if entry.count == 1 else 's'}"
+                lines.append(f"{entry.kind.value:<5} {value}  FOUND  {times}, first at {self.clean(entry.locations[0])}")
+            else:
+                lines.append(f"{entry.kind.value:<5} {value}  NOT FOUND")
+        return lines
+
     def summary_data(self) -> dict:
         """Return the run summary as plain data (for ``--summary-json``)."""
         stats = self.stats
+        extra = {"expected": self.expected_data()} if self.expected else {}
         return {
+            **extra,
             "pans": stats.count(MatchKind.PAN),
             "tracks": stats.count(MatchKind.TRACK),
             "bad_luhn": stats.count(MatchKind.BAD_LUHN),
@@ -243,6 +280,8 @@ class Reporter:
             lines.append(f"Archives expanded: {stats.archives_expanded}")
         if stats.archives_skipped:
             lines.append(f"Archives skipped (no tool or failed): {stats.archives_skipped}")
+        if self.expected:
+            lines += self.expected_lines()
         lines += [
             "",
             "Scan complete.",
