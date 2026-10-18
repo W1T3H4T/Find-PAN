@@ -2,6 +2,7 @@
 
 import gzip
 import logging
+import os
 import subprocess
 import tempfile
 from pathlib import Path
@@ -136,49 +137,38 @@ def test_copy_failure_raises_extractor_error(tmp_path, system_temp):
     assert list(system_temp.iterdir()) == []
 
 
-def run_tar(tmp_path, monkeypatch, windows, gnu, command="tar"):
-    monkeypatch.setattr(archives, "_IS_WINDOWS", windows)
-    monkeypatch.setattr(archives, "_is_gnu_tar", lambda path: gnu)
-    runner = Runner()
-    with archives.extract_archive(str(tmp_path / "a.tar"), tar_config(command=command), LOGGER, runner=runner):
-        pass
-    return runner.commands[0]
 
+def test_other_extractors_keep_the_default_working_directory(tmp_path, monkeypatch):
+    calls = []
 
-def test_gnu_tar_on_windows_gets_force_local(tmp_path, monkeypatch):
-    """GNU tar treats a drive letter as a remote host; --force-local makes drive paths work."""
-    command = run_tar(tmp_path, monkeypatch, windows=True, gnu=True)
-    assert command[1] == "--force-local"
-
-
-def test_force_local_not_added_for_other_tars_or_platforms(tmp_path, monkeypatch):
-    assert "--force-local" not in run_tar(tmp_path, monkeypatch, windows=True, gnu=False)
-    assert "--force-local" not in run_tar(tmp_path, monkeypatch, windows=False, gnu=True)
-
-
-def test_force_local_not_duplicated_when_already_configured(tmp_path, monkeypatch):
-    monkeypatch.setattr(archives, "_IS_WINDOWS", True)
-    monkeypatch.setattr(archives, "_is_gnu_tar", lambda path: True)
-    runner = Runner()
-    config = tar_config(args=["--force-local", "-xf", "{archive}", "-C", "{tempdir}"])
-    with archives.extract_archive(str(tmp_path / "a.tar"), config, LOGGER, runner=runner):
-        pass
-    assert runner.commands[0].count("--force-local") == 1
-
-
-def test_non_tar_command_is_never_probed(tmp_path, monkeypatch):
-    def fail(path):
-        raise AssertionError("probed a non-tar command")
+    def fake_run_limited(cmd, directory, limits, cwd=None):
+        calls.append(cwd)
+        return subprocess.CompletedProcess(cmd, 0, "", "")
 
     monkeypatch.setattr(archives, "_IS_WINDOWS", True)
-    monkeypatch.setattr(archives, "_is_gnu_tar", fail)
-    runner = Runner()
-    config = {"zip": {"command": "unzip", "args": ["{archive}", "{tempdir}"]}}
-    with archives.extract_archive(str(tmp_path / "a.zip"), config, LOGGER, runner=runner):
+    monkeypatch.setattr(archives, "run_limited", fake_run_limited)
+    config = {"zip": {"command": "unzip", "args": ["{archive}", "-d", "{tempdir}"]}}
+    with archives.extract_archive(str(tmp_path / "a.zip"), config, LOGGER):
         pass
+    assert calls == [None]
 
 
-def test_gnu_tar_on_windows_receives_forward_slash_paths(tmp_path, monkeypatch):
-    command = run_tar(tmp_path, monkeypatch, windows=True, gnu=True)
-    assert "\\" not in " ".join(command[1:])
-    assert command[2].endswith("/a.tar")
+# --- cleanup of read-only members ------------------------------------------------------------------------
+
+
+def test_read_only_extracted_members_do_not_leave_the_temp_directory_behind(tmp_path, system_temp):
+    """Windows cannot delete read-only files (and POSIX cannot delete inside a read-only directory)."""
+    import stat
+
+    def effect(cmd):
+        locked = Path(cmd[-1]) / "locked"
+        locked.mkdir()
+        member = locked / "member.txt"
+        member.write_text("read only", encoding="utf-8")
+        os.chmod(member, stat.S_IREAD)
+        os.chmod(locked, stat.S_IREAD | stat.S_IEXEC)
+
+    runner = Runner(effect)
+    with archives.extract_archive(str(tmp_path / "a.tar"), tar_config(command="fake"), LOGGER, runner=runner):
+        pass
+    assert list(system_temp.iterdir()) == []

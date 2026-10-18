@@ -1,113 +1,158 @@
 # Find-PAN archive extractor configuration.
 #
-# This file tells find-pan.py which external programs to use when extracting
-# supported archive formats.  On first run, the application can build this
-# configuration by searching PATH for the commands listed below.  You may
-# edit the paths to point to specific installations (for example, the 7-Zip
-# directory on Windows).
-#
-# Supported archive types:
-#   tar   - .tar, .tar.gz, .tgz, .tar.bz2, .tbz2, .tar.xz, .txz
-#   zip   - .zip, .jar, .war, .ear
-#   7z    - .7z
-#   gzip  - .gz (single compressed file)
+# find-pan expands archives with locally installed tools; nothing is decompressed in Python.  For each
+# archive type (tar, zip, 7z, gzip) this file says which command to run and with which arguments, per
+# operating system, so you can configure the exact commands and parameters of the tools you have installed.
 #
 # ---------------------------------------------------------------------------
-# Extractor configuration options
+# Layout of an extractor entry
 # ---------------------------------------------------------------------------
 #
-# command:
-#   The executable name or absolute path used to extract this archive type.
-#   A bare name (e.g. "tar", "7z") is resolved against the user's PATH at
-#   runtime.  Use an absolute path for tools installed outside PATH.
+#   extractors:
+#     <type>:                       tar | zip | 7z | gzip
+#       windows: [candidate, ...]   used on Windows
+#       linux:   [candidate, ...]   used on Linux (and WSL)
+#       macos:   [candidate, ...]   used on macOS
+#       posix:   [candidate, ...]   used on any non-Windows system that has no section of its own
+#       compression: [...]          informational only
+#       copy_archive_to_tempdir: .. default for every candidate (see below)
 #
-# args:
-#   A list of command-line arguments passed to the extractor.  Two template
-#   placeholders are substituted at runtime:
-#     {archive}  - the original archive file path
-#     {tempdir}  - the temporary directory created for extracted contents
+# A section is one candidate or a list of candidates.  The FIRST candidate whose command exists is
+# used, so list your preferred tool first.  The old flat form (command/args directly under the type)
+# still works and applies to every platform.
 #
-# copy_archive_to_tempdir:
-#   When true, the original archive is copied into the temporary extraction
-#   directory before the extractor runs.  This is required for in-place
-#   decompressors such as gzip, which write the decompressed file next to
-#   the archive.  For normal extractors (tar, unzip, 7z) this should be false.
+# A candidate has these keys:
 #
-# compression:
-#   A list of compression algorithms this extractor can handle.  This is
-#   informational metadata only; the external program is responsible for the
-#   actual decompression.  It is used to document capability and may be used
-#   by future features to select an extractor based on the archive's internal
-#   compression method.
+#   command: <name or full path>    A name found on PATH, or a full path.  %VAR% (Windows) and $VAR
+#                                   (elsewhere) are expanded, e.g. %ProgramFiles%\7-Zip\7z.exe.
+#   args:    [<argument>, ...]      Passed to the command exactly as written, with these placeholders:
+#                                     {archive}        the archive's absolute path
+#                                     {tempdir}        the temporary extraction directory
+#                                     {archive_posix}  {archive} with forward slashes
+#                                     {tempdir_posix}  {tempdir} with forward slashes
+#                                   Other braces are literal text.
+#   cwd: tempdir                    Optional.  Run the command inside the extraction directory, so the
+#                                   destination can simply be ".".  Needed by GNU tar on Windows.
+#   copy_archive_to_tempdir: true   Optional.  Copy the archive into the extraction directory first;
+#                                   for in-place decompressors such as gzip -d.
+#   max_extracted_bytes, max_files, timeout_seconds, min_free_bytes
+#                                   Optional.  Override the limits below for this candidate.
+#
+# Why Windows has several tar candidates: GNU tar there reads "C:" as a host name (so --force-local),
+# Git's MSYS tar rejects backslashes while GnuWin32's native tar rejects forward-slash drive paths for
+# -C, and neither likes relative paths.  The shipped GNU candidates therefore run inside the extraction
+# directory (cwd: tempdir, destination ".") with the archive as an absolute forward-slash path.  Windows'
+# own bsdtar needs none of that and is tried first.
 #
 # ---------------------------------------------------------------------------
 # Extraction limits (decompression-bomb protection)
 # ---------------------------------------------------------------------------
 #
-# While an extractor runs, find-pan watches its output directory and stops
-# (kills) the tool if it exceeds any of these limits.  Whatever was already
-# extracted is still scanned, and the archive is reported as ARCHIVE-FAILED.
-# The defaults are generous; raise or lower them here for all extractors, or
-# add any of the same keys to a single extractor below to override it.
+# While an extractor runs, find-pan watches its output directory and stops (kills) the tool if it
+# exceeds any of these limits.  Whatever was already extracted is still scanned, and the archive is
+# reported as ARCHIVE-FAILED.  The defaults are generous; change them here for all extractors.
 #
 #   max_extracted_bytes  total size of the extracted files        (default 10 GiB)
 #   max_files            number of extracted files and folders    (default 100000)
 #   timeout_seconds      wall-clock time for one extraction       (default 600)
 #   min_free_bytes       stop if free disk space falls below this (default 1 GiB)
 #
+
+extractors:
+  7z:
+    compression:
+    - store
+    - lzma
+    - lzma2
+    - bzip2
+    - deflate
+    - ppmd
+    - bcj2
+    posix:
+    - args: &id001
+      - x
+      - '{archive}'
+      - -o{tempdir}
+      - -y
+      command: 7zz
+    - args: *id001
+      command: 7z
+    - args: *id001
+      command: 7za
+    windows:
+    - args: *id001
+      command: '%ProgramFiles%\7-Zip\7z.exe'
+    - args: *id001
+      command: 7z
+    - args: *id001
+      command: 7za
+  gzip:
+    compression:
+    - deflate
+    copy_archive_to_tempdir: true
+    posix:
+    - args:
+      - -d
+      - '{archive}'
+      command: gzip
+    windows:
+    - args:
+      - -d
+      - '{archive}'
+      command: gzip
+    - args:
+      - -d
+      - '{archive}'
+      command: '%ProgramFiles%\Git\usr\bin\gzip.exe'
+  tar:
+    compression:
+    - store
+    posix:
+    - args: &id002
+      - -xf
+      - '{archive}'
+      - -C
+      - '{tempdir}'
+      command: tar
+    windows:
+    - args: *id002
+      command: '%SystemRoot%\System32\tar.exe'
+    - args: &id003
+      - --force-local
+      - -xf
+      - '{archive_posix}'
+      - -C
+      - .
+      command: '%ProgramFiles%\Git\usr\bin\tar.exe'
+      cwd: tempdir
+    - args: *id003
+      command: '%ProgramFiles(x86)%\GnuWin32\bin\tar.exe'
+      cwd: tempdir
+    - args: *id003
+      command: tar
+      cwd: tempdir
+  zip:
+    compression:
+    - store
+    - deflate
+    - bzip2
+    - lzma
+    posix:
+    - args: &id004
+      - '{archive}'
+      - -d
+      - '{tempdir}'
+      command: unzip
+    windows:
+    - args: *id004
+      command: unzip
+    - args: *id004
+      command: '%ProgramFiles%\Git\usr\bin\unzip.exe'
+    - args: *id002
+      command: '%SystemRoot%\System32\tar.exe'
 limits:
   max_extracted_bytes: 10737418240
   max_files: 100000
-  timeout_seconds: 600
   min_free_bytes: 1073741824
-
-extractors:
-  tar:
-    command: tar
-    args:
-      - -xf
-      - "{archive}"
-      - -C
-      - "{tempdir}"
-    copy_archive_to_tempdir: false
-    compression:
-      - store
-
-  zip:
-    command: unzip
-    args:
-      - "{archive}"
-      - -d
-      - "{tempdir}"
-    copy_archive_to_tempdir: false
-    compression:
-      - store
-      - deflate
-      - bzip2
-      - lzma
-
-  7z:
-    command: 7z
-    args:
-      - x
-      - "{archive}"
-      - -o{tempdir}
-      - -y
-    copy_archive_to_tempdir: false
-    compression:
-      - store
-      - lzma
-      - lzma2
-      - bzip2
-      - deflate
-      - ppmd
-      - bcj2
-
-  gzip:
-    command: gzip
-    args:
-      - -d
-      - "{archive}"
-    copy_archive_to_tempdir: true
-    compression:
-      - deflate
+  timeout_seconds: 600
+schema: 2

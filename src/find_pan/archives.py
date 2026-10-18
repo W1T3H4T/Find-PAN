@@ -6,7 +6,9 @@ Python archive library (and none of its path-traversal pitfalls) is involved.
 
 import logging
 import os
+import re
 import signal
+import stat
 import shutil
 import subprocess
 import sys
@@ -14,9 +16,9 @@ import tempfile
 import time
 from contextlib import contextmanager
 from dataclasses import fields, replace
-from functools import lru_cache
 from typing import Callable, Iterator
 
+from find_pan import config
 from find_pan.config import EXTRACTOR_CONFIG_FILENAME, detect_archive_type
 from find_pan.errors import ExtractorError, ExtractorUnavailable, LimitExceeded
 from find_pan.models import ExtractionLimits
@@ -54,6 +56,22 @@ def _tree_usage(directory: str) -> tuple[int, int]:
         except OSError:
             continue
     return total, count
+
+
+def _make_writable_and_retry(function, path, _error) -> None:
+    """rmtree error handler: clear read-only flags (extracted members keep their permissions) and retry."""
+    parent = os.path.dirname(path)
+    os.chmod(parent, stat.S_IRWXU)
+    os.chmod(path, stat.S_IRWXU)
+    function(path)
+
+
+def _remove_tree(directory: str) -> None:
+    """Delete an extraction directory even when it holds read-only files or directories."""
+    if sys.version_info >= (3, 12):
+        shutil.rmtree(directory, onexc=_make_writable_and_retry)
+    else:
+        shutil.rmtree(directory, onerror=_make_writable_and_retry)
 
 
 def _kill_tree(process: subprocess.Popen) -> None:
@@ -97,7 +115,8 @@ def _next_poll_delay(
     return max(_MIN_POLL_SECONDS, delay)
 
 
-def run_limited(cmd: list[str], directory: str, limits: ExtractionLimits) -> subprocess.CompletedProcess:
+def run_limited(cmd: list[str], directory: str, limits: ExtractionLimits,
+                cwd: str | None = None) -> subprocess.CompletedProcess:
     """Run an extractor, stopping it if it exceeds *limits* on what it writes to *directory*.
 
     A watchdog polls the directory size, entry count, elapsed time and free
@@ -111,7 +130,7 @@ def run_limited(cmd: list[str], directory: str, limits: ExtractionLimits) -> sub
 
     with tempfile.TemporaryFile() as out_file, tempfile.TemporaryFile() as err_file:
         options = {"start_new_session": True} if not _IS_WINDOWS else {}
-        process = subprocess.Popen(cmd, stdout=out_file, stderr=err_file, **options)
+        process = subprocess.Popen(cmd, stdout=out_file, stderr=err_file, cwd=cwd, **options)
         started = time.monotonic()
         previous = None
         try:
@@ -141,26 +160,31 @@ def run_limited(cmd: list[str], directory: str, limits: ExtractionLimits) -> sub
     return subprocess.CompletedProcess(cmd, 0, stdout, stderr)
 
 
-@lru_cache(maxsize=None)
-def _is_gnu_tar(command_path: str) -> bool:
-    """Return whether *command_path* is GNU tar (``tar --version`` says so)."""
-    try:
-        result = subprocess.run(
-            [command_path, "--version"], capture_output=True, text=True, check=False, timeout=10
-        )
-    except (OSError, subprocess.SubprocessError):
-        return False
-    return "GNU tar" in result.stdout
+def select_candidate(candidates: list[dict]) -> tuple[dict, str]:
+    """Return ``(candidate, command_path)`` for the first candidate whose command exists.
+
+    ``%VAR%`` / ``$VAR`` in a command are expanded first.  When none exists, the first candidate is
+    returned with its (expanded) command unchanged, so the failure is reported once, by the attempt
+    to run it, listing every command that was tried.
+    """
+    for candidate in candidates:
+        resolved = shutil.which(os.path.expandvars(candidate["command"]))
+        if resolved:
+            return candidate, resolved
+    first = candidates[0]
+    return first, os.path.expandvars(first["command"])
 
 
-def _needs_force_local(command_path: str, args: list[str]) -> bool:
-    """GNU tar treats a drive letter as a remote host name; Windows paths need --force-local."""
-    return (
-        _IS_WINDOWS
-        and os.path.splitext(os.path.basename(command_path))[0].lower() in ("tar", "gtar")
-        and "--force-local" not in args
-        and _is_gnu_tar(command_path)
-    )
+_PLACEHOLDER = re.compile(r"\{(archive_posix|tempdir_posix|archive|tempdir)\}")
+
+
+def fill_placeholders(argument: str, values: dict[str, str]) -> str:
+    """Substitute ``{archive}``, ``{tempdir}`` and their ``_posix`` forms in one pass.
+
+    Not ``str.format`` (other braces are literal text) and not repeated replacement (a path that
+    happens to contain ``{tempdir}`` is never expanded again).
+    """
+    return _PLACEHOLDER.sub(lambda match: values[match.group(1)], argument)
 
 
 @contextmanager
@@ -187,28 +211,36 @@ def extract_archive(
     if archive_type is None:
         raise ExtractorUnavailable(f"Unsupported archive type: {archive_path}")
 
-    extractor = extractor_config.get(archive_type)
-    if not extractor:
+    entry = extractor_config.get(archive_type)
+    if not entry:
         raise ExtractorUnavailable(
             f"No extractor configured for archive type '{archive_type}' ({archive_path}). "
             f"Run the setup script to build {EXTRACTOR_CONFIG_FILENAME}."
         )
 
-    command = extractor.get("command")
-    args_template = extractor.get("args", [])
-    if not command or not args_template:
+    configured = config.extractor_candidates(entry)
+    candidates = [c for c in configured if c.get("command") and c.get("args")]
+    if not candidates:
+        if configured:
+            raise ExtractorUnavailable(
+                f"Incomplete extractor configuration for '{archive_type}': missing command or args."
+            )
         raise ExtractorUnavailable(
-            f"Incomplete extractor configuration for '{archive_type}': missing command or args."
+            f"No extractor configured for archive type '{archive_type}' on this platform "
+            f"({config.platform_key()}) ({archive_path}). Add one to {EXTRACTOR_CONFIG_FILENAME}."
         )
 
-    #   Per-extractor values in the YAML override the global limits.
+    extractor, command_path = select_candidate(candidates)
+    command = extractor["command"]
+    tried = ", ".join(candidate["command"] for candidate in candidates)
+    args_template = extractor["args"]
+
+    #   Per-extractor (or per-candidate) values in the YAML override the global limits.
     limits = replace(
         limits or ExtractionLimits(),
         **{field.name: extractor[field.name] for field in fields(ExtractionLimits) if field.name in extractor},
     )
     temp_dir = tempfile.mkdtemp(prefix="find-pan-")
-    if runner is None:
-        runner = lambda cmd, **_: run_limited(cmd, temp_dir, limits)    # noqa: E731
     try:
         logger.info("Archive Scan: extracting %s as %s into %s ...", archive_path, archive_type, temp_dir)
 
@@ -224,17 +256,18 @@ def extract_archive(
             #   Absolute, so a relative name such as "-evil.zip" can never look like an option.
             archive_for_extractor = os.path.abspath(archive_path)
 
-        command_path = shutil.which(command) or command
-        archive_arg, tempdir_arg = archive_for_extractor, temp_dir
-        force_local = _needs_force_local(command_path, args_template)
-        if force_local:
-            #   MSYS-based GNU tar also rejects backslashes in these paths.
-            archive_arg, tempdir_arg = archive_arg.replace("\\", "/"), tempdir_arg.replace("\\", "/")
-        #   Plain substitution, not str.format: other braces in an argument are literal text.
-        args = [arg.replace("{archive}", archive_arg).replace("{tempdir}", tempdir_arg) for arg in args_template]
-        if force_local:
-            args.insert(0, "--force-local")
+        values = {
+            "archive": archive_for_extractor,
+            "tempdir": temp_dir,
+            "archive_posix": archive_for_extractor.replace("\\", "/"),
+            "tempdir_posix": temp_dir.replace("\\", "/"),
+        }
+        args = [fill_placeholders(argument, values) for argument in args_template]
         cmd = [command_path] + args
+        #   "cwd: tempdir" runs the tool inside the extraction directory (see the Windows tar candidates).
+        work_dir = temp_dir if extractor.get("cwd") == "tempdir" else None
+        if runner is None:
+            runner = lambda cmd, **_: run_limited(cmd, temp_dir, limits, cwd=work_dir)    # noqa: E731
         if verbose:
             logger.info("Extractor command: %s", " ".join(cmd))
 
@@ -260,7 +293,7 @@ def extract_archive(
             )
         except FileNotFoundError as error:
             raise ExtractorUnavailable(
-                f"Extractor command not found: {command}. "
+                f"Extractor command not found: {tried}. "
                 f"Update {EXTRACTOR_CONFIG_FILENAME} with the correct path."
             ) from error
 
@@ -269,7 +302,7 @@ def extract_archive(
             raise partial_failure
     finally:
         try:
-            shutil.rmtree(temp_dir)
+            _remove_tree(temp_dir)
             logger.info("Cleaned up temporary extraction directory: %s", temp_dir)
         except OSError as error:
             logger.warning("Could not remove temporary extraction directory %s: %s", temp_dir, error)

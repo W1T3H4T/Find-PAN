@@ -275,3 +275,27 @@ def test_read_rows_rejects_non_numeric_line_numbers(tmp_path):
                     encoding="utf-8")
     with pytest.raises(BaselineError, match="line"):
         baseline.read_rows(path)
+
+
+# --- required_tools with per-platform extractor candidates ------------------------------------------------------------------------
+
+
+def test_required_tools_names_the_first_installed_candidate_for_each_archive_type(repo, monkeypatch):
+    write(repo / "a.zip", b"PK\x03\x04" + b"\x00" * 30)
+    write(repo / "b.7z", bytes([0x37, 0x7A, 0xBC, 0xAF, 0x27, 0x1C]) + b"\x00" * 30)
+    extractors = {
+        "zip": {"posix": [{"command": "missing-unzip", "args": ["x"]}, {"command": "bsdunzip", "args": ["x"]}],
+                "windows": [{"command": "missing-unzip", "args": ["x"]}, {"command": "bsdunzip", "args": ["x"]}]},
+        "7z": {"command": "7zz", "args": ["x"]},                       # flat entry, tool not installed
+    }
+    monkeypatch.setattr(baseline, "load_extractor_config", lambda path: extractors)
+    monkeypatch.setattr(baseline, "find_extractor_config_path", lambda: "unused")
+    monkeypatch.setattr(baseline.shutil, "which", lambda command: "/bin/bsdunzip" if command == "bsdunzip" else None)
+    assert baseline.required_tools(["a.zip", "b.7z"], repo) == ["7zz", "bsdunzip"]
+
+
+def test_required_tools_is_empty_without_archives(repo, monkeypatch):
+    write(repo / "plain.txt", "hello")
+    monkeypatch.setattr(baseline, "load_extractor_config", lambda path: {})
+    monkeypatch.setattr(baseline, "find_extractor_config_path", lambda: "unused")
+    assert baseline.required_tools(["plain.txt"], repo) == []

@@ -57,7 +57,7 @@ def test_pan_regex_configuration_is_processed(pan_generator):
 #   ---------------------------------------------------------------------------
 
 
-def test_default_extractor_configuration_exists_and_loads():
+def test_default_extractor_configuration_exists_and_loads(config_module):
     """The bundled find-pan-conf.yaml exists and contains all supported extractors."""
     assert DEFAULT_EXTRACTOR_CONFIG_PATH.exists(), (
         f"Default extractor configuration missing: {DEFAULT_EXTRACTOR_CONFIG_PATH}"
@@ -72,9 +72,11 @@ def test_default_extractor_configuration_exists_and_loads():
             f"Missing extractor configuration for '{archive_type}'"
         )
         extractor = configuration["extractors"][archive_type]
-        assert extractor.get("command"), f"'{archive_type}' has no command"
-        assert isinstance(extractor.get("args", []), list)
-        assert isinstance(extractor.get("copy_archive_to_tempdir"), bool)
+        for platform in ("windows", "linux", "macos"):
+            candidates = config_module.extractor_candidates(extractor, platform)
+            assert candidates, f"'{archive_type}' has no extractor for {platform}"
+            for candidate in candidates:
+                assert candidate["command"] and isinstance(candidate["args"], list) and candidate["args"]
         assert isinstance(extractor.get("compression", []), list)
         assert extractor["compression"]
 
@@ -99,19 +101,12 @@ def test_extractor_configuration_builds_when_file_missing(config_module, tmp_pat
         config_module, "_application_root", lambda: str(tmp_path / "empty-app-root")
     )
     monkeypatch.setattr(config_module.os.path, "expanduser", lambda _p: str(tmp_path))
-    monkeypatch.setattr(
-        config_module.shutil,
-        "which",
-        lambda tool: f"/usr/bin/{tool}" if tool in ("tar", "unzip", "gzip") else None,
-    )
 
     config_path = config_module.find_extractor_config_path()
     assert Path(config_path).exists()
 
     extractors = config_module.load_extractor_config(config_path)
-    assert extractors["tar"]["command"] == "tar"
-    assert extractors["zip"]["command"] == "unzip"
-    assert extractors["gzip"]["command"] == "gzip"
+    assert extractors == config_module.DEFAULT_EXTRACTORS
 
 
 #   ---------------------------------------------------------------------------
@@ -191,25 +186,21 @@ class TestDetectArchiveType:
 class TestExtractorConfig:
     """find-pan-conf.yaml is discovered, built, and loaded."""
 
-    def test_build_extractor_config_creates_yaml_with_discovered_tools(
+    def test_build_extractor_config_writes_the_platform_defaults_without_probing_for_tools(
         self, config_module, tmp_path, monkeypatch
     ):
-        monkeypatch.setattr(
-            config_module.shutil,
-            "which",
-            lambda tool: f"/usr/bin/{tool}" if tool in ("tar", "unzip", "gzip") else None,
-        )
+        def fail(_tool):
+            raise AssertionError("the defaults are written as they are; availability is checked at use")
+
+        monkeypatch.setattr(config_module.shutil, "which", fail)
         config_path = tmp_path / "find-pan-conf.yaml"
 
         config_module.build_extractor_config(str(config_path))
 
         data = yaml.safe_load(config_path.read_text(encoding="utf-8"))
         extractors = data["extractors"]
-        assert extractors["tar"]["command"] == "tar"
-        assert extractors["zip"]["command"] == "unzip"
-        assert extractors["gzip"]["command"] == "gzip"
-        #   7z was not discovered, so the first candidate command is recorded.
-        assert extractors["7z"]["command"] == "7z"
+        assert extractors == config_module.DEFAULT_EXTRACTORS
+        assert [c["command"] for c in config_module.extractor_candidates(extractors["7z"], "linux")][:1] == ["7zz"]
         #   Compression metadata is present for every extractor.
         for archive_type in ("tar", "zip", "7z", "gzip"):
             assert extractors[archive_type]["compression"]
@@ -283,7 +274,7 @@ class TestFindExtractorConfigPath:
         assert Path(path).exists()
         data = yaml.safe_load(Path(path).read_text(encoding="utf-8"))
         assert "extractors" in data
-        assert data["extractors"]["tar"]["command"] == "tar"
+        assert data["extractors"] == config_module.DEFAULT_EXTRACTORS
 
     def test_builds_config_under_home_dot_config_when_xdg_unset(
         self, config_module, tmp_path, monkeypatch
