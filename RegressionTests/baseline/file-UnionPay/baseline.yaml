@@ -2,7 +2,7 @@ name: file-UnionPay
 description: single fixture UnionPay.txt
 created: '2026-10-17T23:07:04Z'
 find_pan:
-  version: 3.5.0
+  version: 3.6.0
   command:
   - --file
   - RegressionTests/UnionPay.txt

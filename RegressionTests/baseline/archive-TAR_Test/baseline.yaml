@@ -2,7 +2,7 @@ name: archive-TAR_Test
 description: single fixture TAR_Test.tar
 created: '2026-10-17T23:07:04Z'
 find_pan:
-  version: 3.5.0
+  version: 3.6.0
   command:
   - --file
   - RegressionTests/TAR_Test.tar

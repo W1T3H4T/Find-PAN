@@ -32,6 +32,15 @@ uv run python bin/find-pan.py --path /path/to/data --mask --csv matches.csv --su
 
 At least one of `--path` or `--file` is required. You can combine them; explicit files are processed first, followed by the directory tree. Overlapping inputs can be scanned more than once.
 
+The wrapper scripts `bin/find-pan.sh` (Linux, macOS, WSL, Git Bash) and `bin/find-pan.ps1` (PowerShell) run the same program from any directory, in the project environment that `setup-env` created, and pass every argument and the exit status through. They do not change the working directory, so relative paths mean what they say in your shell:
+
+```console
+./bin/find-pan.sh --path /path/to/data --mask --summary-json summary.json
+.\bin\find-pan.ps1 --path D:\data --mask --summary-json summary.json
+```
+
+They use `uv` when it is installed and otherwise the project environment's own Python. Set `UV_PROJECT_ENVIRONMENT` to use a different environment.
+
 Masking is opt-in. Without `--mask`, findings and source lines can contain full PANs and track data.
 
 ## Installation
@@ -355,6 +364,7 @@ Baseline exit statuses are `0` for matching results, `1` for differences, and `2
 
 | Tool | Purpose |
 | --- | --- |
+| `bin/find-pan.sh`, `bin/find-pan.ps1` | Run `find-pan.py` from any directory in the project environment (shell and PowerShell wrappers). |
 | `bin/baseline.py` | Create and validate regression baselines. |
 | `bin/generate-pan.py` | Generate synthetic PANs and noisy text with embedded PAN/track records. |
 | `bin/generate-invalid-pan.py` | Generate brand-conformant PANs that fail the Luhn check (space, hyphen or no grouping). |
