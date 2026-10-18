@@ -6,9 +6,11 @@ module has no side effects, logging, or global application state.
 """
 
 import json
+import logging
 import os
 import re
 import shutil
+import sys
 from dataclasses import asdict, fields
 from pathlib import Path
 from typing import Dict, List
@@ -17,6 +19,8 @@ import yaml
 
 from find_pan.errors import ConfigError
 from find_pan.models import ExtractionLimits
+
+logger = logging.getLogger("find_pan.config")
 
 # - Default extractor configuration filename
 _EXTRACTOR_CONFIG_FILENAME = "find-pan-conf.yaml"
@@ -84,6 +88,8 @@ def find_extractor_config_path() -> str:
     """
     existing_path = _find_existing_extractor_config()
     if existing_path:
+        if _is_user_level(existing_path) and _is_legacy_config(existing_path):
+            _migrate_legacy_config(existing_path)
         return existing_path
 
     config_dir = _find_pan_config_directory()
@@ -99,6 +105,50 @@ def find_extractor_config_path() -> str:
             ) from e
 
     return config_file
+
+
+def _is_user_level(config_path: str) -> bool:
+    """Whether *config_path* is a per-user file (never the application's shipped configuration)."""
+    shipped = os.path.normcase(os.path.join(_application_root(), "config"))
+    return os.path.normcase(os.path.dirname(os.path.abspath(config_path))) != shipped
+
+
+def _is_legacy_config(config_path: str) -> bool:
+    """Whether the file is a flat-format configuration written by find-pan before platform sections.
+
+    Such files were generated automatically on first use and persist; with GNU tar on Windows their
+    ``tar`` entry no longer works.  A file with the current ``schema`` marker, or without any flat
+    entry (for instance a hand-written one that already uses platform sections), is not legacy.
+    """
+    try:
+        with open(config_path, "r", encoding="utf-8", errors="replace") as config_file:
+            data = yaml.safe_load(config_file)
+    except (OSError, yaml.YAMLError):
+        return False                                   # unreadable: load_extractor_config reports it
+    if not isinstance(data, dict) or data.get("schema") == SCHEMA_VERSION:
+        return False
+    extractors = data.get("extractors")
+    if not isinstance(extractors, dict):
+        return False
+    return any(isinstance(entry, dict) and "command" in entry
+               and not any(section in entry for section in PLATFORM_SECTIONS)
+               for entry in extractors.values())
+
+
+def _migrate_legacy_config(config_path: str) -> str:
+    """Keep the old file as ``<name>.legacy`` (never overwriting a backup) and write the defaults."""
+    backup = config_path + ".legacy"
+    number = 1
+    while os.path.exists(backup):
+        number += 1
+        backup = f"{config_path}.legacy{number}"
+    os.replace(config_path, backup)
+    build_extractor_config(config_path)
+    logger.warning(
+        "Replaced the legacy extractor configuration %s with the current defaults (platform sections). "
+        "The old file is kept as %s; copy any customizations into the new file.", config_path, backup,
+    )
+    return backup
 
 
 def _find_existing_extractor_config() -> str | None:
@@ -135,59 +185,151 @@ def _find_pan_config_directory() -> str:
     return os.path.join(home, ".config", "find-pan")
 
 
+#   Version of the configuration layout; written to generated files so that an older generated file
+#   (flat entries, no platform sections) can be recognized and upgraded.
+SCHEMA_VERSION = 2
+
+#   Sections of an extractor entry that hold per-platform candidates, in lookup order after the exact
+#   platform: "posix" covers every platform except Windows.
+PLATFORM_SECTIONS = ("windows", "linux", "macos", "posix")
+_CWD_VALUES = (None, "tempdir")
+
+#   Windows 10+ ships bsdtar here; it needs no special arguments and also extracts zip files.
+_BSDTAR = r"%SystemRoot%\System32\tar.exe"
+#   GNU tar on Windows reads "C:" as a host name (--force-local) and the builds disagree about path
+#   syntax, so it runs inside the extraction directory (cwd: tempdir) with the destination ".".
+_GNU_TAR_WINDOWS = ["--force-local", "-xf", "{archive_posix}", "-C", "."]
+_TAR = ["-xf", "{archive}", "-C", "{tempdir}"]
+_UNZIP = ["{archive}", "-d", "{tempdir}"]
+_SEVEN_ZIP = ["x", "{archive}", "-o{tempdir}", "-y"]
+
+#   The extractors used when no configuration file exists and written into a newly created one.  For
+#   every archive type: platform sections ("windows", "linux", "macos", "posix") holding one candidate
+#   or an ordered list of candidates; the first whose command exists is used.
+DEFAULT_EXTRACTORS: Dict[str, Dict] = {
+    "tar": {
+        "compression": ["store"],
+        "windows": [
+            {"command": _BSDTAR, "args": _TAR},
+            {"command": r"%ProgramFiles%\Git\usr\bin\tar.exe", "args": _GNU_TAR_WINDOWS, "cwd": "tempdir"},
+            {"command": r"%ProgramFiles(x86)%\GnuWin32\bin\tar.exe", "args": _GNU_TAR_WINDOWS, "cwd": "tempdir"},
+            {"command": "tar", "args": _GNU_TAR_WINDOWS, "cwd": "tempdir"},
+        ],
+        "posix": [{"command": "tar", "args": _TAR}],
+    },
+    "zip": {
+        "compression": ["store", "deflate", "bzip2", "lzma"],
+        "windows": [
+            {"command": "unzip", "args": _UNZIP},
+            {"command": r"%ProgramFiles%\Git\usr\bin\unzip.exe", "args": _UNZIP},
+            {"command": _BSDTAR, "args": _TAR},
+        ],
+        "posix": [{"command": "unzip", "args": _UNZIP}],
+    },
+    "7z": {
+        "compression": ["store", "lzma", "lzma2", "bzip2", "deflate", "ppmd", "bcj2"],
+        "windows": [
+            {"command": r"%ProgramFiles%\7-Zip\7z.exe", "args": _SEVEN_ZIP},
+            {"command": "7z", "args": _SEVEN_ZIP},
+            {"command": "7za", "args": _SEVEN_ZIP},
+        ],
+        "posix": [
+            {"command": "7zz", "args": _SEVEN_ZIP},
+            {"command": "7z", "args": _SEVEN_ZIP},
+            {"command": "7za", "args": _SEVEN_ZIP},
+        ],
+    },
+    "gzip": {
+        "compression": ["deflate"],
+        "copy_archive_to_tempdir": True,
+        "windows": [
+            {"command": "gzip", "args": ["-d", "{archive}"]},
+            {"command": r"%ProgramFiles%\Git\usr\bin\gzip.exe", "args": ["-d", "{archive}"]},
+        ],
+        "posix": [{"command": "gzip", "args": ["-d", "{archive}"]}],
+    },
+}
+
+
+def platform_key(system_platform: str | None = None) -> str:
+    """Return the configuration key for a ``sys.platform`` value: windows, linux, macos or other."""
+    system_platform = sys.platform if system_platform is None else system_platform
+    if system_platform in ("win32", "cygwin"):
+        return "windows"
+    if system_platform.startswith("linux"):
+        return "linux"
+    if system_platform == "darwin":
+        return "macos"
+    return "other"
+
+
+def extractor_candidates(entry: Dict, platform: str | None = None) -> List[Dict]:
+    """Return the ordered candidate extractors of *entry* for *platform* (default: this system).
+
+    An entry is either flat (``command``/``args`` at the top, the original format, one candidate for
+    every platform) or has platform sections.  The exact platform section is used, else ``posix`` for
+    any non-Windows platform, else the flat keys.  Entry-level settings that are not sections
+    (``copy_archive_to_tempdir``, limit overrides, ``compression``) are defaults for each candidate.
+    """
+    platform = platform_key() if platform is None else platform
+    defaults = {key: value for key, value in entry.items() if key not in PLATFORM_SECTIONS}
+    section = entry.get(platform)
+    if section is None and platform != "windows":
+        section = entry.get("posix")
+    if section is None:
+        return [defaults] if "command" in defaults else []
+    candidates = section if isinstance(section, list) else [section]
+    return [{**defaults, **candidate} for candidate in candidates]
+
+
+def _validate_candidate(candidate: object, where: str) -> None:
+    if not isinstance(candidate, dict):
+        raise ConfigError(f"{where}: expected a mapping with 'command' and 'args', got {candidate!r}")
+    if not isinstance(candidate.get("command"), str) or not candidate["command"]:
+        raise ConfigError(f"{where}: 'command' must be a non-empty string")
+    arguments = candidate.get("args", [])
+    if not isinstance(arguments, list) or not all(isinstance(arg, str) for arg in arguments):
+        raise ConfigError(f"{where}: 'args' must be a list of strings")
+    if candidate.get("cwd") not in _CWD_VALUES:
+        raise ConfigError(f"{where}: 'cwd' must be 'tempdir' (or omitted), got {candidate['cwd']!r}")
+
+
+def validate_extractors(extractors: object, source: str = "extractor configuration") -> None:
+    """Raise ``ConfigError`` unless *extractors* is a valid mapping of archive type to entry."""
+    if not isinstance(extractors, dict):
+        raise ConfigError(f"{source}: 'extractors' must be a mapping")
+    for archive_type, entry in extractors.items():
+        where = f"{source}: extractor '{archive_type}'"
+        if not isinstance(entry, dict):
+            raise ConfigError(f"{where}: expected a mapping, got {entry!r}")
+        if "command" in entry:                       # flat format
+            _validate_candidate(entry, where)
+        for section_name in PLATFORM_SECTIONS:
+            if section_name not in entry:
+                continue
+            section = entry[section_name]
+            if not isinstance(section, (dict, list)):
+                raise ConfigError(f"{where}, {section_name}: expected a mapping or a list of mappings")
+            for number, candidate in enumerate(section if isinstance(section, list) else [section], 1):
+                _validate_candidate(candidate, f"{where}, {section_name} #{number}")
+
+
+_CONFIG_HEADER = """\
+# Find-PAN archive extractor configuration.
+#
+# find-pan expands archives with locally installed tools.  For each archive type this file lists, per
+# platform (windows, linux, macos, posix = any non-Windows system), one or more candidate commands; the
+# first whose command exists is used.  See README.md ("Extractor configuration") for the full schema.
+#
+"""
+
+
 def build_extractor_config(config_path: str) -> None:
-    """Create an extractor configuration using tools found on PATH."""
-    known_commands = {
-        "tar": ["tar", "gtar"],
-        "zip": ["unzip"],
-        "7z": ["7z", "7zz", "7za"],
-        "gzip": ["gzip", "gunzip"],
-    }
-
-    compression_algorithms = {
-        "tar": ["store"],
-        "zip": ["store", "deflate", "bzip2", "lzma"],
-        "7z": ["store", "lzma", "lzma2", "bzip2", "deflate", "ppmd", "bcj2"],
-        "gzip": ["deflate"],
-    }
-
-    extractors: Dict[str, Dict] = {}
-    for archive_type, commands in known_commands.items():
-        tool_path = None
-        for command in commands:
-            tool_path = shutil.which(command)
-            if tool_path:
-                break
-
-        if not tool_path:
-            extractors[archive_type] = {
-                "command": commands[0],
-                "args": [],
-                "copy_archive_to_tempdir": archive_type == "gzip",
-                "compression": compression_algorithms[archive_type],
-            }
-            continue
-
-        if archive_type == "tar":
-            args = ["-xf", "{archive}", "-C", "{tempdir}"]
-        elif archive_type == "zip":
-            args = ["{archive}", "-d", "{tempdir}"]
-        elif archive_type == "7z":
-            args = ["x", "{archive}", "-o{tempdir}", "-y"]
-        else:  # gzip
-            args = ["-d", "{archive}"]
-
-        extractors[archive_type] = {
-            "command": command,
-            "args": args,
-            "copy_archive_to_tempdir": archive_type == "gzip",
-            "compression": compression_algorithms[archive_type],
-        }
-
-
-    config = {"limits": asdict(ExtractionLimits()), "extractors": extractors}
-    with open(config_path, "w", encoding="utf-8") as config_file:
-        yaml.safe_dump(config, config_file, sort_keys=True)
+    """Write the default extractor configuration (see ``DEFAULT_EXTRACTORS``) to *config_path*."""
+    document = {"schema": SCHEMA_VERSION, "limits": asdict(ExtractionLimits()), "extractors": DEFAULT_EXTRACTORS}
+    with open(config_path, "w", encoding="utf-8", newline="\n") as config_file:
+        config_file.write(_CONFIG_HEADER)
+        yaml.safe_dump(document, config_file, sort_keys=True)
 
 
 def load_extraction_limits(config_path: str) -> ExtractionLimits:
@@ -226,7 +368,9 @@ def load_extractor_config(config_path: str) -> Dict[str, Dict]:
             raise ConfigError(f"Invalid extractor configuration {config_path}: {error}") from error
     if not isinstance(data, dict):
         raise ConfigError(f"Invalid extractor configuration {config_path}: expected a mapping")
-    return data.get("extractors", {})
+    extractors = data.get("extractors", {})
+    validate_extractors(extractors, f"extractor configuration {config_path}")
+    return extractors
 
 
 # ===========================================================================

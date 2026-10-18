@@ -35,7 +35,8 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
-from find_pan.config import find_extractor_config_path, load_extractor_config  # noqa: E402
+from find_pan.archives import select_candidate  # noqa: E402
+from find_pan.config import extractor_candidates, find_extractor_config_path, load_extractor_config  # noqa: E402
 from find_pan.filetypes import FileKind, classify_head  # noqa: E402
 from find_pan.version import __version__ as find_pan_version  # noqa: E402
 
@@ -348,9 +349,13 @@ def required_tools(inputs: Iterable[str], root: Path = REPO_ROOT) -> list[str]:
             head = handle.read(1024)
         classification = classify_head(head, rel_path, False, logger)
         if classification.kind is FileKind.ARCHIVE:
-            command = extractors.get(classification.archive_type, {}).get("command")
-            if command:
-                tools.add(Path(command).stem)
+            #   The tool that would run on this system: the first installed candidate, or else the first
+            #   candidate (so a missing tool is named and --create refuses).
+            entry = extractors.get(classification.archive_type, {})
+            candidates = [c for c in extractor_candidates(entry) if c.get("command")]
+            if candidates:
+                chosen, _ = select_candidate(candidates)
+                tools.add(Path(os.path.expandvars(chosen["command"])).stem)
     return sorted(tools)
 
 

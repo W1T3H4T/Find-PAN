@@ -218,8 +218,9 @@ def test_real_tar_expands_a_tar_with_the_default_arguments(build, tmp_path):
     archive = tmp_path / "real.tar"
     with tarfile.open(archive, "w") as handle:
         handle.add(member, arcname="member.txt")
-    config = {"tar": {"command": "tar", "args": ["-xf", "{archive}", "-C", "{tempdir}"]}}
-    scanner, reporter, sink = build(load_extractors=lambda: config)
+    from find_pan.config import DEFAULT_EXTRACTORS
+
+    scanner, reporter, sink = build(load_extractors=lambda: DEFAULT_EXTRACTORS)
     scanner.process_file(str(archive))
     assert pans(sink) == [VALID_PAN]
     assert reporter.stats.archives_expanded == 1 and not scanner.problems

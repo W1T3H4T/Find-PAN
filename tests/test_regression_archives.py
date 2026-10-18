@@ -6,6 +6,7 @@ scanning the plain files.  The tests use the real extraction tools from the
 default extractor configuration and skip when a tool is not installed.
 """
 
+import os
 import re
 import shutil
 from pathlib import Path
@@ -13,7 +14,7 @@ from pathlib import Path
 import pytest
 
 from find_pan import cli
-from find_pan.config import detect_archive_type, find_extractor_config_path, load_extractor_config
+from find_pan.config import detect_archive_type, extractor_candidates, find_extractor_config_path, load_extractor_config
 
 FIXTURES = Path(__file__).resolve().parents[1] / "RegressionTests"
 ARCHIVES = ["ZIP_Test.zip", "TAR_Test.tar", "7z_Test.7z"]
@@ -29,10 +30,10 @@ def run(tmp_path, capsys, *arguments) -> tuple[int, str]:
 
 
 def require_extractor(archive: Path) -> None:
-    config = load_extractor_config(find_extractor_config_path())
-    command = config.get(detect_archive_type(str(archive)), {}).get("command")
-    if not command or shutil.which(command) is None:
-        pytest.skip(f"extractor {command!r} for {archive.name} is not installed")
+    entry = load_extractor_config(find_extractor_config_path()).get(detect_archive_type(str(archive)), {})
+    commands = [c["command"] for c in extractor_candidates(entry)]
+    if not any(shutil.which(os.path.expandvars(command)) for command in commands):
+        pytest.skip(f"no extractor for {archive.name} is installed (tried {', '.join(commands)})")
 
 
 @pytest.fixture
