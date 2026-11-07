@@ -2,7 +2,6 @@
 
 import csv
 import importlib.util
-import os
 import sys
 from pathlib import Path
 
@@ -73,15 +72,10 @@ def test_rewrite_args_rewrites_path_file_and_rgx_patterns_and_keeps_other_switch
         "--path", "d", "--file", "two.txt", "d/one.txt", "--rgx-patterns", "p.json", "--mask", "--line-limit", "5"]
 
 
-@pytest.mark.parametrize("switch", ["--csv", "--log-dir", "--summary-json", "--version", "--verbose", "--debug"])
-def test_rewrite_args_rejects_every_owned_switch(switch, repo):
-    with pytest.raises(BaselineError, match="owned|manages|cannot"):
-        baseline.rewrite_find_pan_args([switch, "x"] if switch not in ("--version", "--verbose", "--debug") else [switch], repo)
-
-
-def test_rewrite_args_rejects_an_equals_form_of_an_owned_switch(repo):
-    with pytest.raises(BaselineError):
-        baseline.rewrite_find_pan_args(["--csv=out.csv"], repo)
+def test_rewrite_args_preserves_find_pan_options(repo):
+    args = ["--csv=out.csv", "--log-dir", "logs", "--summary-json", "summary.json",
+            "--version", "--verbose", "--debug", "--exclude-dir", "cache*"]
+    assert baseline.rewrite_find_pan_args(args, repo) == args
 
 
 # --- enumerating inputs ---------------------------------------------------------------------------------------------
@@ -219,12 +213,14 @@ def test_format_row():
 
 
 def test_inputs_may_not_include_the_baseline_directory_itself(repo):
-    write(repo / "RegressionTests" / "baseline" / "x" / "baseline.csv")
+    baseline_dir = repo / baseline.BASELINE_RELATIVE_ROOT
+    output = baseline_dir / baseline.OUTPUT_DIRECTORY_NAME / "x.csv"
+    write(output)
     write(repo / "RegressionTests" / "a.txt")
     with pytest.raises(BaselineError, match="baseline directory"):
-        baseline.enumerate_inputs(["--path", str(repo / "RegressionTests")], repo)
+        baseline.enumerate_inputs(["--path", str(baseline_dir)], repo)
     with pytest.raises(BaselineError, match="baseline directory"):
-        baseline.enumerate_inputs(["--file", str(repo / "RegressionTests" / "baseline" / "x" / "baseline.csv")], repo)
+        baseline.enumerate_inputs(["--file", str(output)], repo)
     assert baseline.enumerate_inputs(["--file", str(repo / "RegressionTests" / "a.txt")], repo) == ["RegressionTests/a.txt"]
 
 
@@ -234,11 +230,19 @@ def test_inputs_may_not_include_the_baseline_directory_itself(repo):
 def test_path_over_a_parent_of_the_baseline_directory_is_refused_even_before_it_exists(repo):
     """The baseline would later contain its own output; this must fail at --create, not at --validate."""
     write(repo / "RegressionTests" / "a.txt")
-    assert not (repo / "RegressionTests" / "baseline").exists()
+    assert not (repo / baseline.BASELINE_RELATIVE_ROOT).exists()
+    for parent in (repo, repo / "RegressionTests"):
+        with pytest.raises(BaselineError, match="baseline directory"):
+            baseline.enumerate_inputs(["--path", str(parent)], repo)
+
+
+def test_input_exclusion_uses_the_supplied_baseline_root(repo):
+    custom = repo / "custom" / "baselines"
+    write(custom / "output" / "x.csv")
+    write(repo / "RegressionTests" / "a.txt")
     with pytest.raises(BaselineError, match="baseline directory"):
-        baseline.enumerate_inputs(["--path", str(repo / "RegressionTests")], repo)
-    with pytest.raises(BaselineError, match="baseline directory"):
-        baseline.enumerate_inputs(["--path", str(repo)], repo)
+        baseline.enumerate_inputs(["--path", str(repo / "custom")], repo, custom)
+    assert baseline.enumerate_inputs(["--path", str(repo / "RegressionTests")], repo, custom) == ["RegressionTests/a.txt"]
 
 
 def test_file_equals_form_is_rewritten_and_enumerated(repo):
@@ -257,9 +261,9 @@ def test_two_path_switches_are_refused_because_find_pan_keeps_only_the_last(repo
         baseline.enumerate_inputs(["--path", str(repo / "a"), "--path", str(repo / "b")], repo)
 
 
-@pytest.mark.parametrize("argument", ["--pa", "--summ", "--rgx", "--verb", "--fil", "--lo", "--cs", "--de"])
+@pytest.mark.parametrize("argument", ["--pa", "--rgx", "--fil"])
 def test_abbreviated_switches_are_refused(argument, repo):
-    """find-pan accepts abbreviations; they would bypass the owned-switch check and path rewriting."""
+    """find-pan accepts abbreviations; path switches need explicit rewriting."""
     with pytest.raises(BaselineError, match="full switch name"):
         baseline.rewrite_find_pan_args([argument, "x"], repo)
 

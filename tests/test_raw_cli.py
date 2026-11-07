@@ -180,6 +180,7 @@ def test_mask_applies_to_the_expected_value_report(tmp_path, capsys):
     status, out, _ = run(tmp_path, capsys, "--file", path, "--raw", "--mask",
                          "--pan-list", list_file(tmp_path, "p.txt", PAN, ABSENT),
                          "--track-list", list_file(tmp_path, "t.txt", TRACK2))
+    assert status == 0
     assert PAN not in out and ABSENT not in out and TRACK2 not in out
     assert "455673******9855" in out and "550000******0004" in out
 

@@ -1,6 +1,5 @@
 """Tests for find_pan.cli."""
 
-import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -43,6 +42,11 @@ def test_parse_args_all_flags():
         skip_binary=True, line_limit=5, report_delta=7, csv="o.csv", verbose=True, debug=True,
         mask=True, log_anti_pan=True,
     )
+
+
+def test_exclude_dir_accepts_repeated_patterns():
+    settings = cli.parse_args(["--path", "data", "--exclude-dir", "base*", "--exclude-dir=cache?"])
+    assert settings.exclude_dirs == ("base*", "cache?")
 
 
 @pytest.mark.parametrize("value", ["0", "-3"])
@@ -298,18 +302,14 @@ def test_missing_file_entry_is_reported_skipped_and_the_run_continues(tmp_path, 
     assert "[NOT-FOUND]" in captured.out and "[NOT-A-FILE]" in captured.out
 
 
-def test_archive_expanded_and_listed_in_summary(tmp_path, monkeypatch, capsys):
+def test_archive_expanded_and_listed_in_summary(tmp_path, monkeypatch, capsys, zip_extractor_config):
     import zipfile
 
     archive = tmp_path / "bundle.dat"        # content, not the extension, says zip
     with zipfile.ZipFile(archive, "w") as handle:
         handle.writestr("inner.txt", f"card {PAN}\n")
-    unzip = shutil.which("unzip")
-    if unzip is None:
-        pytest.skip("needs a local unzip")
     monkeypatch.setattr(cli, "find_extractor_config_path", lambda: "unused")
-    monkeypatch.setattr(cli, "load_extractor_config", lambda path: {
-        "zip": {"command": unzip, "args": ["-o", "{archive}", "-d", "{tempdir}"]}})
+    monkeypatch.setattr(cli, "load_extractor_config", lambda path: zip_extractor_config)
     status = cli.main(["--file", str(archive), "--log-dir", str(tmp_path / "logs")])
     out = capsys.readouterr().out
     assert status == 0
@@ -341,18 +341,14 @@ def test_failing_extractor_tool_is_an_error_and_listed(tmp_path, monkeypatch, ca
     assert "[ARCHIVE-FAILED]" in captured.out
 
 
-def test_path_scan_expands_archives_found_in_the_directory(tmp_path, monkeypatch, capsys):
+def test_path_scan_expands_archives_found_in_the_directory(tmp_path, monkeypatch, capsys, zip_extractor_config):
     import zipfile
 
-    unzip = shutil.which("unzip")
-    if unzip is None:
-        pytest.skip("needs a local unzip")
     scan_dir = tmp_path / "scan"
     scan_dir.mkdir()
     with zipfile.ZipFile(scan_dir / "bundle.zip", "w") as handle:
         handle.writestr("inner.txt", f"card {PAN}\n")
     monkeypatch.setattr(cli, "find_extractor_config_path", lambda: "unused")
-    monkeypatch.setattr(cli, "load_extractor_config", lambda path: {
-        "zip": {"command": unzip, "args": ["-o", "{archive}", "-d", "{tempdir}"]}})
+    monkeypatch.setattr(cli, "load_extractor_config", lambda path: zip_extractor_config)
     assert cli.main(["--path", str(scan_dir), "--log-dir", str(tmp_path / "logs")]) == 0
     assert "PANs Matched  :        1" in capsys.readouterr().out

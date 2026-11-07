@@ -11,12 +11,15 @@ broken libmagic) is never imported by the suite.
 
 import importlib.util
 import json
+import os
+import shutil
 import sys
+import tempfile
 from pathlib import Path
 
 import pytest
 
-from find_pan.config import compile_regex_patterns
+from find_pan.config import compile_regex_patterns, extractor_candidates, find_extractor_config_path, load_extractor_config
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -26,6 +29,25 @@ PAN_GENERATOR_PATH = ROOT / "bin" / "generate-pan.py"
 CONFIGURATION_PATH = ROOT / "config" / "find-pan-regex.json"
 
 
+def pytest_configure(config):
+    """Give xdist workers separate system temp directories for subprocess scans."""
+    if not hasattr(config, "workerinput"):
+        return
+
+    config.find_pan_temp_directory = Path(tempfile.gettempdir()) / f"pytest-{config.workerinput['workerid']}-find-pan"
+    config.find_pan_temp_directory.mkdir(parents=True, exist_ok=True)
+    tempfile.tempdir = str(config.find_pan_temp_directory)
+    for variable in ("TMP", "TEMP", "TMPDIR"):
+        os.environ[variable] = str(config.find_pan_temp_directory)
+
+
+def pytest_unconfigure(config):
+    """Remove an xdist worker's isolated temp directory after tests finish."""
+    directory = getattr(config, "find_pan_temp_directory", None)
+    if directory is not None:
+        shutil.rmtree(directory, ignore_errors=True)
+
+
 def load_script_module(module_name: str, script_path: Path):
     """Load a repository script as a module without a package install."""
     specification = importlib.util.spec_from_file_location(module_name, script_path)
@@ -33,6 +55,14 @@ def load_script_module(module_name: str, script_path: Path):
     sys.modules[specification.name] = module
     specification.loader.exec_module(module)
     return module
+
+
+@pytest.fixture(scope="session")
+def zip_extractor_config():
+    entry = load_extractor_config(find_extractor_config_path()).get("zip", {})
+    if not any(shutil.which(os.path.expandvars(candidate["command"])) for candidate in extractor_candidates(entry)):
+        pytest.skip("no configured ZIP extractor is installed")
+    return {"zip": entry}
 
 
 @pytest.fixture(scope="session")

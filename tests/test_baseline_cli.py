@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 import yaml
+from find_pan import config
 
 ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location("baseline", ROOT / "bin" / "baseline.py")
@@ -46,14 +47,14 @@ def repo(template, tmp_path):
 
 @pytest.fixture
 def bl_root(repo):
-    return repo / "RegressionTests" / "baseline"
+    return repo / baseline.BASELINE_RELATIVE_ROOT
 
 
 def files_args(repo, *names):
     return ["--file", *[str(repo / "RegressionTests" / name) for name in (names or FIXTURES)]]
 
 
-def create(repo, bl_root, name="plain", *args, force=False, description="test baseline"):
+def create(repo, bl_root, name="plain", *args, force=False, description="test baseline"):  # pylint: disable=keyword-arg-before-vararg
     return baseline.create(name, description, list(args) or files_args(repo), force=force,
                            root=repo, baseline_root=bl_root)
 
@@ -71,8 +72,9 @@ def tree_state(path: Path) -> dict:
 
 def test_create_then_validate_passes(repo, bl_root):
     target = create(repo, bl_root)
-    assert (target / "baseline.csv").exists() and (target / "baseline.yaml").exists()
-    data = yaml.safe_load((target / "baseline.yaml").read_text(encoding="utf-8"))
+    assert target == bl_root / "plain.yaml"
+    assert (bl_root / "output" / "plain.csv").exists() and target.exists()
+    data = yaml.safe_load(target.read_text(encoding="utf-8"))
     assert data["name"] == "plain" and data["description"] == "test baseline"
     assert data["find_pan"]["command"][0] == "--file"
     assert data["find_pan"]["command"][1:] == [f"RegressionTests/{n}" for n in FIXTURES]
@@ -82,36 +84,159 @@ def test_create_then_validate_passes(repo, bl_root):
     assert outcome.verdict == "PASS" and outcome.status == 0
 
 
+def test_exclude_dir_is_passed_through_to_find_pan(repo, bl_root):
+    directory = repo / "RegressionTests" / "nested"
+    (directory / "cache-data").mkdir(parents=True)
+    (directory / "cache-data" / "ignored.txt").write_text(f"{PAN}\n", encoding="utf-8")
+    (directory / "included.txt").write_text(f"{PAN}\n", encoding="utf-8")
+    target = create(repo, bl_root, "excluded", "--path", str(directory), "--exclude-dir", "cache-*")
+    document = yaml.safe_load(target.read_text(encoding="utf-8"))
+    assert document["find_pan"]["command"] == ["--path", "RegressionTests/nested", "--exclude-dir", "cache-*"]
+    assert document["summary"]["files_scanned"] == 1
+    assert validate(repo, bl_root, "excluded").verdict == "PASS"
+
+
+def test_main_consumes_baseline_options_and_forwards_scanner_options(repo, bl_root):
+    target = repo / "RegressionTests" / "VISA.txt"
+    assert run_main(repo, bl_root, "--create", "forwarded", "--file", str(target),
+                    "--description", "example", "--debug", "--exclude-dir", "cache*") == 0
+    document = yaml.safe_load((bl_root / "forwarded.yaml").read_text(encoding="utf-8"))
+    assert document["description"] == "example"
+    assert document["find_pan"]["command"] == ["--file", "RegressionTests/VISA.txt",
+                                                "--debug", "--exclude-dir", "cache*"]
+    assert validate(repo, bl_root, "forwarded").verdict == "PASS"
+
+
+def test_separator_preserves_remaining_arguments(repo, bl_root, monkeypatch):
+    received = {}
+    target = bl_root / "captured.yaml"
+    monkeypatch.setattr(baseline, "create", lambda name, description, args, force, root, baseline_root:
+                        received.update(name=name, description=description, args=args, force=force) or target)
+    monkeypatch.setattr(baseline, "_load_baseline_document", lambda path: {})
+    assert run_main(repo, bl_root, "--create", "captured", "--force", "--", "--description", "scanner",
+                    "--", "literal") == 0
+    assert received == {"name": "captured", "description": "", "args": ["--description", "scanner", "--", "literal"],
+                        "force": True}
+
+
+def test_create_and_validate_yaml_config_file(repo, bl_root):
+    config_path = bl_root / "flat.yaml"
+
+    assert run_main(repo, bl_root, "--create", str(config_path), "--description", "flat baseline",
+                    "--", *files_args(repo)) == 0
+    csv_path = bl_root / "output" / "flat.csv"
+    assert config_path.is_file() and csv_path.is_file()
+    document = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    assert document["name"] == "flat" and document["description"] == "flat baseline"
+    assert document["csv_file"] == csv_path.name
+    assert validate(repo, bl_root, str(config_path)).verdict == "PASS"
+    assert validate(repo, bl_root, config_path.name).verdict == "PASS"
+
+
+def test_create_rejects_json_baseline_configuration(repo, bl_root, capsys):
+    config_path = bl_root / "flat.json"
+    assert run_main(repo, bl_root, "--create", str(config_path), "--", *files_args(repo)) == 2
+    assert not config_path.exists()
+    assert "must use YAML" in capsys.readouterr().err
+
+
+def test_validate_all_discovers_yaml_files_and_named_baselines(repo, bl_root):
+    create(repo, bl_root, str(bl_root / "flat.yaml"))
+    create(repo, bl_root, "legacy")
+
+    assert run_main(repo, bl_root, "--validate", "--all") == 0
+
+
 def test_create_refuses_an_existing_name_without_force_and_replaces_with_force(repo, bl_root):
     create(repo, bl_root)
     with pytest.raises(baseline.BaselineError, match="exists"):
         create(repo, bl_root)
     create(repo, bl_root, force=True, description="second")
-    assert yaml.safe_load((bl_root / "plain" / "baseline.yaml").read_text(encoding="utf-8"))["description"] == "second"
+    assert yaml.safe_load((bl_root / "plain.yaml").read_text(encoding="utf-8"))["description"] == "second"
+
+
+@pytest.mark.parametrize("alias", ["plain.yml", "PLAIN.yaml"])
+@pytest.mark.parametrize("force", [False, True])
+def test_create_rejects_configuration_aliases_even_with_force(repo, bl_root, alias, force):
+    create(repo, bl_root)
+    before = tree_state(bl_root)
+    with pytest.raises(baseline.BaselineError, match="collision"):
+        create(repo, bl_root, alias, force=force)
+    assert tree_state(bl_root) == before
+
+
+@pytest.mark.parametrize("force", [False, True])
+def test_create_rejects_orphan_output_even_with_force(repo, bl_root, force):
+    output = bl_root / "output"
+    output.mkdir(parents=True)
+    (output / "plain.csv").write_text("must not overwrite", encoding="utf-8")
+    before = tree_state(bl_root)
+    with pytest.raises(baseline.BaselineError, match="collision"):
+        create(repo, bl_root, force=force)
+    assert tree_state(bl_root) == before
+
+
+def test_create_and_validate_reject_shared_output_ownership(repo, bl_root):
+    create(repo, bl_root)
+    (bl_root / "other.yaml").write_text("name: other\ncsv_file: plain.csv\n", encoding="utf-8")
+    before = tree_state(bl_root)
+    with pytest.raises(baseline.BaselineError, match="collision"):
+        create(repo, bl_root, force=True)
+    assert validate(repo, bl_root, "plain").status == 2
+    assert tree_state(bl_root) == before
+
+
+def test_validate_rejects_output_path_overrides(repo, bl_root):
+    create(repo, bl_root)
+    config_path = bl_root / "plain.yaml"
+    document = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    document["csv_file"] = "../elsewhere.csv"
+    config_path.write_text(yaml.safe_dump(document), encoding="utf-8")
+    assert validate(repo, bl_root, "plain").status == 2
+
+
+@pytest.mark.parametrize("identifier", ["output/nested.yaml", "nested/config.yaml", "../outside.yaml"])
+def test_create_rejects_configuration_paths_outside_flat_directory(repo, bl_root, identifier):
+    with pytest.raises(baseline.BaselineError, match="directly inside"):
+        create(repo, bl_root, identifier)
+
+
+def test_named_baseline_resolves_existing_yml_file(repo, bl_root):
+    create(repo, bl_root, "short.yml")
+    assert validate(repo, bl_root, "short").verdict == "PASS"
+    assert create(repo, bl_root, "short", force=True) == bl_root / "short.yml"
+
+
+def test_publication_lock_prevents_overwrite(repo, bl_root):
+    create(repo, bl_root)
+    lock = bl_root / ".publish.lock"
+    lock.write_text("busy", encoding="utf-8")
+    before = tree_state(bl_root)
+    with pytest.raises(baseline.BaselineError, match="publication"):
+        baseline._write_file_baseline(bl_root / "plain.yaml", {"csv_file": "plain.csv"}, [], True)
+    assert tree_state(bl_root) == before
 
 
 def test_failed_create_leaves_no_partial_directory(repo, bl_root):
     """Review Focus 4."""
     with pytest.raises(baseline.BaselineError):
         create(repo, bl_root, "broken", "--file", str(repo / "RegressionTests" / "VISA.txt"), "--no-such-switch")
-    assert not (bl_root / "broken").exists()
+    assert not (bl_root / "broken.yaml").exists()
     assert not bl_root.exists() or list(bl_root.iterdir()) == []      # no staging leftovers
     create(repo, bl_root, "keep")
-    before = tree_state(bl_root / "keep")
+    before = tree_state(bl_root)
     with pytest.raises(baseline.BaselineError):
         create(repo, bl_root, "keep", "--file", str(repo / "RegressionTests" / "VISA.txt"), "--no-such-switch", force=True)
-    assert tree_state(bl_root / "keep") == before
-    assert [p.name for p in bl_root.iterdir()] == ["keep"]
+    assert tree_state(bl_root) == before
+    assert sorted(p.name for p in bl_root.iterdir()) == ["keep.yaml", "output"]
 
 
-def test_create_rejects_owned_switches_and_outside_paths(repo, bl_root, tmp_path):
+def test_create_rejects_outside_paths(repo, bl_root, tmp_path):
     outside = tmp_path / "outside.txt"
     outside.write_text(f"card {PAN}\n", encoding="utf-8")
-    with pytest.raises(baseline.BaselineError, match="cannot be passed"):
-        create(repo, bl_root, "x", *files_args(repo), "--csv", "mine.csv")
     with pytest.raises(baseline.BaselineError, match="outside"):
         create(repo, bl_root, "x", "--file", str(outside))
-    assert not (bl_root / "x").exists()
+    assert not (bl_root / "x.yaml").exists()
 
 
 def test_create_requires_an_input(repo, bl_root):
@@ -119,12 +244,33 @@ def test_create_requires_an_input(repo, bl_root):
         create(repo, bl_root, "x", "--mask")
 
 
+def test_create_rejects_an_empty_input_directory(repo, bl_root):
+    empty_directory = repo / "RegressionTests" / "empty"
+    empty_directory.mkdir()
+    with pytest.raises(baseline.BaselineError, match="no files were found"):
+        create(repo, bl_root, "empty", "--path", str(empty_directory))
+    assert not (bl_root / "empty.yaml").exists()
+
+
+def test_create_refuses_to_baseline_a_skipped_binary_file(repo, bl_root):
+    binary_file = repo / "RegressionTests" / "binary.bin"
+    binary_file.write_bytes(b"\x00\x01\x02\x03")
+    with pytest.raises(baseline.BaselineError, match="did not scan everything.*BINARY"):
+        create(repo, bl_root, "binary", "--skip-binary", "--file", str(binary_file))
+    assert not (bl_root / "binary.yaml").exists()
+
+
+def test_main_confirms_all_requested_files_were_scanned(repo, bl_root, capsys):
+    assert run_main(repo, bl_root, "--create", "confirmed", *files_args(repo, "VISA.txt")) == 0
+    assert "Confirmed all 1 requested input file(s) were scanned successfully." in capsys.readouterr().out
+
+
 def test_create_with_zero_findings(repo, bl_root):
     """Review Focus 2."""
     empty = repo / "RegressionTests" / "clean.txt"
     empty.write_text("nothing to see\n", encoding="utf-8")
     create(repo, bl_root, "clean", "--file", str(empty))
-    assert (bl_root / "clean" / "baseline.csv").read_text(encoding="utf-8").splitlines() == [
+    assert (bl_root / "output" / "clean.csv").read_text(encoding="utf-8").splitlines() == [
         "filename,line_number,offset,pattern_name,data_type,matched_data"]
     assert validate(repo, bl_root, "clean").verdict == "PASS"
 
@@ -146,7 +292,7 @@ def test_validate_detects_an_edited_input_and_names_the_lost_row(repo, bl_root):
 
 def test_validate_detects_a_corrupted_baseline_row(repo, bl_root):
     create(repo, bl_root)
-    csv_path = bl_root / "plain" / "baseline.csv"
+    csv_path = bl_root / "output" / "plain.csv"
     lines = csv_path.read_text(encoding="utf-8").splitlines()
     lines[1] = lines[1][:-1] + ("0" if lines[1][-1] != "0" else "1")      # alter the matched data
     csv_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -158,7 +304,7 @@ def test_validate_detects_a_corrupted_baseline_row(repo, bl_root):
 
 def test_validate_detects_a_changed_summary_count(repo, bl_root):
     create(repo, bl_root)
-    yaml_path = bl_root / "plain" / "baseline.yaml"
+    yaml_path = bl_root / "plain.yaml"
     data = yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
     data["summary"]["pans"] += 1
     yaml_path.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
@@ -191,7 +337,7 @@ def test_validate_reports_added_and_removed_input_files(repo, bl_root):
 
 def test_max_diff_limits_printed_rows_but_prints_the_count(repo, bl_root):
     create(repo, bl_root)
-    csv_path = bl_root / "plain" / "baseline.csv"
+    csv_path = bl_root / "output" / "plain.csv"
     header, *rows = csv_path.read_text(encoding="utf-8").splitlines()
     csv_path.write_text("\n".join([header] + rows[:3]) + "\n", encoding="utf-8")
     outcome = validate(repo, bl_root, "plain", max_diff=2)
@@ -211,7 +357,7 @@ def test_validate_does_not_modify_the_baseline(repo, bl_root):
 
 def test_missing_tool_is_skipped_and_fails_with_strict(repo, bl_root):
     create(repo, bl_root)
-    yaml_path = bl_root / "plain" / "baseline.yaml"
+    yaml_path = bl_root / "plain.yaml"
     data = yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
     data["requires_tools"] = ["definitely-not-installed-tool"]
     yaml_path.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
@@ -226,10 +372,10 @@ def test_unknown_baseline_is_an_error(repo, bl_root):
     assert outcome.verdict == "ERROR" and outcome.status == 2
 
 
-def test_yaml_name_must_match_directory_and_bad_names_are_rejected(repo, bl_root):
+def test_yaml_name_must_match_filename_and_bad_names_are_rejected(repo, bl_root):
     """Review Focus 1."""
     create(repo, bl_root)
-    yaml_path = bl_root / "plain" / "baseline.yaml"
+    yaml_path = bl_root / "plain.yaml"
     data = yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
     data["name"] = "other"
     yaml_path.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
@@ -266,7 +412,7 @@ def report_status(out, name):
 def test_validate_all_mixes_pass_and_fail_and_returns_1(repo, bl_root, capsys):
     create(repo, bl_root, "good")
     create(repo, bl_root, "bad")
-    csv_path = bl_root / "bad" / "baseline.csv"
+    csv_path = bl_root / "output" / "bad.csv"
     csv_path.write_text("\n".join(csv_path.read_text(encoding="utf-8").splitlines()[:-1]) + "\n", encoding="utf-8")
     assert run_main(repo, bl_root, "--validate", "--all") == 1
     out = capsys.readouterr().out
@@ -278,11 +424,11 @@ def test_validate_all_continues_after_a_broken_baseline(repo, bl_root, capsys):
     """Review Focus 5."""
     create(repo, bl_root, "good")
     create(repo, bl_root, "broken")
-    (bl_root / "broken" / "baseline.yaml").write_text("name: [unclosed", encoding="utf-8")
+    (bl_root / "broken.yaml").write_text("name: [unclosed", encoding="utf-8")
     assert run_main(repo, bl_root, "--validate", "--all") == 2             # broken + pass
     assert report_status(capsys.readouterr().out, "good") == "PASS"
     create(repo, bl_root, "fails")
-    csv_path = bl_root / "fails" / "baseline.csv"
+    csv_path = bl_root / "output" / "fails.csv"
     csv_path.write_text("\n".join(csv_path.read_text(encoding="utf-8").splitlines()[:-1]) + "\n", encoding="utf-8")
     assert run_main(repo, bl_root, "--validate", "--all") == 1             # broken + fail
 
@@ -309,9 +455,9 @@ def test_main_exit_codes_and_argument_rules(repo, bl_root, capsys):
 def test_main_passes_unknown_switches_to_find_pan_and_accepts_double_dash(repo, bl_root):
     assert run_main(repo, bl_root, "--create", "masked", "--description", "d", "--",
                     *files_args(repo, "VISA.txt"), "--mask") == 0
-    csv_text = (bl_root / "masked" / "baseline.csv").read_text(encoding="utf-8")
+    csv_text = (bl_root / "output" / "masked.csv").read_text(encoding="utf-8")
     assert PAN not in csv_text and "*" in csv_text
-    data = yaml.safe_load((bl_root / "masked" / "baseline.yaml").read_text(encoding="utf-8"))
+    data = yaml.safe_load((bl_root / "masked.yaml").read_text(encoding="utf-8"))
     assert "--mask" in data["find_pan"]["command"]
 
 
@@ -324,16 +470,16 @@ def test_create_refuses_a_run_that_did_not_scan_everything(repo, bl_root):
     bogus.write_bytes(bytes([0x37, 0x7A, 0xBC, 0xAF, 0x27, 0x1C]) + b"\x00" * 40)
     with pytest.raises(baseline.BaselineError):
         create(repo, bl_root, "arch", "--file", str(bogus))
-    assert not (bl_root / "arch").exists()
+    assert not (bl_root / "arch.yaml").exists()
     assert not bl_root.exists() or list(bl_root.iterdir()) == []
 
 
 def test_validate_all_survives_garbled_baseline_files(repo, bl_root, capsys):
     create(repo, bl_root, "good")
     create(repo, bl_root, "garbled")
-    (bl_root / "garbled" / "baseline.yaml").write_bytes(b"\xff\xfe\x00 not utf-8 \x81")
+    (bl_root / "garbled.yaml").write_bytes(b"\xff\xfe\x00 not utf-8 \x81")
     create(repo, bl_root, "badrow")
-    csv_path = bl_root / "badrow" / "baseline.csv"
+    csv_path = bl_root / "output" / "badrow.csv"
     lines = csv_path.read_text(encoding="utf-8").splitlines()
     parts = lines[1].split(",")
     parts[1] = "x"
@@ -347,20 +493,20 @@ def test_validate_all_survives_garbled_baseline_files(repo, bl_root, capsys):
 @pytest.mark.parametrize("failure", [OSError("disk full"), KeyboardInterrupt()], ids=["oserror", "interrupt"])
 def test_a_failed_replace_keeps_the_old_baseline_and_leaves_no_staging(repo, bl_root, monkeypatch, failure):
     create(repo, bl_root, "keep")
-    before = tree_state(bl_root / "keep")
+    before = tree_state(bl_root)
     real_replace = baseline.os.replace
-    target = bl_root / "keep"
+    target = bl_root / "keep.yaml"
 
     def flaky(src, dst):
-        if Path(dst) == target and Path(src).parent == bl_root:        # staging -> target
+        if Path(dst) == target and Path(src).parent.name.startswith(".keep."):
             raise failure
         return real_replace(src, dst)
 
     monkeypatch.setattr(baseline.os, "replace", flaky)
     with pytest.raises(type(failure)):
         create(repo, bl_root, "keep", *files_args(repo), force=True)
-    assert tree_state(target) == before
-    assert [entry.name for entry in bl_root.iterdir()] == ["keep"]
+    assert tree_state(bl_root) == before
+    assert sorted(entry.name for entry in bl_root.iterdir()) == ["keep.yaml", "output"]
 
 
 @pytest.mark.parametrize("value", ["0", "-1", "abc"])
@@ -373,7 +519,7 @@ def test_max_diff_must_be_a_positive_number(repo, bl_root, value, capsys):
 def test_validate_all_report_is_laid_out_in_columns_with_a_header_and_totals(repo, bl_root, capsys):
     create(repo, bl_root, "good")
     create(repo, bl_root, "a-much-longer-name")
-    csv_path = bl_root / "a-much-longer-name" / "baseline.csv"
+    csv_path = bl_root / "output" / "a-much-longer-name.csv"
     rows_kept = csv_path.read_text(encoding="utf-8").splitlines()[:-1]
     csv_path.write_text("\n".join(rows_kept) + "\n", encoding="utf-8")
     run_main(repo, bl_root, "--validate", "--all")
@@ -402,7 +548,7 @@ def test_a_recorded_tool_counts_as_available_when_another_candidate_for_its_type
         "zip": {"posix": [{"command": "unzip", "args": []}, {"command": "7z", "args": []}]},
         "tar": {"posix": [{"command": "tar", "args": []}]},
     }
-    monkeypatch.setattr(baseline.config, "platform_key", lambda system=None: "linux")
+    monkeypatch.setattr(config, "platform_key", lambda system=None: "linux")
     assert baseline.tool_available("unzip", extractors)
     assert baseline.tool_available("7z", extractors)
     assert not baseline.tool_available("tar", extractors)              # nothing for tar is installed

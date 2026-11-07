@@ -4,8 +4,6 @@ import importlib.util
 import sys
 from pathlib import Path
 
-import pytest
-
 ROOT = Path(__file__).resolve().parents[1]
 GENERATE_PAN_PATH = ROOT / "bin" / "generate-pan.py"
 CONFIGURATION_PATH = ROOT / "config" / "find-pan-regex.json"

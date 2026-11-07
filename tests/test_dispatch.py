@@ -196,13 +196,11 @@ def test_unloadable_extractor_config_skips_archives_with_a_warning(build, tmp_pa
     assert any("extractors unavailable" in problem.message for problem in scanner.problems)
 
 
-@pytest.mark.skipif(shutil.which("unzip") is None, reason="needs a local unzip")
-def test_real_tool_expands_a_zip_and_scans_its_members(build, tmp_path):
+def test_real_tool_expands_a_zip_and_scans_its_members(build, tmp_path, zip_extractor_config):
     archive = tmp_path / "real.dat"          # unhelpful extension: content decides
     with zipfile.ZipFile(archive, "w") as handle:
         handle.writestr("inner.txt", f"card {VALID_PAN}\n")
-    config = {"zip": {"command": "unzip", "args": ["-o", "{archive}", "-d", "{tempdir}"]}}
-    scanner, reporter, sink = build(load_extractors=lambda: config)
+    scanner, reporter, sink = build(load_extractors=lambda: zip_extractor_config)
     scanner.process_file(str(archive))
     assert pans(sink) == [VALID_PAN]
     assert reporter.stats.archives_expanded == 1

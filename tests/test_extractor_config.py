@@ -205,7 +205,7 @@ def extract(archive, entry, runner=None, platform="linux", **kwargs):
 def test_the_first_candidate_that_exists_is_used(archive, monkeypatch):
     monkeypatch.setattr(config, "platform_key", lambda system=None: "linux")
     available = {"second-tool": "/opt/second-tool", "third-tool": "/opt/third-tool"}
-    monkeypatch.setattr(archives.shutil, "which", lambda command: available.get(command))
+    monkeypatch.setattr(archives.shutil, "which", available.get)
     entry = {"linux": [candidate("first-tool"), candidate("second-tool"), candidate("third-tool")]}
     runner, _ = extract(archive, entry)
     assert runner.commands[0][0] == "/opt/second-tool"

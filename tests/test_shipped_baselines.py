@@ -1,4 +1,4 @@
-"""Every baseline in RegressionTests/baseline/ must validate against the current scanner.
+"""Every shipped baseline configuration must validate against the current scanner.
 
 This confirms only that they all pass; a baseline that fails shows its differences in the report.
 """
@@ -10,13 +10,12 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-BASELINE_DIR = ROOT / "RegressionTests" / "baseline"
 spec = importlib.util.spec_from_file_location("baseline", ROOT / "bin" / "baseline.py")
 baseline = importlib.util.module_from_spec(spec)
 sys.modules["baseline"] = baseline
 spec.loader.exec_module(baseline)
 
-NAMES = sorted(entry.name for entry in BASELINE_DIR.iterdir() if (entry / "baseline.yaml").is_file())
+NAMES = baseline._all_names(baseline.BASELINE_ROOT)
 
 
 @pytest.mark.parametrize("name", NAMES)

@@ -2,7 +2,6 @@
 
 import bz2
 import gzip
-import io
 import logging
 import lzma
 import tarfile

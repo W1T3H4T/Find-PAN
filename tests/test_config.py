@@ -3,7 +3,6 @@
 import json
 import os
 import shutil
-import subprocess
 import random
 import re
 from pathlib import Path
@@ -192,7 +191,7 @@ class TestExtractorConfig:
         def fail(_tool):
             raise AssertionError("the defaults are written as they are; availability is checked at use")
 
-        monkeypatch.setattr(config_module.shutil, "which", fail)
+        monkeypatch.setattr(shutil, "which", fail)
         config_path = tmp_path / "find-pan-conf.yaml"
 
         config_module.build_extractor_config(str(config_path))
@@ -263,7 +262,7 @@ class TestFindExtractorConfigPath:
         )
         monkeypatch.setattr(config_module.os.path, "expanduser", lambda _p: str(tmp_path))
         monkeypatch.setattr(
-            config_module.shutil,
+            shutil,
             "which",
             lambda tool: f"/usr/bin/{tool}" if tool == "tar" else None,
         )
@@ -287,7 +286,7 @@ class TestFindExtractorConfigPath:
             config_module, "_application_root", lambda: str(tmp_path / "empty-app-root")
         )
         monkeypatch.setattr(
-            config_module.shutil,
+            shutil,
             "which",
             lambda tool: f"/usr/bin/{tool}" if tool == "tar" else None,
         )

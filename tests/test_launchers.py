@@ -1,5 +1,6 @@
 """bin/find-pan.sh and bin/find-pan.ps1: run find-pan from any directory with the arguments passed through."""
 
+import os
 import shutil
 import subprocess
 import sys
@@ -14,11 +15,17 @@ PAN = "4556737586899855"
 def _bash():
     """A bash that understands the checkout's paths: any on POSIX, Git's on Windows (not the WSL stub)."""
     found = shutil.which("bash")
-    if found is None:
-        return None
-    if sys.platform == "win32" and "git" not in found.lower():
-        return None
-    return found
+    if sys.platform != "win32":
+        return found
+    if found and "git" in found.lower():
+        return found
+    git = shutil.which("git")
+    if git:
+        git_root = Path(git).resolve().parent.parent
+        for candidate in (git_root / "bin" / "bash.exe", git_root / "usr" / "bin" / "bash.exe"):
+            if candidate.is_file():
+                return str(candidate)
+    return None
 
 
 LAUNCHERS = {
@@ -36,7 +43,7 @@ def launcher(request):
 
 
 def run(command, cwd, *arguments):
-    return subprocess.run([*command, *arguments], cwd=cwd, capture_output=True, text=True, timeout=120)
+    return subprocess.run([*command, *arguments], cwd=cwd, capture_output=True, text=True, timeout=120, check=False)
 
 
 def test_the_launchers_exist_and_the_shell_one_is_executable():
@@ -57,6 +64,17 @@ def test_relative_paths_are_relative_to_where_the_launcher_is_run(launcher, tmp_
                  "--summary-json", "summary.json")
     assert result.returncode == 0 and "PANs Matched  :        1" in result.stdout
     assert (tmp_path / "summary.json").is_file() and PAN not in result.stdout
+
+
+def test_launcher_ignores_inherited_uv_environment(launcher, tmp_path):
+    alternate = tmp_path / "unexpected-environment"
+    env = os.environ.copy()
+    env["UV_PROJECT_ENVIRONMENT"] = str(alternate)
+    result = subprocess.run([*launcher, "--version"], cwd=tmp_path, env=env,
+                            capture_output=True, text=True, timeout=120, check=False)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "find-pan.py v" in result.stdout
+    assert not alternate.exists()
 
 
 def test_the_exit_status_of_find_pan_is_returned(launcher, tmp_path):

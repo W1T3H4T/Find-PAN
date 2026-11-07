@@ -1,6 +1,9 @@
+-e .
 lorem-text>=3.0
 names>=0.3.0
 python-magic>=0.4.27
 pyyaml>=6.0.1
 random-address>=1.1.1
+pylint>=3.3
 pytest>=8.0.0
+pytest-xdist>=3.6.1

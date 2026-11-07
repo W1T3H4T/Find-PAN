@@ -131,7 +131,7 @@ def test_utf16_matches_across_a_chunk_boundary_are_found_once(compiled_patterns,
 def test_the_file_is_counted_once_however_many_chunks_it_has(compiled_patterns, tmp_path):
     path = tmp_path / "dump.bin"
     path.write_bytes(b"\xff" * 5000 + PAN.encode())
-    scanner, sink, _ = make(compiled_patterns, chunk_size=1024, overlap=64)
+    scanner, _, _ = make(compiled_patterns, chunk_size=1024, overlap=64)
     scanner.scan_file(str(path))
     assert scanner.reporter.stats.files == 1
 

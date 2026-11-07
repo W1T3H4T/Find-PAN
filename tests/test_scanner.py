@@ -2,8 +2,6 @@
 
 import builtins
 import logging
-from contextlib import contextmanager
-
 import pytest
 
 from find_pan import scanner as scanner_module
@@ -118,6 +116,29 @@ def test_scan_directory_walks_nested_directories(build, tmp_path):
     scanner, _, sink = build()
     scanner.scan_path(str(tmp_path))
     assert {view.pan for view in kinds(sink, MatchKind.PAN)} == {VALID_PAN, SECOND_PAN}
+
+
+@pytest.mark.parametrize("extracted", [False, True])
+def test_directory_exclusions_match_names_at_any_depth(build, tmp_path, extracted):
+    for directory in ("keep", "nested/baseline-one", "cache1", "Baseline-two"):
+        path = tmp_path / directory
+        path.mkdir(parents=True)
+        (path / "data.txt").write_text(f"{VALID_PAN}\n", encoding="utf-8")
+    scanner, reporter, sink = build(exclude_dirs=("base*", "cache?"))
+    scanner._walk(str(tmp_path), extracted=extracted)
+    assert reporter.stats.files == 2
+    assert len(kinds(sink, MatchKind.PAN)) == 2
+
+
+def test_exclusion_does_not_apply_to_explicit_files_or_scan_root(build, tmp_path):
+    excluded = tmp_path / "baseline"
+    excluded.mkdir()
+    target = excluded / "data.txt"
+    target.write_text(f"{VALID_PAN}\n", encoding="utf-8")
+    scanner, reporter, _ = build(exclude_dirs=("baseline",))
+    scanner.scan_files([str(target)])
+    scanner.scan_path(str(excluded))
+    assert reporter.stats.files == 2
 
 
 

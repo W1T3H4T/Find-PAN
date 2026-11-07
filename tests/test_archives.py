@@ -6,6 +6,7 @@ import os
 import subprocess
 import tempfile
 from pathlib import Path
+from unittest.mock import Mock
 
 import pytest
 
@@ -13,6 +14,52 @@ from find_pan import archives
 from find_pan.errors import ExtractorError, ExtractorUnavailable
 
 LOGGER = logging.getLogger("test.archives")
+
+
+@pytest.mark.parametrize("version,callback_name", [((3, 11), "onerror"), ((3, 12), "onexc")])
+def test_remove_tree_uses_version_appropriate_error_callback(monkeypatch, tmp_path, version, callback_name):
+    root = tmp_path / "extract"
+    child = root / "file.txt"
+    accessible = Mock()
+    retry = Mock()
+    error = PermissionError("denied")
+
+    def rmtree(path, **kwargs):
+        assert path == str(root)
+        assert list(kwargs) == [callback_name]
+        argument = (type(error), error, None) if callback_name == "onerror" else error
+        kwargs[callback_name](retry, str(child), argument)
+
+    monkeypatch.setattr(archives.shutil, "rmtree", rmtree)
+    monkeypatch.setattr(archives, "_make_user_accessible", accessible)
+    with monkeypatch.context() as context:
+        context.setattr(archives.sys, "version_info", version)
+        archives._remove_tree(str(root))
+    assert accessible.call_args_list == [((str(root),),), ((str(child),),)]
+    retry.assert_called_once_with(str(child))
+
+
+def test_kill_tree_uses_windows_taskkill(monkeypatch):
+    process = Mock(pid=123)
+    runner = Mock()
+    monkeypatch.setattr(archives, "_IS_WINDOWS", True)
+    monkeypatch.setattr(archives.subprocess, "run", runner)
+    archives._kill_tree(process)
+    runner.assert_called_once_with(["taskkill", "/F", "/T", "/PID", "123"], capture_output=True, check=False)
+    process.kill.assert_called_once_with()
+    process.wait.assert_called_once_with()
+
+
+def test_kill_tree_uses_posix_process_group(monkeypatch):
+    process = Mock(pid=123)
+    killpg = Mock()
+    monkeypatch.setattr(archives, "_IS_WINDOWS", False)
+    monkeypatch.setattr(archives.os, "killpg", killpg, raising=False)
+    monkeypatch.setattr(archives.signal, "SIGKILL", 9, raising=False)
+    archives._kill_tree(process)
+    killpg.assert_called_once_with(123, 9)
+    process.kill.assert_called_once_with()
+    process.wait.assert_called_once_with()
 
 
 @pytest.fixture(autouse=True)

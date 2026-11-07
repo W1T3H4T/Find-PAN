@@ -107,7 +107,7 @@ def test_the_default_depth_limit_is_ten_and_can_be_configured():
 def test_a_scan_does_not_end_when_a_file_cannot_be_processed(build, tmp_path, monkeypatch):
     (tmp_path / "a-bad.txt").write_text(f"{VISA}\n", encoding="utf-8")
     (tmp_path / "b-good.txt").write_text(f"{VISA}\n", encoding="utf-8")
-    scanner, reporter, sink = build()
+    scanner, _, sink = build()
     real = scanner.process_file
 
     def process(path):
