@@ -14,7 +14,9 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+	"pylint>=3.3",
 	"pytest>=8.0.0",
+	"pytest-xdist>=3.6.1",
 ]
 
 [tool.pytest.ini_options]

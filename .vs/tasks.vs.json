@@ -5,10 +5,8 @@
       "taskLabel": "Pytest Regression Tests",
       "appliesTo": "*",
       "type": "launch",
-      "command": "uv",
+      "command": "${workspaceRoot}\\.venv\\Scripts\\python.exe",
       "args": [
-        "run",
-        "python",
         "bin/run-pytest-regression.py"
       ],
       "workingDirectory": "${workspaceRoot}"
