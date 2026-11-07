@@ -21,9 +21,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
-from find_pan.config import compile_regex_patterns, load_json_data  # noqa: E402
-from find_pan.detectors import scan_line  # noqa: E402
-from find_pan.models import MatchKind  # noqa: E402
+from find_pan.config import compile_regex_patterns, load_json_data  # noqa: E402  # pylint: disable=wrong-import-position
+from find_pan.detectors import scan_line  # noqa: E402  # pylint: disable=wrong-import-position
+from find_pan.models import MatchKind  # noqa: E402  # pylint: disable=wrong-import-position
 
 DEFAULT_PATTERNS = ROOT / "config" / "find-pan-regex.json"
 MAX_ATTEMPTS = 1000
@@ -108,4 +108,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

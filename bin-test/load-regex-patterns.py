@@ -11,7 +11,7 @@ def generate_regex_dict(data):
         pattern_dict: dict = {}
 
         # Iterate over each pattern name in the data
-        for pattern_name, patterns in json_data.items():
+        for pattern_name, patterns in data.items():
             print(f"Pattern name=[{pattern_name}]")
 
             # Skip patterns with less than 2 regexes
@@ -44,7 +44,7 @@ def generate_regex_dict(data):
 
         return pattern_dict
 
-    except Exception as e:
+    except (AttributeError, KeyError, TypeError, re.error) as e:
         print(f"Error: {e}")
         return None
 
@@ -59,7 +59,7 @@ if not json_file.endswith(".json"):
 try:
     with open(json_file, "r", encoding="utf-8", errors="replace") as f:
         json_data = json.load(f)
-except Exception as e:
+except (OSError, UnicodeError, json.JSONDecodeError) as e:
     print(f"main: Error reading JSON file: {e}")
 
 # Generate regex dictionary

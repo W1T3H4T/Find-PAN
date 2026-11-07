@@ -359,6 +359,8 @@ Baseline configurations use YAML only (`.yaml` or `.yml`); JSON configuration fi
 
 `--exclude-dir` is passed to find-pan but does not change baseline input tracking or relax the baseline-directory restriction.
 
+For `--create`, baseline options are consumed and other options are forwarded to find-pan. Put `--` before find-pan arguments to prevent baseline from interpreting any later options. Baseline normalizes input paths and supplies its own temporary `--csv`, `--summary-json`, and `--log-dir` values, which take precedence over forwarded values.
+
 Configuration stems and output filenames must be unique, including case-insensitive aliases and `.yaml`/`.yml` alternatives. Outputs must match their configuration stem. Creation refuses existing configurations unless `--force` explicitly regenerates that configuration and its CSV. `--force` never permits overwriting another configuration's output or an orphan CSV without a matching configuration. Publication is serialized, and failures restore the previous configuration and CSV. If an interrupted process leaves `RegressionTests/baseline/.publish.lock`, confirm no baseline creation is running before removing the stale lock.
 
 Validation compares rows independent of order, summary counts, skipped files, and input hashes. Text hashes normalize CRLF to LF. `--max-diff N` limits displayed differences. Missing extractor tools produce `SKIPPED (environment)` unless `--strict` is set.

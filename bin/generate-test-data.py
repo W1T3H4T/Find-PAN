@@ -46,9 +46,9 @@ from pathlib import Path
 BIN = Path(__file__).resolve().parent
 sys.path.insert(0, str(BIN.parent / "src"))
 
-from find_pan.config import compile_regex_patterns, load_json_data  # noqa: E402
-from find_pan.detectors import scan_line  # noqa: E402
-from find_pan.models import MatchKind  # noqa: E402
+from find_pan.config import compile_regex_patterns, load_json_data  # noqa: E402  # pylint: disable=wrong-import-position
+from find_pan.detectors import scan_line  # noqa: E402  # pylint: disable=wrong-import-position
+from find_pan.models import MatchKind  # noqa: E402  # pylint: disable=wrong-import-position
 
 DEFAULT_PATTERNS = BIN.parent / "config" / "find-pan-regex.json"
 KINDS = ("clean", "pan", "delimited", "track", "bad-luhn", "anti-pan")
@@ -126,10 +126,10 @@ def group(digits: str) -> list[str]:
     return parts
 
 
-class Maker:
+class Maker:  # pylint: disable=too-many-instance-attributes
     """Builds hits and files from the configured patterns."""
 
-    def __init__(self, patterns_path: Path, mix: dict[str, float], rng: random.Random, max_hits: int,
+    def __init__(self, patterns_path: Path, mix: dict[str, float], rng: random.Random, max_hits: int,  # pylint: disable=too-many-arguments
                  max_size: int, crlf: float, min_size: int = 0) -> None:
         self.pan_tool = load("generate-pan")
         self.invalid_tool = load("generate-invalid-pan")
@@ -292,7 +292,7 @@ def directory_for(index: int, per_dir: int, depth: int, total: int) -> Path:
     return Path(*[f"d{(number // fanout ** level) % fanout:03d}" for level in reversed(range(depth))]) if depth else Path()
 
 
-def generate(out: Path, files: int, maker: Maker, rng: random.Random, per_dir: int, depth: int,
+def generate(out: Path, files: int, maker: Maker, rng: random.Random, per_dir: int, depth: int,  # pylint: disable=too-many-arguments
              binary: float, archives: float, nest: float) -> tuple[Counts, list[dict]]:
     """Write *files* files under *out*; return the planted totals and the manifest entries."""
     totals, entries, pending = Counts(), [], []
@@ -327,7 +327,7 @@ def generate(out: Path, files: int, maker: Maker, rng: random.Random, per_dir: i
     return totals, entries
 
 
-def write_answers(answers: Path, totals: Counts, entries: list[dict], maker: Maker, seed: int, args) -> None:
+def write_answers(answers: Path, totals: Counts, entries: list[dict], maker: Maker, seed: int, args) -> None:  # pylint: disable=too-many-arguments
     answers.mkdir(parents=True, exist_ok=True)
     binary_files = sum(entry["kind"] == "binary" for entry in entries)
     expected = {**totals.as_dict()}

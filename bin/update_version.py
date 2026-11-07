@@ -127,6 +127,7 @@ def main(argv: list[str] | None = None) -> int:
     else:
         #   Should not happen because the mutually exclusive group is required.
         parser.error("No version action specified")
+        return 2
 
     write_pyproject_version(args.pyproject, new_version)
     version_file = args.version_file or args.pyproject.parent / "src" / "find_pan" / "version.py"

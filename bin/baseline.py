@@ -34,10 +34,10 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
-from find_pan.archives import select_candidate  # noqa: E402
-from find_pan.config import extractor_candidates, find_extractor_config_path, load_extractor_config  # noqa: E402
-from find_pan.filetypes import FileKind, classify_head  # noqa: E402
-from find_pan.version import __version__ as find_pan_version  # noqa: E402
+from find_pan.archives import select_candidate  # noqa: E402  # pylint: disable=wrong-import-position
+from find_pan.config import extractor_candidates, find_extractor_config_path, load_extractor_config  # noqa: E402  # pylint: disable=wrong-import-position
+from find_pan.filetypes import FileKind, classify_head  # noqa: E402  # pylint: disable=wrong-import-position
+from find_pan.version import __version__ as find_pan_version  # noqa: E402  # pylint: disable=wrong-import-position
 
 BASELINE_RELATIVE_ROOT = Path("RegressionTests") / "baseline"
 BASELINE_ROOT = REPO_ROOT / BASELINE_RELATIVE_ROOT
@@ -45,12 +45,8 @@ OUTPUT_DIRECTORY_NAME = "output"
 
 CSV_FIELDS = ["filename", "line_number", "offset", "pattern_name", "data_type", "matched_data"]
 
-#   find-pan switches that baseline.py controls itself.
-OWNED_SWITCHES = ("--csv", "--log-dir", "--summary-json", "--version", "--verbose", "--debug")
 #   find-pan switches whose values are paths and are stored repository-relative.
 _PATH_SWITCHES = ("--path", "--file", "--rgx-patterns")
-#   find-pan accepts unambiguous abbreviations of its switches; those two groups must be spelled out.
-_KNOWN_SWITCHES = OWNED_SWITCHES + _PATH_SWITCHES
 
 _NAME_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 _CONFIG_SUFFIXES = {".yaml", ".yml"}
@@ -190,18 +186,15 @@ def to_repo_relative(path: str, root: Path = REPO_ROOT, base: Path | None = None
 def rewrite_find_pan_args(args: Sequence[str], root: Path = REPO_ROOT) -> list[str]:
     """Return the find-pan arguments with every path rewritten repository-relative.
 
-    Raises ``BaselineError`` when an argument names a switch that baseline.py manages itself.
+    Other find-pan arguments are left unchanged.
     """
     rewritten: list[str] = []
     in_file_list = False
     pending_path_value = False
     for arg in args:
-        owned = next((s for s in OWNED_SWITCHES if arg == s or arg.startswith(s + "=")), None)
-        if owned:
-            raise BaselineError(f"{owned} is managed by baseline.py and cannot be passed to find-pan")
         switch_name = arg.partition("=")[0]
-        if (arg.startswith("--") and len(switch_name) > 2 and switch_name not in _KNOWN_SWITCHES
-                and any(known.startswith(switch_name) for known in _KNOWN_SWITCHES)):
+        if (arg.startswith("--") and len(switch_name) > 2 and switch_name not in _PATH_SWITCHES
+                and any(known.startswith(switch_name) for known in _PATH_SWITCHES)):
             raise BaselineError(f"{switch_name}: abbreviated switch; use the full switch name")
         if pending_path_value:
             rewritten.append(to_repo_relative(arg, root))
@@ -529,7 +522,7 @@ def _publish_file_baseline(config_path: Path, document: dict, rows: Iterable[Seq
         shutil.rmtree(staging, ignore_errors=True)
 
 
-def create(name: str, description: str, find_pan_args: Sequence[str], force: bool = False,
+def create(name: str, description: str, find_pan_args: Sequence[str], force: bool = False,  # pylint: disable=too-many-arguments
            root: Path = REPO_ROOT, baseline_root: Path = BASELINE_ROOT) -> Path:
     """Create a configuration and its CSV after a complete scan."""
     baseline_name, config_path = _baseline_config_path(name, root, baseline_root)
@@ -593,7 +586,7 @@ def _limited(prefix: str, rows: list, max_diff: int, label: str) -> list[str]:
     return lines
 
 
-def validate(name: str, strict: bool = False, max_diff: int = 50,
+def validate(name: str, strict: bool = False, max_diff: int = 50,  # pylint: disable=too-many-return-statements
              root: Path = REPO_ROOT, baseline_root: Path = BASELINE_ROOT) -> Outcome:
     """Re-run find-pan exactly as recorded for baseline *name* and compare with the stored results."""
     try:
@@ -718,11 +711,17 @@ def format_totals(outcomes: Sequence[Outcome]) -> str:
 def main(argv: Sequence[str] | None = None, root: Path = REPO_ROOT, baseline_root: Path = BASELINE_ROOT) -> int:
     """Run the tool; return the exit status (0 ok, 1 differences, 2 usage or environment error)."""
     parser = build_parser()
+    arguments = list(sys.argv[1:] if argv is None else argv)
+    if "--" in arguments:
+        separator = arguments.index("--")
+        baseline_args, forwarded = arguments[:separator], arguments[separator + 1:]
+    else:
+        baseline_args, forwarded = arguments, []
     try:
-        args, rest = parser.parse_known_args(argv)
+        args, rest = parser.parse_known_args(baseline_args)
     except SystemExit as exit_request:
         return int(exit_request.code or 0)
-    rest = [item for item in rest if item != "--"]
+    rest.extend(forwarded)
 
     try:
         if args.create is not None and args.validate is None:

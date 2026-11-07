@@ -55,6 +55,7 @@ def luhn_check_digit(prefix: str) -> str:
 
 def generate_from_tokens(tokens: Iterable, rng: random.Random) -> str:
     """Generate a numeric candidate from a parsed Python regular expression."""
+    # pylint: disable=no-member  # opcode constants are not visible to static analysis
     value = []
 
     for token, data in tokens:
@@ -230,7 +231,7 @@ def filler(rng: random.Random) -> str:
     return " ".join(words) + rng.choice(("", "", ".", ",", "?"))
 
 
-def generate_random_text(
+def generate_random_text(  # pylint: disable=too-many-arguments
     pan_patterns: dict[str, dict],
     track_regexes: list[re.Pattern],
     anti_pans: list[re.Pattern],
@@ -329,7 +330,7 @@ def parse_arguments(arguments: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(arguments)
 
 
-def main(arguments: list[str] | None = None) -> int:
+def main(arguments: list[str] | None = None) -> int:  # pylint: disable=too-many-return-statements,too-many-statements
     """Run the PAN generator application."""
     args = parse_arguments(arguments)
 
