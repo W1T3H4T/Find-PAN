@@ -1,12 +1,12 @@
 name: RegressionTest-Data
 description: ''
-created: '2026-11-07T22:18:23Z'
+created: '2026-11-07T23:27:07Z'
 csv_file: RegressionTest-Data.csv
 find_pan:
-  version: 3.5.3
+  version: 3.6.1
   command:
   - --path
-  - .\RegressionTests\
+  - .\RegressionTests
   - --exclude-dir
   - baseline
   working_directory:

@@ -1,0 +1,15 @@
+name: DumpFile
+description: ''
+created: '2026-11-07T23:24:24Z'
+csv_file: DumpFile.csv
+find_pan:
+  version: 3.6.1
+  command:
+  - --file
+  - .\gvim.dmp.gz
+  - --raw-file
+  - '*.dmp'
+  working_directory:
+    relative_to_repo: RegressionTests
+python: 3.14.5
+platform: win32
