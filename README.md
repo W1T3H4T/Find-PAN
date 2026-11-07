@@ -1,6 +1,6 @@
 # Find-PAN
 
-Current version: **3.6.1**. See the [changelog](CHANGELOG.md) for release history.
+Current version: **3.6.2**. See the [changelog](CHANGELOG.md) for release history.
 
 Find Primary Account Numbers (PANs) and Track 1 / Track 2 data in files, directory trees, and nested archives. Find-PAN uses configurable regular expressions, anti-PAN filters, and Luhn validation, then writes findings to logs and optional CSV output.
 
@@ -119,7 +119,7 @@ uv run python bin/find-pan.py [--path PATH] [--file FILE [FILE ...]]
     [--exclude-dir PATTERN]...
     [--log-dir LOG_DIR] [--rgx-patterns RGX_PATTERNS] [--rgx-prefix]
     [--skip-binary] [--line-limit LINE_LIMIT] [--report-delta REPORT_DELTA]
-    [--csv CSV] [--summary-json PATH] [--raw] [--raw-encodings LIST]
+    [--csv CSV] [--summary-json PATH] [--raw] [--raw-file PATTERN]... [--raw-encodings LIST]
     [--pan-list FILE] [--track-list FILE] [--log-anti-pan]
     [--verbose] [--debug] [--mask] [--version]
 ```
@@ -139,7 +139,8 @@ uv run python bin/find-pan.py [--path PATH] [--file FILE [FILE ...]]
 | `--csv FILE`              | Write PAN and TRACK findings to a CSV file. Replaces existing contents. |
 | `--summary-json FILE`     | Write counts, timings, skipped files, and exit status to JSON. Replaces existing contents. |
 | `--raw`                   | Scan every file as raw bytes (memory dumps, disk images): no line splitting, binary skipping or archive expansion. Matches are reported by byte offset. See [Raw scans and expected values](#raw-scans-and-expected-values). Default off. |
-| `--raw-encodings LIST`    | With `--raw`: comma-separated text encodings to look for, from `ascii` and `utf-16` (both byte orders). Default `ascii,utf-16`. |
+| `--raw-file PATTERN`      | Scan files whose names match this case-sensitive shell-style glob as raw bytes, including files inside expanded archives. Repeat for multiple patterns. Other files use normal classification and archive expansion. Quote patterns to prevent shell expansion. |
+| `--raw-encodings LIST`    | With `--raw` or `--raw-file`: comma-separated text encodings to look for, from `ascii` and `utf-16` (both byte orders). Default `ascii,utf-16`. |
 | `--pan-list FILE`         | Report only the PANs listed in FILE (one per line; spaces and hyphens allowed). A report filter on what the configured patterns found, never a source of PANs; the summary lists each value as found (how often, and where first) or not found. Works with or without `--raw`. |
 | `--track-list FILE`       | Report only the track 1 or track 2 strings listed in FILE, one per line; works like `--pan-list`. |
 | `--log-anti-pan`          | Write anti-PAN hits to their own log and include its path and entry count in the console summary. Default off. |
@@ -184,7 +185,7 @@ CSV uses this header:
 filename,line_number,offset,pattern_name,data_type,matched_data
 ```
 
-`filename` is the base name, not the complete path. `data_type` is `PAN` or `TRACK`. Non-ASCII characters in CSV text fields are replaced with `?`, and a field that starts with `=`, `+`, `-` or `@` (a file name can) gets a leading `'` so a spreadsheet shows it as text instead of running it as a formula. Line numbers start at 1; offsets start at 0 and count decoded characters, not bytes. With `--raw`, `line_number` is `0` and `offset` is the absolute byte offset in the file.
+`filename` is the base name, not the complete path. `data_type` is `PAN` or `TRACK`. Non-ASCII characters in CSV text fields are replaced with `?`, and a field that starts with `=`, `+`, `-` or `@` (a file name can) gets a leading `'` so a spreadsheet shows it as text instead of running it as a formula. Line numbers start at 1; offsets start at 0 and count decoded characters, not bytes. For raw-scanned files, `line_number` is `0` and `offset` is the absolute byte offset in the file.
 
 JSON contains `pans`, `tracks`, `bad_luhn`, `anti_pans`, `files_scanned`, `archives_expanded`, `archives_skipped`, `skipped`, `total_time`, `average_time`, and `exit_status`; with `--pan-list` or `--track-list` also `expected` (see [Raw scans and expected values](#raw-scans-and-expected-values)). Each `skipped` entry is `[reason, path]`; detailed reasons remain in the trace log. Skipped archive members use stable paths such as `backup.zip!/nested/file.txt`, chained for nested archives. Finding logs use extraction paths, and CSV uses base names.
 
@@ -263,11 +264,19 @@ Find-PAN scans files, not live memory. To inspect memory, dump it with a tool bu
 uv run python bin/find-pan.py --file memory.dmp --raw --csv hits.csv --mask
 ```
 
-`--raw` treats each file as an opaque byte stream. It reads the file in 8 MiB chunks with 512 bytes of overlap, so a PAN or track record on a chunk boundary is found once, whole. Within each chunk, every byte (or UTF-16 two-byte unit) that is not printable ASCII acts as a line break, and the ordinary detectors (patterns, Luhn check, anti-PAN filters), `--mask`, and all outputs apply to what remains.
+To scan dumps inside archives, select their names instead of using `--raw`:
+
+```console
+uv run python bin/find-pan.py --file evidence.zip --raw-file "*.dmp" --raw-file "*.mem" --csv hits.csv --mask
+```
+
+`--raw-file` matches each file's basename, including members at any archive depth, not the full path. Matching is case-sensitive: add `--raw-file "*.DMP"` if needed. A matching file is always scanned as raw bytes even with `--skip-binary`; it will not be expanded if it is itself an archive. Nonmatching files are classified normally, so archives such as `evidence.zip` are expanded before their members are checked. Find-PAN does not automatically identify memory dumps by content.
+
+Raw scanning treats selected files as opaque byte streams. It reads each file in 8 MiB chunks with 512 bytes of overlap, so a PAN or track record on a chunk boundary is found once, whole. Within each chunk, every byte (or UTF-16 two-byte unit) that is not printable ASCII acts as a line break, and the ordinary detectors (patterns, Luhn check, anti-PAN filters), `--mask`, and all outputs apply to what remains.
 
 - **Encodings.** ASCII text and UTF-16 text (little- and big-endian, at any byte alignment) are read; `--raw-encodings ascii` restricts the scan to ASCII. Each encoding reports only what it can read, so nothing is counted twice. Other encodings, packed BCD, encrypted values and tokens are not found.
 - **Locations.** CSV `line_number` is `0` and `offset` is the absolute byte offset; `--verbose` shows `Location: byte 4107 (0x100B, ascii)`. The log's source text is a short context window around the match.
-- **What `--raw` skips.** Binary and executable classification, `--skip-binary`, `--line-limit`, and archive expansion do not apply: archives are scanned as bytes, so compressed content is not seen. Expand them first if you need their contents.
+- **What raw scanning skips.** Binary and executable classification, `--skip-binary`, `--line-limit`, and archive expansion do not apply to a raw-selected file. `--raw` selects every file, including archives, so use `--raw-file` to expand an archive and select its members instead.
 - **Expect more false positives.** Random digit runs pass the Luhn check about one time in ten; the anti-PAN filters matter more here. A PAN split across non-contiguous pages, or interrupted by a non-printable byte, is not found.
 - **Handle the dump as cardholder data.** A memory dump holds every PAN in memory in clear text. Protect it and delete it securely when finished.
 

@@ -60,7 +60,7 @@ class Scanner:
         self._load_extractors = load_extractors
         self._extractors: dict | None = None
         self._load_limits = load_limits
-        self._raw = RawScanner(patterns, reporter, settings.raw_encodings) if settings.raw else None
+        self._raw = RawScanner(patterns, reporter, settings.raw_encodings) if settings.raw or settings.raw_files else None
         self._limits: ExtractionLimits | None = None
         #   Content digests of the archives currently being expanded (outermost first).
         self._expanding: list[str] = []
@@ -90,7 +90,8 @@ class Scanner:
         """Classify *file_path* by content and skip, expand or scan it."""
         if not os.path.isfile(file_path):
             return
-        if self._raw is not None:
+        if self.settings.raw or any(fnmatchcase(os.path.basename(file_path), pattern)
+                                    for pattern in self.settings.raw_files):
             self._scan_raw(file_path)
             return
         try:
@@ -169,7 +170,7 @@ class Scanner:
                 self.reporter.file_started()
                 limit = self.settings.line_limit
                 for line_number, line in enumerate(handle, 1):
-                    if limit > 0 and line_number > limit:
+                    if 0 < limit < line_number:
                         break
                     matches = scan_line(file_path, line_number, line, self.patterns)
                     for match in matches:

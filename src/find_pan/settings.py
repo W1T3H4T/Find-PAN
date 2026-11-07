@@ -26,6 +26,7 @@ class Settings:
     log_anti_pan: bool = False
     summary_json: str | None = None
     raw: bool = False
+    raw_files: tuple[str, ...] = ()
     raw_encodings: tuple[str, ...] = ("ascii", "utf-16")
     pan_list: str | None = None
     track_list: str | None = None

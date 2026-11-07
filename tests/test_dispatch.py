@@ -103,6 +103,22 @@ def test_nested_archives_expand_through_the_same_processor(build, tmp_path, monk
     assert reporter.stats.archives_expanded == 2
 
 
+def test_raw_file_patterns_apply_through_nested_archives(build, tmp_path, monkeypatch):
+    outer = zip_stub(tmp_path / "outer.zip")
+    middle = folder_with(tmp_path, "middle")
+    (middle / "inner.zip").write_bytes(ZIP_MAGIC + b"inner")
+    deepest = folder_with(tmp_path, "deepest", **{"notes.txt": f"card {SECOND_PAN}\n"})
+    (deepest / "memory.mem").write_bytes(b"\xff" * 40 + b" " + VALID_PAN.encode() + b" " + b"\xff" * 40)
+    fake_extractor(monkeypatch, lambda path: middle if path.endswith("outer.zip") else deepest)
+    scanner, reporter, sink = build(load_extractors=lambda: {"zip": {}}, skip_binary=True,
+                                    raw_files=("*.dmp", "*.mem"), raw_encodings=("ascii",))
+    scanner.process_file(str(outer))
+    assert sorted(pans(sink)) == sorted([VALID_PAN, SECOND_PAN])
+    assert reporter.stats.archives_expanded == 2
+    raw_match = next(view for view in sink.views if view.pan == VALID_PAN)
+    assert raw_match.offset == 41 and "outer.zip!/inner.zip!/memory.mem" in raw_match.file_path
+
+
 def test_text_file_with_archive_extension_is_scanned_as_text(build, tmp_path, caplog):
     target = tmp_path / "notes.zip"
     target.write_text(f"card {VALID_PAN}\n", encoding="utf-8")

@@ -40,6 +40,7 @@ def test_defaults_leave_raw_mode_and_lists_off():
     settings = cli.parse_args(["--path", "p"])
     assert not settings.raw and settings.pan_list is None and settings.track_list is None
     assert settings.raw_encodings == ("ascii", "utf-16")
+    assert settings.raw_files == ()
 
 
 def test_the_options_are_parsed():
@@ -47,6 +48,11 @@ def test_the_options_are_parsed():
                                "--pan-list", "p.txt", "--track-list", "t.txt"])
     assert settings.raw and settings.raw_encodings == ("ascii",)
     assert (settings.pan_list, settings.track_list) == ("p.txt", "t.txt")
+
+
+def test_raw_file_accepts_repeated_patterns():
+    settings = cli.parse_args(["--file", "bundle.zip", "--raw-file", "*.dmp", "--raw-file=*.mem"])
+    assert settings.raw_files == ("*.dmp", "*.mem") and not settings.raw
 
 
 def test_an_unknown_raw_encoding_is_a_usage_error(capsys):
@@ -80,6 +86,32 @@ def test_raw_does_not_expand_archives_it_scans_their_bytes(tmp_path, capsys):
     with zipfile.ZipFile(path, "w", zipfile.ZIP_STORED) as handle:
         handle.writestr("card.txt", f"card {PAN}\n")
     status, out, _ = run(tmp_path, capsys, "--file", str(path), "--raw")
+    assert status == 0 and "PANs Matched  :        1" in out and "Archives expanded" not in out
+
+
+def test_raw_file_scans_matching_zip_members_and_normal_text(tmp_path, capsys, monkeypatch, zip_extractor_config):
+    path = tmp_path / "bundle.zip"
+    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as handle:
+        handle.writestr("nested/memory.dmp", FF * 40 + b" " + PAN.encode() + b" " + FF * 40)
+        handle.writestr("nested/notes.txt", f"card {OTHER}\n")
+        handle.writestr("nested/ignore.DMP", FF * 40 + b" " + ABSENT.encode() + b" " + FF * 40)
+    monkeypatch.setattr(cli, "find_extractor_config_path", lambda: "unused")
+    monkeypatch.setattr(cli, "load_extractor_config", lambda _: zip_extractor_config)
+    csv_path = tmp_path / "out.csv"
+    status, out, _ = run(tmp_path, capsys, "--file", str(path), "--raw-file", "*.dmp", "--skip-binary",
+                         "--raw-encodings", "ascii", "--csv", str(csv_path))
+    assert status == 0 and "Archives expanded: 1" in out
+    with csv_path.open(encoding="utf-8", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    assert {(row["filename"], row["matched_data"], row["line_number"], row["offset"]) for row in rows} == {
+        ("memory.dmp", PAN, "0", "41"), ("notes.txt", OTHER, "1", "5")}
+
+
+def test_raw_file_matching_an_archive_scans_its_bytes_without_expansion(tmp_path, capsys):
+    path = tmp_path / "stored.zip"
+    with zipfile.ZipFile(path, "w", zipfile.ZIP_STORED) as handle:
+        handle.writestr("card.txt", f"card {PAN}\n")
+    status, out, _ = run(tmp_path, capsys, "--file", str(path), "--raw-file", "*.zip")
     assert status == 0 and "PANs Matched  :        1" in out and "Archives expanded" not in out
 
 

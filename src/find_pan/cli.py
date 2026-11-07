@@ -114,8 +114,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument( "--raw", default=False, action="store_true",
                         help="Scan every file as raw bytes (memory dumps, disk images): no line splitting, no binary "
                         "skipping, no archive expansion. Matches are reported by byte offset.")
+    parser.add_argument( "--raw-file", action="append", default=[], metavar="PATTERN",
+                        help="Scan files whose names match this case-sensitive shell-style glob as raw bytes. "
+                        "Repeat for multiple patterns; applies inside expanded archives too.")
     parser.add_argument( "--raw-encodings", type=_raw_encodings, default=",".join(DEFAULT_RAW_ENCODINGS), metavar="LIST",
-                        help=f"With --raw: comma-separated encodings to read text as ({', '.join(RAW_ENCODINGS)}). "
+                        help=f"With --raw or --raw-file: comma-separated encodings to read text as ({', '.join(RAW_ENCODINGS)}). "
                         "utf-16 covers both byte orders.")
     parser.add_argument( "--pan-list", metavar="FILE", default=None,
                         help="Report only the PANs listed in FILE (one per line; spaces and hyphens allowed). A filter on what the patterns "
@@ -153,6 +156,7 @@ def _settings_from(namespace: argparse.Namespace) -> Settings:
         log_anti_pan=namespace.log_anti_pan,
         summary_json=namespace.summary_json,
         raw=namespace.raw,
+        raw_files=tuple(namespace.raw_file),
         raw_encodings=tuple(namespace.raw_encodings.split(",")),
         pan_list=namespace.pan_list,
         track_list=namespace.track_list,

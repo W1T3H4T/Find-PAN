@@ -2,6 +2,11 @@
 
 Release history is reconstructed from the [GitHub release for v3.5.3](https://github.com/W1T3H4T/Find-PAN/releases/tag/v3.5.3), the repository's published tags, and version-related commits. Versions without published tags are historical version milestones, not necessarily GitHub releases. Dates reflect the relevant commit or published release date; this is a concise reconstruction rather than an exhaustive history.
 
+## 3.6.2
+
+- Add repeatable `--raw-file` filename patterns to raw-scan selected files, including extracted archive members, while expanding other archives normally.
+- Document raw-file matching, encoding selection and archive behavior; add regression tests.
+
 ## 3.6.1 — documentation update
 
 - Add a supporting-scripts guide and a reconstructed changelog.

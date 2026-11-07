@@ -1,6 +1,6 @@
 # Find-PAN supporting scripts
 
-These scripts support Find-PAN 3.6.1. Run the examples from the repository root after following the [installation instructions](../README.md#installation). Python scripts use the project-root `.venv`; `uv run python` is shown below. See each script's `--help` for its complete options. Generated fixtures may contain synthetic PANs and track data; scanner logs and CSVs may contain sensitive data unless masking is enabled.
+These scripts support Find-PAN 3.6.2. Run the examples from the repository root after following the [installation instructions](../README.md#installation). Python scripts use the project-root `.venv`; `uv run python` is shown below. See each script's `--help` for its complete options. Generated fixtures may contain synthetic PANs and track data; scanner logs and CSVs may contain sensitive data unless masking is enabled.
 
 ## Launch and setup
 
@@ -13,6 +13,7 @@ These scripts support Find-PAN 3.6.1. Run the examples from the repository root 
 ```console
 uv run python bin/find-pan.py --version
 uv run python bin/find-pan.py --file RegressionTests/VISA.txt --mask
+uv run python bin/find-pan.py --file evidence.zip --raw-file "*.dmp" --mask
 ```
 
 ## Regression baselines and tests
