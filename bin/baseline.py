@@ -26,6 +26,7 @@ import tempfile
 from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from fnmatch import fnmatchcase
 from pathlib import Path
 from typing import Iterable, Sequence
 
@@ -35,6 +36,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
 from find_pan.archives import select_candidate  # noqa: E402  # pylint: disable=wrong-import-position
+from find_pan.cli import build_parser as build_find_pan_parser  # noqa: E402  # pylint: disable=wrong-import-position
 from find_pan.config import extractor_candidates, find_extractor_config_path, load_extractor_config  # noqa: E402  # pylint: disable=wrong-import-position
 from find_pan.filetypes import FileKind, classify_head  # noqa: E402  # pylint: disable=wrong-import-position
 from find_pan.version import __version__ as find_pan_version  # noqa: E402  # pylint: disable=wrong-import-position
@@ -257,6 +259,11 @@ def enumerate_inputs(args: Sequence[str], root: Path = REPO_ROOT, baseline_root:
     ``--path`` directory are not listed; archives are listed once (their members are not).
     """
     directories, files = _path_values(args)
+    try:
+        options, _ = build_find_pan_parser().parse_known_args(args)
+    except SystemExit as error:
+        raise BaselineError("invalid find-pan arguments") from error
+    exclude_dirs = options.exclude_dir
     if len(directories) > 1:
         raise BaselineError("only one --path is allowed (find-pan scans only the last one)")
     found: set[str] = set()
@@ -267,11 +274,18 @@ def enumerate_inputs(args: Sequence[str], root: Path = REPO_ROOT, baseline_root:
         base = (root / relative).resolve()
         if not base.is_dir():
             raise BaselineError(f"{directory}: --path must be a directory")
-        #   Refused even when the baseline directory does not exist yet: the first baseline created
-        #   would put its own output inside the scanned tree and every later validate would fail.
-        if base == baseline_dir or baseline_dir in base.parents or base in baseline_dir.parents:
+        if base == baseline_dir or baseline_dir in base.parents:
             raise BaselineError(f"{directory}: inputs must not include the baseline directory itself")
-        for current, _, names in os.walk(base):
+        if base in baseline_dir.parents and not any(
+            fnmatchcase(part, pattern)
+            for part in baseline_dir.relative_to(base).parts
+            for pattern in exclude_dirs
+        ):
+            raise BaselineError(f"{directory}: inputs must not include the baseline directory itself; "
+                                f"use --exclude-dir {baseline_dir.name} (a directory-name pattern)")
+        for current, subdirs, names in os.walk(base):
+            subdirs[:] = [name for name in subdirs
+                          if not any(fnmatchcase(name, pattern) for pattern in exclude_dirs)]
             for name in names:
                 full = Path(current) / name
                 if full.is_symlink() or not full.is_file():
@@ -319,10 +333,11 @@ def canonical_rows(rows: Iterable[Sequence[str]]) -> list[tuple[str, ...]]:
 
 
 def read_rows(path: Path) -> list[tuple[str, ...]]:
-    """Read a find-pan style CSV (header skipped) into canonical order."""
+    """Read a find-pan CSV into canonical order, validating its header and rows."""
     with open(path, newline="", encoding="utf-8") as handle:
-        reader = csv.reader(handle)
-        next(reader, None)
+        reader = csv.reader(handle, strict=True)
+        if next(reader, None) != CSV_FIELDS:
+            raise BaselineError(f"{path}: invalid CSV header")
         rows = [tuple(row) for row in reader if row]
     for row in rows:
         if len(row) != len(CSV_FIELDS):
@@ -400,8 +415,8 @@ class RunResult:
     stderr: str
 
 
-def run_find_pan(args: Sequence[str], root: Path = REPO_ROOT) -> RunResult:
-    """Run ``bin/find-pan.py`` (as a subprocess, in *root*) and collect its CSV and summary.
+def run_find_pan(args: Sequence[str], root: Path = REPO_ROOT, cwd: Path | None = None) -> RunResult:
+    """Run ``bin/find-pan.py`` and collect its CSV and summary.
 
     Exit statuses 0 and 1 are results (1 means a requested file was never scanned); anything
     else, or missing output, raises ``BaselineError`` with find-pan's stderr.
@@ -412,7 +427,7 @@ def run_find_pan(args: Sequence[str], root: Path = REPO_ROOT) -> RunResult:
         command = [sys.executable, str(root / "bin" / "find-pan.py"), *args,
                    "--csv", str(csv_path), "--log-dir", str(Path(scratch) / "logs"),
                    "--summary-json", str(json_path)]
-        completed = subprocess.run(command, cwd=root, capture_output=True, text=True,
+        completed = subprocess.run(command, cwd=cwd or root, capture_output=True, text=True,
                                    encoding="utf-8", errors="replace", check=False)
         if completed.returncode not in (0, 1) or not csv_path.exists() or not json_path.exists():
             detail = (completed.stderr or completed.stdout).strip()[-1500:]
@@ -527,20 +542,14 @@ def create(name: str, description: str, find_pan_args: Sequence[str], force: boo
     """Create a configuration and its CSV after a complete scan."""
     baseline_name, config_path = _baseline_config_path(name, root, baseline_root)
     _check_collisions(config_path, _csv_path(config_path, {}), force)
-    if not _has_input(find_pan_args):
-        raise BaselineError("give the files to scan with --path or --file")
-
-    args = rewrite_find_pan_args(find_pan_args, root)
-    manifest = inputs_manifest(args, root, baseline_root)
-    if not manifest:
-        raise BaselineError("no files were found in the requested inputs")
-    tools = required_tools([entry["path"] for entry in manifest], root)
-    absent = [tool for tool in tools if shutil.which(tool) is None]
-    if absent:
-        raise BaselineError(f"install {', '.join(absent)} first: expanding these inputs needs it")
-    result = run_find_pan(args, root)
-    skipped = [f"[{reason}] {path}" for reason, path in result.summary.get("skipped", [])
-               ]
+    args = list(find_pan_args)
+    cwd = Path.cwd().resolve()
+    try:
+        working_directory = {"relative_to_repo": cwd.relative_to(root.resolve()).as_posix()}
+    except ValueError:
+        working_directory = {"absolute": str(cwd)}
+    result = run_find_pan(args, root, cwd)
+    skipped = [f"[{reason}] {path}" for reason, path in result.summary.get("skipped", [])]
     if result.status != 0 or skipped or result.summary.get("archives_skipped"):
         raise BaselineError("find-pan did not scan everything, so nothing was recorded: "
                             + ("; ".join(skipped) or result.stderr.strip()[-1500:]
@@ -551,13 +560,9 @@ def create(name: str, description: str, find_pan_args: Sequence[str], force: boo
         "description": description,
         "created": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "csv_file": f"{baseline_name}.csv",
-        "find_pan": {"version": find_pan_version, "command": list(args)},
+        "find_pan": {"version": find_pan_version, "command": list(args), "working_directory": working_directory},
         "python": platform.python_version(),
         "platform": sys.platform,
-        "requires_tools": tools,
-        "inputs": manifest,
-        "summary": {key: value for key, value in result.summary.items()
-                    if key in (*_SUMMARY_FIELDS, "skipped", "exit_status")},
     }
     _write_file_baseline(config_path, document, result.rows, force)
     return config_path
@@ -589,6 +594,7 @@ def _limited(prefix: str, rows: list, max_diff: int, label: str) -> list[str]:
 def validate(name: str, strict: bool = False, max_diff: int = 50,  # pylint: disable=too-many-return-statements
              root: Path = REPO_ROOT, baseline_root: Path = BASELINE_ROOT) -> Outcome:
     """Re-run find-pan exactly as recorded for baseline *name* and compare with the stored results."""
+    _ = strict  # Retained for compatibility; incomplete scans are always errors.
     try:
         baseline_name, config_path = _baseline_config_path(name, root, baseline_root)
         if not config_path.is_file():
@@ -605,20 +611,18 @@ def validate(name: str, strict: bool = False, max_diff: int = 50,  # pylint: dis
         if not csv_path.is_file():
             return _error(name, f"baseline output CSV is missing: {csv_path}")
 
-        required = document.get("requires_tools", [])
-        extractors = load_extractor_config(find_extractor_config_path()) if required else {}
-        missing_tools = [tool for tool in required if not tool_available(tool, extractors)]
-        if missing_tools:
-            return Outcome(name, "SKIPPED (environment)",
-                           [f"required extractor not installed: {', '.join(missing_tools)}"], 1 if strict else 0)
-
         command = list(document["find_pan"]["command"])
-        current_inputs = inputs_manifest(command, root, baseline_root)
-        result = run_find_pan(command, root)
-
-        input_messages = diff_inputs(document.get("inputs", []), current_inputs)
+        working_directory = document["find_pan"].get("working_directory")
+        if working_directory is None:
+            cwd = root
+        elif "relative_to_repo" in working_directory:
+            cwd = root / working_directory["relative_to_repo"]
+        else:
+            cwd = Path(working_directory["absolute"])
+        result = run_find_pan(command, root, cwd)
+        if result.status != 0 or result.summary.get("skipped") or result.summary.get("archives_skipped"):
+            return _error(name, "find-pan did not complete the requested scan: " + result.stderr.strip())
         missing, extra = diff_rows(read_rows(csv_path), result.rows)
-        summary_messages = diff_summary(document.get("summary", {}), result.summary)
     except BaselineError as error:
         return _error(name, str(error))
     except Exception as error:  # pylint: disable=broad-exception-caught
@@ -626,23 +630,15 @@ def validate(name: str, strict: bool = False, max_diff: int = 50,  # pylint: dis
         #   never an uncaught traceback with status 1 ("differs") that stops --all.
         return _error(name, f"could not validate: {type(error).__name__}: {error}")
 
-    output_differs = bool(missing or extra or summary_messages)
-    if not input_messages and not output_differs:
+    if not missing and not extra:
         return Outcome(name, "PASS", [], 0)
 
-    lines = list(input_messages)
+    lines = []
     if missing:
         lines += _limited("missing", missing, max_diff, "missing")
     if extra:
         lines += _limited("extra", extra, max_diff, "extra")
-    lines += summary_messages
-    if input_messages and output_differs:
-        verdict = "FAIL (inputs changed, output differs)"
-    elif input_messages:
-        verdict = "FAIL (inputs changed)"
-    else:
-        verdict = "FAIL (output differs)"
-    return Outcome(name, verdict, lines, 1)
+    return Outcome(name, "FAIL (output differs)", lines, 1)
 
 
 # ===========================================================================
@@ -666,11 +662,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--create", metavar="CONFIG", help=f"Create a YAML configuration in {BASELINE_RELATIVE_ROOT.as_posix()}/ (or supply a NAME).")
     parser.add_argument("--validate", metavar="CONFIG", nargs="?", const="",
                         help="Re-run find-pan and compare with a YAML config or NAME (or every baseline with --all).")
+    parser.add_argument("--list", action="store_true", help="List available baseline names.")
     parser.add_argument("--all", action="store_true", help="With --validate: check every baseline.")
     parser.add_argument("--description", default="", help="With --create: what the baseline covers.")
     parser.add_argument("--force", action="store_true", help="With --create: regenerate an existing configuration and its output.")
     parser.add_argument("--strict", action="store_true",
-                        help="With --validate: treat baselines skipped for a missing extractor as failures.")
+                        help="Retained for compatibility; incomplete scans are always errors.")
     parser.add_argument("--max-diff", type=_positive_int, default=50, metavar="N",
                         help="With --validate: maximum differing rows to print per baseline.")
     return parser
@@ -724,12 +721,18 @@ def main(argv: Sequence[str] | None = None, root: Path = REPO_ROOT, baseline_roo
     rest.extend(forwarded)
 
     try:
+        if args.list:
+            if args.create is not None or args.validate is not None or args.all or rest:
+                raise BaselineError("--list cannot be combined with other actions or scanner arguments")
+            names = _all_names(baseline_root)
+            print("\n".join(names) if names else "No baselines found.")
+            return 0
+
         if args.create is not None and args.validate is None:
             if args.all:
                 raise BaselineError("--all only applies to --validate")
             target = create(args.create, args.description, rest, args.force, root, baseline_root)
-            document = _load_baseline_document(target)
-            print(f"Confirmed all {len(document.get('inputs', []))} requested input file(s) were scanned successfully.")
+            print("Confirmed find-pan completed successfully.")
             print(f"created baseline {args.create}: {target}")
             return 0
 
@@ -752,7 +755,7 @@ def main(argv: Sequence[str] | None = None, root: Path = REPO_ROOT, baseline_roo
             statuses = {o.status for o in outcomes}
             return 1 if 1 in statuses else (2 if 2 in statuses else 0)
 
-        raise BaselineError("give exactly one of --create NAME or --validate [NAME | --all]")
+        raise BaselineError("give exactly one of --create NAME, --validate [NAME | --all], or --list")
     except (BaselineError, OSError) as error:
         print(f"Error: {error}", file=sys.stderr)
         return 2

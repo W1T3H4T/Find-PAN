@@ -77,11 +77,48 @@ def test_create_then_validate_passes(repo, bl_root):
     data = yaml.safe_load(target.read_text(encoding="utf-8"))
     assert data["name"] == "plain" and data["description"] == "test baseline"
     assert data["find_pan"]["command"][0] == "--file"
-    assert data["find_pan"]["command"][1:] == [f"RegressionTests/{n}" for n in FIXTURES]
-    assert [entry["path"] for entry in data["inputs"]] == sorted(f"RegressionTests/{n}" for n in FIXTURES)
-    assert data["summary"]["pans"] > 0 and data["requires_tools"] == []
+    assert data["find_pan"]["command"] == files_args(repo)
+    assert "inputs" not in data and "summary" not in data
     outcome = validate(repo, bl_root, "plain")
     assert outcome.verdict == "PASS" and outcome.status == 0
+
+
+def test_relative_arguments_replay_from_original_working_directory(repo, bl_root, monkeypatch):
+    monkeypatch.chdir(repo / "RegressionTests")
+    target = create(repo, bl_root, "relative", "--file", "VISA.txt")
+    document = yaml.safe_load(target.read_text(encoding="utf-8"))
+    assert document["find_pan"]["command"] == ["--file", "VISA.txt"]
+    assert document["find_pan"]["working_directory"] == {"relative_to_repo": "RegressionTests"}
+    monkeypatch.chdir(repo)
+    assert validate(repo, bl_root, "relative").verdict == "PASS"
+
+
+def test_relative_arguments_outside_repo_replay_from_original_working_directory(repo, bl_root, tmp_path, monkeypatch):
+    (tmp_path / "outside.txt").write_text(f"{PAN}\n", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    target = create(repo, bl_root, "outside", "--file", "outside.txt")
+    document = yaml.safe_load(target.read_text(encoding="utf-8"))
+    assert document["find_pan"]["working_directory"] == {"absolute": str(tmp_path.resolve())}
+    monkeypatch.chdir(repo)
+    assert validate(repo, bl_root, "outside").verdict == "PASS"
+
+
+def test_validation_scans_to_separate_temporary_csv(repo, bl_root, monkeypatch):
+    create(repo, bl_root)
+    saved_csv = bl_root / "output" / "plain.csv"
+    original = saved_csv.read_bytes()
+    real_run = baseline.subprocess.run
+    csv_paths = []
+
+    def capture_run(command, **kwargs):
+        csv_paths.append(Path(command[command.index("--csv") + 1]))
+        return real_run(command, **kwargs)
+
+    monkeypatch.setattr(baseline.subprocess, "run", capture_run)
+    assert validate(repo, bl_root, "plain").verdict == "PASS"
+    assert len(csv_paths) == 1 and csv_paths[0] != saved_csv
+    assert not csv_paths[0].exists()
+    assert saved_csv.read_bytes() == original
 
 
 def test_exclude_dir_is_passed_through_to_find_pan(repo, bl_root):
@@ -91,9 +128,7 @@ def test_exclude_dir_is_passed_through_to_find_pan(repo, bl_root):
     (directory / "included.txt").write_text(f"{PAN}\n", encoding="utf-8")
     target = create(repo, bl_root, "excluded", "--path", str(directory), "--exclude-dir", "cache-*")
     document = yaml.safe_load(target.read_text(encoding="utf-8"))
-    assert document["find_pan"]["command"] == ["--path", "RegressionTests/nested", "--exclude-dir", "cache-*"]
-    assert document["summary"]["files_scanned"] == 1
-    assert [entry["path"] for entry in document["inputs"]] == ["RegressionTests/nested/included.txt"]
+    assert document["find_pan"]["command"] == ["--path", str(directory), "--exclude-dir", "cache-*"]
     (directory / "cache-data" / "ignored.txt").write_text("changed\n", encoding="utf-8")
     assert validate(repo, bl_root, "excluded").verdict == "PASS"
 
@@ -102,9 +137,7 @@ def test_scan_regression_root_excludes_baseline_artifacts(repo, bl_root):
     assert run_main(repo, bl_root, "--create", "regression", "--path", str(repo / "RegressionTests"),
                     "--exclude-dir", "baseline") == 0
     document = yaml.safe_load((bl_root / "regression.yaml").read_text(encoding="utf-8"))
-    assert document["find_pan"]["command"] == ["--path", "RegressionTests", "--exclude-dir", "baseline"]
-    assert len(document["inputs"]) == len(FIXTURES)
-    assert document["summary"]["files_scanned"] == len(FIXTURES)
+    assert document["find_pan"]["command"] == ["--path", str(repo / "RegressionTests"), "--exclude-dir", "baseline"]
     assert validate(repo, bl_root, "regression").verdict == "PASS"
 
 
@@ -114,7 +147,7 @@ def test_main_consumes_baseline_options_and_forwards_scanner_options(repo, bl_ro
                     "--description", "example", "--debug", "--exclude-dir", "cache*") == 0
     document = yaml.safe_load((bl_root / "forwarded.yaml").read_text(encoding="utf-8"))
     assert document["description"] == "example"
-    assert document["find_pan"]["command"] == ["--file", "RegressionTests/VISA.txt",
+    assert document["find_pan"]["command"] == ["--file", str(target),
                                                 "--debug", "--exclude-dir", "cache*"]
     assert validate(repo, bl_root, "forwarded").verdict == "PASS"
 
@@ -243,25 +276,23 @@ def test_failed_create_leaves_no_partial_directory(repo, bl_root):
     assert sorted(p.name for p in bl_root.iterdir()) == ["keep.yaml", "output"]
 
 
-def test_create_rejects_outside_paths(repo, bl_root, tmp_path):
+def test_create_forwards_outside_paths(repo, bl_root, tmp_path):
     outside = tmp_path / "outside.txt"
     outside.write_text(f"card {PAN}\n", encoding="utf-8")
-    with pytest.raises(baseline.BaselineError, match="outside"):
-        create(repo, bl_root, "x", "--file", str(outside))
-    assert not (bl_root / "x.yaml").exists()
+    create(repo, bl_root, "x", "--file", str(outside))
+    assert validate(repo, bl_root, "x").verdict == "PASS"
 
 
 def test_create_requires_an_input(repo, bl_root):
-    with pytest.raises(baseline.BaselineError, match="--path or --file"):
+    with pytest.raises(baseline.BaselineError, match="find-pan failed"):
         create(repo, bl_root, "x", "--mask")
 
 
-def test_create_rejects_an_empty_input_directory(repo, bl_root):
+def test_create_accepts_an_empty_input_directory(repo, bl_root):
     empty_directory = repo / "RegressionTests" / "empty"
     empty_directory.mkdir()
-    with pytest.raises(baseline.BaselineError, match="no files were found"):
-        create(repo, bl_root, "empty", "--path", str(empty_directory))
-    assert not (bl_root / "empty.yaml").exists()
+    create(repo, bl_root, "empty", "--path", str(empty_directory))
+    assert validate(repo, bl_root, "empty").verdict == "PASS"
 
 
 def test_create_refuses_to_baseline_a_skipped_binary_file(repo, bl_root):
@@ -274,7 +305,7 @@ def test_create_refuses_to_baseline_a_skipped_binary_file(repo, bl_root):
 
 def test_main_confirms_all_requested_files_were_scanned(repo, bl_root, capsys):
     assert run_main(repo, bl_root, "--create", "confirmed", *files_args(repo, "VISA.txt")) == 0
-    assert "Confirmed all 1 requested input file(s) were scanned successfully." in capsys.readouterr().out
+    assert "Confirmed find-pan completed successfully." in capsys.readouterr().out
 
 
 def test_create_with_zero_findings(repo, bl_root):
@@ -296,9 +327,7 @@ def test_validate_detects_an_edited_input_and_names_the_lost_row(repo, bl_root):
     lines = visa.read_text(encoding="utf-8").splitlines()
     visa.write_text("\n".join(lines[1:]) + "\n", encoding="utf-8")        # drop the first line
     outcome = validate(repo, bl_root, "plain")
-    assert outcome.verdict == "FAIL (inputs changed, output differs)" and outcome.status == 1
-    text = "\n".join(outcome.lines)
-    assert "input changed: RegressionTests/VISA.txt" in text
+    assert outcome.verdict == "FAIL (output differs)" and outcome.status == 1
     assert any(line.startswith("missing:") and "VISA.txt:" in line for line in outcome.lines)
 
 
@@ -314,15 +343,30 @@ def test_validate_detects_a_corrupted_baseline_row(repo, bl_root):
     assert sum(line.startswith("extra:") for line in outcome.lines) == 1
 
 
-def test_validate_detects_a_changed_summary_count(repo, bl_root):
+def test_validate_ignores_legacy_summary_metadata(repo, bl_root):
     create(repo, bl_root)
     yaml_path = bl_root / "plain.yaml"
     data = yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
-    data["summary"]["pans"] += 1
+    data["summary"] = {"pans": 999999}
     yaml_path.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
     outcome = validate(repo, bl_root, "plain")
-    assert outcome.verdict == "FAIL (output differs)"
-    assert any(line.startswith("pans: baseline") for line in outcome.lines)
+    assert outcome.verdict == "PASS"
+
+
+def test_input_change_without_csv_change_passes(repo, bl_root):
+    clean = repo / "RegressionTests" / "clean.txt"
+    clean.write_text("nothing here\n", encoding="utf-8")
+    create(repo, bl_root, "clean", "--file", str(clean))
+    clean.write_text("still nothing here\n", encoding="utf-8")
+    assert validate(repo, bl_root, "clean").verdict == "PASS"
+
+
+def test_validate_rejects_invalid_csv_header(repo, bl_root):
+    create(repo, bl_root)
+    csv_path = bl_root / "output" / "plain.csv"
+    csv_path.write_text("wrong,header\n", encoding="utf-8")
+    outcome = validate(repo, bl_root, "plain")
+    assert outcome.status == 2 and "invalid CSV header" in "\n".join(outcome.lines)
 
 
 def test_crlf_only_change_to_an_input_passes(repo, bl_root):
@@ -332,7 +376,7 @@ def test_crlf_only_change_to_an_input_passes(repo, bl_root):
     assert validate(repo, bl_root, "plain").verdict == "PASS"
 
 
-def test_validate_reports_added_and_removed_input_files(repo, bl_root):
+def test_validate_reports_changed_csv_rows_for_added_and_removed_files(repo, bl_root):
     data = repo / "RegressionTests" / "set"
     data.mkdir()
     for name in ("VISA.txt", "UnionPay.txt"):
@@ -342,8 +386,8 @@ def test_validate_reports_added_and_removed_input_files(repo, bl_root):
     (data / "extra.txt").write_text(f"card {PAN}\n", encoding="utf-8")
     outcome = validate(repo, bl_root, "dir")
     text = "\n".join(outcome.lines)
-    assert "input removed: RegressionTests/set/UnionPay.txt" in text
-    assert "input added: RegressionTests/set/extra.txt" in text
+    assert "missing: UnionPay.txt:" in text
+    assert "extra: extra.txt:" in text
     assert outcome.status == 1
 
 
@@ -367,16 +411,13 @@ def test_validate_does_not_modify_the_baseline(repo, bl_root):
 # --- validate: environment and errors ----------------------------------------------------------------------------------------------
 
 
-def test_missing_tool_is_skipped_and_fails_with_strict(repo, bl_root):
+def test_validate_ignores_legacy_tool_metadata(repo, bl_root):
     create(repo, bl_root)
     yaml_path = bl_root / "plain.yaml"
     data = yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
     data["requires_tools"] = ["definitely-not-installed-tool"]
     yaml_path.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
-    soft = validate(repo, bl_root, "plain")
-    assert soft.verdict == "SKIPPED (environment)" and soft.status == 0
-    assert "definitely-not-installed-tool" in "\n".join(soft.lines)
-    assert validate(repo, bl_root, "plain", strict=True).status == 1
+    assert validate(repo, bl_root, "plain").verdict == "PASS"
 
 
 def test_unknown_baseline_is_an_error(repo, bl_root):
@@ -419,6 +460,36 @@ def report_status(out, name):
         if len(parts) >= 2 and parts[1] == name and not line.startswith(" " * 4):
             return parts[0]
     return None
+
+
+def test_list_shows_discovered_baseline_names_without_running_scans(repo, bl_root, capsys, monkeypatch):
+    bl_root.mkdir(parents=True)
+    (bl_root / "zeta.yaml").write_text("", encoding="utf-8")
+    (bl_root / "alpha.yml").write_text("", encoding="utf-8")
+    (bl_root / ".hidden.yaml").write_text("", encoding="utf-8")
+    (bl_root / "notes.txt").write_text("", encoding="utf-8")
+    (bl_root / "nested.yaml").mkdir()
+    monkeypatch.setattr(baseline, "run_find_pan", lambda *args, **kwargs: pytest.fail("unexpected scan"))
+    assert run_main(repo, bl_root, "--list") == 0
+    output = capsys.readouterr()
+    assert output.out.splitlines() == ["alpha", "zeta"]
+    assert not output.err
+
+
+def test_list_with_no_baselines(repo, bl_root, capsys):
+    assert run_main(repo, bl_root, "--list") == 0
+    assert capsys.readouterr().out.strip() == "No baselines found."
+
+
+@pytest.mark.parametrize("arguments", [
+    ("--list", "--create", "name"),
+    ("--list", "--validate", "name"),
+    ("--list", "--all"),
+    ("--list", "--file", "input.txt"),
+])
+def test_list_rejects_other_actions_and_scanner_arguments(repo, bl_root, arguments, capsys):
+    assert run_main(repo, bl_root, *arguments) == 2
+    assert "--list cannot be combined" in capsys.readouterr().err
 
 
 def test_validate_all_mixes_pass_and_fail_and_returns_1(repo, bl_root, capsys):

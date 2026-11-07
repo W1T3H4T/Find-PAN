@@ -353,18 +353,19 @@ uv run python bin/baseline.py --create RegressionTests/baseline/visa-only.yaml -
 uv run python bin/baseline.py --validate RegressionTests/baseline/visa-only.yaml
 uv run python bin/baseline.py --create plain-text --force --file RegressionTests/*.txt
 uv run python bin/baseline.py --create RegressionTest-Data --path RegressionTests --exclude-dir baseline
+uv run python bin/baseline.py --list
 uv run python bin/baseline.py --validate --all
 ```
 
-Baseline configurations use YAML only (`.yaml` or `.yml`); JSON configuration files are rejected. Configurations live directly in `RegressionTests/baseline/`, and CSV outputs live in its `output/` subdirectory. A name creates `RegressionTests/baseline/NAME.yaml` and `RegressionTests/baseline/output/NAME.csv`; an explicit YAML path must be directly inside that baseline directory. Configurations record the output filename, find-pan arguments, input hashes, versions, extractor requirements, and summary information. `--validate --all` discovers configurations directly in the baseline directory. Inputs must be inside the repository and outside the baseline directory. When `--path` contains the baseline directory, exclude it with a directory-name pattern such as `--exclude-dir baseline`.
+Baseline configurations use YAML only (`.yaml` or `.yml`); JSON configuration files are rejected. Configurations live directly in `RegressionTests/baseline/`, and CSV outputs live in its `output/` subdirectory. A name creates `RegressionTests/baseline/NAME.yaml` and `RegressionTests/baseline/output/NAME.csv`; an explicit YAML path must be directly inside that baseline directory. Configurations record the output filename, find-pan arguments, working directory and versions. `--list` displays the baseline names discovered directly in that directory, without running scans; `--validate --all` validates the same configurations. When scanning a directory containing baseline artifacts, exclude them with a directory-name pattern such as `--exclude-dir baseline`.
 
-`--exclude-dir` is passed to find-pan and applied to baseline input tracking using the same case-sensitive directory-name glob rules. Explicit `--file` inputs and the `--path` root itself are not excluded.
+`--exclude-dir` is passed to find-pan, which applies case-sensitive directory-name glob rules. Explicit `--file` inputs and the `--path` root itself are not excluded.
 
-For `--create`, baseline options are consumed and other options are forwarded to find-pan. Put `--` before find-pan arguments to prevent baseline from interpreting any later options. Baseline normalizes input paths and supplies its own temporary `--csv`, `--summary-json`, and `--log-dir` values, which take precedence over forwarded values.
+For `--create`, baseline options are consumed and other options are forwarded unchanged to find-pan. Put `--` before find-pan arguments to prevent baseline from interpreting any later options. Relative paths are resolved from the creation working directory, which is recorded and reused during validation; a directory within the repository is stored relative to the repository. Older configurations without a working directory run from the repository root. Baseline supplies its own temporary `--csv`, `--summary-json`, and `--log-dir` values, which take precedence over forwarded values.
 
 Configuration stems and output filenames must be unique, including case-insensitive aliases and `.yaml`/`.yml` alternatives. Outputs must match their configuration stem. Creation refuses existing configurations unless `--force` explicitly regenerates that configuration and its CSV. `--force` never permits overwriting another configuration's output or an orphan CSV without a matching configuration. Publication is serialized, and failures restore the previous configuration and CSV. If an interrupted process leaves `RegressionTests/baseline/.publish.lock`, confirm no baseline creation is running before removing the stale lock.
 
-Validation compares rows independent of order, summary counts, skipped files, and input hashes. Text hashes normalize CRLF to LF. `--max-diff N` limits displayed differences. Missing extractor tools produce `SKIPPED (environment)` unless `--strict` is set.
+Validation reruns find-pan into a separate temporary CSV and compares its rows with the saved CSV, including duplicate counts but independent of row order or line endings. Changes that do not affect CSV findings do not fail validation. A failed or incomplete scan is an error. `--max-diff N` limits displayed differences; `--strict` is retained for compatibility and does not change this behavior.
 
 The report lists one row per baseline (status, name, reason), with the differences indented beneath a failing one, and ends with totals:
 
@@ -374,12 +375,9 @@ Validating 3 baselines
 PASS   file-VISA
 FAIL   masked  output differs
     missing: VISA.txt:26:0  PAN  VISA  493077******8123
-    pans: baseline 374, now 373
+ERROR  archive-7z_Test  find-pan did not complete the requested scan
 
-SKIP   archive-7z_Test  environment
-    required extractor not installed: 7z
-
-3 baselines: 1 passed, 1 failed, 1 skipped, 0 errors
+3 baselines: 1 passed, 1 failed, 0 skipped, 1 errors
 ```
 
 Baseline exit statuses are `0` for matching results, `1` for differences, and `2` for usage/environment errors. [tests/test_shipped_baselines.py](tests/test_shipped_baselines.py) validates every configuration it finds in `RegressionTests/baseline/` and fails if any of them does not pass. Remove both the configuration and its matching CSV when removing a baseline.
