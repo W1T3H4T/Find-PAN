@@ -126,7 +126,7 @@ uv run python bin/find-pan.py [--path PATH] [--file FILE [FILE ...]]
 | --- | --- |
 | `-h`, `--help`            | Show command help and defaults. |
 | `--path PATH`             | Recursively scan a directory tree, including recognized archives. |
-| `--exclude-dir PATTERN`   | Exclude child directories whose names match a case-sensitive shell-style glob (for example `baseline*`). Repeat for multiple patterns; applies inside expanded archives. The scan root and explicit `--file` entries are not excluded. Quote patterns to prevent shell expansion. |
+| `--exclude-dir PATTERN`   | In every directory scanned, exclude child directories whose names match a case-sensitive shell-style glob (for example `baseline*`). Repeat for multiple patterns; applies at every depth inside expanded archives too. The scan root and explicit `--file` entries are not excluded. Quote patterns to prevent shell expansion. |
 | `--file FILE [FILE ...]`  | Scan explicit files or archives. Repeat the flag to add more files. Missing files and directories are reported and skipped; use `--path` for directories. |
 | `--log-dir DIR`           | Log directory; defaults to `Find-PAN-Logs` in the user's home directory. Created if necessary. |
 | `--rgx-patterns FILE`     | Use this regex JSON file instead of searching the standard locations. |
@@ -367,17 +367,16 @@ Configuration stems and output filenames must be unique, including case-insensit
 
 Validation reruns find-pan into a separate temporary CSV and compares its rows with the saved CSV, including duplicate counts but independent of row order or line endings. Changes that do not affect CSV findings do not fail validation. A failed or incomplete scan is an error. `--max-diff N` limits displayed differences; `--strict` is retained for compatibility and does not change this behavior.
 
-The report lists one row per baseline (status, name, reason), with the differences indented beneath a failing one, and ends with totals:
+When validating all baselines in an interactive terminal, an animated dot spinner appears beside `RUN` and is replaced by `PASS` or `FAIL` for each scan. Redirected output contains the final results only. Errors also display as `FAIL`, with error details and a separate error count in the summary. Each baseline has one line with its status, elapsed time, and any differences; the summary gives counts and total elapsed time:
 
 ```text
 Validating 3 baselines
 
-PASS   file-VISA
-FAIL   masked  output differs
-    missing: VISA.txt:26:0  PAN  VISA  493077******8123
-ERROR  archive-7z_Test  find-pan did not complete the requested scan
+PASS   file-VISA         0.35s
+FAIL   masked            0.40s  output differs  | missing: VISA.txt:26:0  PAN  VISA  493077******8123
+FAIL   archive-7z_Test   0.12s  error  | find-pan did not complete the requested scan
 
-3 baselines: 1 passed, 1 failed, 0 skipped, 1 errors
+3 baselines: 1 passed, 1 failed, 0 skipped, 1 errors, total time 0.87s
 ```
 
 Baseline exit statuses are `0` for matching results, `1` for differences, and `2` for usage/environment errors. [tests/test_shipped_baselines.py](tests/test_shipped_baselines.py) validates every configuration it finds in `RegressionTests/baseline/` and fails if any of them does not pass. Remove both the configuration and its matching CSV when removing a baseline.

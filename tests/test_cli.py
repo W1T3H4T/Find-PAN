@@ -1,5 +1,6 @@
 """Tests for find_pan.cli."""
 
+import csv
 import subprocess
 import sys
 from pathlib import Path
@@ -134,6 +135,19 @@ def test_scan_reports_summary_and_returns_0(tmp_path, capsys):
     out = capsys.readouterr().out
     assert "PANs Matched  :        1" in out
     assert "Scanned       :        1 Files." in out
+
+
+def test_exclude_dir_matches_children_in_each_scanned_directory(tmp_path):
+    scan_dir = tmp_path / "scan"
+    for relative in ("cache-root", "nested/cache-deep", "nested/deeper/cache-last", "nested/keep", "Cache-upper"):
+        directory = scan_dir / relative
+        directory.mkdir(parents=True, exist_ok=True)
+        (directory / f"{directory.name}.txt").write_text(f"card {PAN}\n", encoding="utf-8")
+    csv_path = tmp_path / "out.csv"
+    assert cli.main(scan_args(tmp_path, "--exclude-dir", "cache-*", "--csv", str(csv_path))) == 0
+    with csv_path.open(newline="", encoding="utf-8") as handle:
+        filenames = {row["filename"] for row in csv.DictReader(handle)}
+    assert filenames == {"keep.txt", "Cache-upper.txt"}
 
 
 def test_line_limit_flag_end_to_end(tmp_path, capsys):

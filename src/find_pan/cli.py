@@ -90,8 +90,8 @@ def build_parser() -> argparse.ArgumentParser:
     #   Mutable processing (change our runtime/detection behavior)
     parser.add_argument( "--path", help="Filesystem pathname to scan.", type=str, default=None)
     parser.add_argument( "--exclude-dir", action="append", default=[], metavar="PATTERN",
-                        help="Exclude child directories whose names match this case-sensitive shell-style glob. "
-                        "Repeat for multiple patterns; applies inside archives too.")
+                        help="At every directory scanned, exclude child directories whose names match this "
+                        "case-sensitive shell-style glob. Repeat for multiple patterns; applies inside archives too.")
     parser.add_argument( "--file", help="Files to scan; any number, e.g. --file a.txt b.zip c.tar.gz. "
                         "Archives are detected by content, expanded with the configured tools, and scanned.",
                         nargs="+", action="extend", metavar="FILE", default=[])

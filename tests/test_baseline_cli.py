@@ -5,8 +5,10 @@ fixtures), so the find-pan that runs is the real one and no real baseline is tou
 """
 
 import importlib.util
+import io
 import shutil
 import sys
+import threading
 from pathlib import Path
 
 import pytest
@@ -454,10 +456,10 @@ def run_main(repo, bl_root, *argv):
 
 
 def report_status(out, name):
-    """The status label (PASS, FAIL, SKIP, ERROR) on the report line for baseline *name*."""
+    """The final status label on the report line for baseline *name*."""
     for line in out.splitlines():
         parts = line.split()
-        if len(parts) >= 2 and parts[1] == name and not line.startswith(" " * 4):
+        if len(parts) >= 2 and parts[0] in {"PASS", "FAIL"} and parts[1] == name:
             return parts[0]
     return None
 
@@ -501,6 +503,80 @@ def test_validate_all_mixes_pass_and_fail_and_returns_1(repo, bl_root, capsys):
     out = capsys.readouterr().out
     assert report_status(out, "bad") == "FAIL" and report_status(out, "good") == "PASS"
     assert "1 passed, 1 failed" in out
+
+
+def test_validate_all_reports_running_before_each_result(repo, bl_root, capsys, monkeypatch):
+    bl_root.mkdir(parents=True)
+    for name in ("bad", "broken", "good"):
+        (bl_root / f"{name}.yaml").touch()
+    verdicts = {"bad": ("FAIL (output differs)", 1), "broken": ("ERROR", 2), "good": ("PASS", 0)}
+
+    monkeypatch.setattr(sys.stdout, "isatty", lambda: True)
+    clock = iter((0, 1, 2.25, 3, 5.5, 6, 9.75, 10))
+    monkeypatch.setattr(baseline.time, "perf_counter", lambda: next(clock))
+
+    def fake_validate(name, *_args):
+        verdict, status = verdicts[name]
+        return baseline.Outcome(name, verdict, ["detail\ncontinued"] if name == "broken" else [], status)
+
+    monkeypatch.setattr(baseline, "validate", fake_validate)
+    assert run_main(repo, bl_root, "--validate", "--all") == 1
+    output = capsys.readouterr().out
+    assert "RUN    bad \u280b\r" in output and "\rFAIL   bad     1.25s  output differs\n" in output
+    assert "RUN    broken \u280b\r" in output and "\rFAIL   broken  2.50s  error  | detail continued\n" in output
+    assert "RUN    good \u280b\r" in output and "\rPASS   good    3.75s\n" in output
+    assert "1 passed, 1 failed, 0 skipped, 1 errors, total time 10.00s" in output
+
+
+def test_running_indicator_animates_and_stops(capsys):
+    second_frame = threading.Event()
+    stream = sys.stdout
+
+    class ObservedStream:
+        encoding = "utf-8"
+
+        def write(self, text):
+            stream.write(text)
+            if "\u2819" in text:
+                second_frame.set()
+
+        def flush(self):
+            stream.flush()
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(sys, "stdout", ObservedStream())
+        with baseline._running_indicator("slow", True):
+            assert second_frame.wait(2)
+    output = capsys.readouterr().out
+    assert "RUN    slow \u280b" in output and "RUN    slow \u2819" in output
+    assert output.endswith("\r" + " " * len("RUN    slow \u280b") + "\r")
+
+
+def test_running_indicator_falls_back_to_ascii_and_cleans_up_on_error(monkeypatch):
+    class AsciiStream(io.StringIO):
+        encoding = "ascii"
+
+    stream = AsciiStream()
+    monkeypatch.setattr(sys, "stdout", stream)
+    with pytest.raises(RuntimeError, match="interrupted"):
+        with baseline._running_indicator("broken", True):
+            raise RuntimeError("interrupted")
+    assert stream.getvalue() == "RUN    broken .\r" + " " * len("RUN    broken .") + "\r"
+
+
+def test_validate_all_redirected_output_has_one_line_per_baseline(repo, bl_root, capsys, monkeypatch):
+    bl_root.mkdir(parents=True)
+    for name in ("bad", "good"):
+        (bl_root / f"{name}.yaml").touch()
+    monkeypatch.setattr(sys.stdout, "isatty", lambda: False)
+    monkeypatch.setattr(baseline, "validate", lambda name, *_: baseline.Outcome(
+        name, "FAIL (output differs)" if name == "bad" else "PASS", ["difference"] if name == "bad" else [],
+        1 if name == "bad" else 0))
+    assert run_main(repo, bl_root, "--validate", "--all") == 1
+    output = capsys.readouterr().out
+    assert "RUN    " not in output and "\r" not in output
+    rows = [line for line in output.splitlines() if line.startswith(("PASS", "FAIL"))]
+    assert len(rows) == 2 and "difference" in rows[0]
 
 
 def test_validate_all_continues_after_a_broken_baseline(repo, bl_root, capsys):
@@ -570,7 +646,8 @@ def test_validate_all_survives_garbled_baseline_files(repo, bl_root, capsys):
     csv_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     assert run_main(repo, bl_root, "--validate", "--all") == 2
     out = capsys.readouterr().out
-    assert [report_status(out, n) for n in ("good", "garbled", "badrow")] == ["PASS", "ERROR", "ERROR"]
+    assert [report_status(out, n) for n in ("good", "garbled", "badrow")] == ["PASS", "FAIL", "FAIL"]
+    assert "error" in out
 
 
 @pytest.mark.parametrize("failure", [OSError("disk full"), KeyboardInterrupt()], ids=["oserror", "interrupt"])
@@ -613,10 +690,8 @@ def test_validate_all_report_is_laid_out_in_columns_with_a_header_and_totals(rep
     #   The names start in the same column, so the verdict text after them lines up as well.
     assert rows[0].index("a-much-longer-name") == rows[1].index("good")
     failing = next(line for line in rows if line.startswith("FAIL"))
-    assert failing.rstrip().endswith("output differs")
-    detail = lines[lines.index(failing) + 1]
-    assert detail.startswith("    extra: ")      # a row the baseline no longer has
-    assert lines[-1] == "2 baselines: 1 passed, 1 failed, 0 skipped, 0 errors"
+    assert "output differs" in failing and "extra: " in failing
+    assert lines[-1].startswith("2 baselines: 1 passed, 1 failed, 0 skipped, 0 errors, total time ")
     assert lines[-2] == ""
 
 

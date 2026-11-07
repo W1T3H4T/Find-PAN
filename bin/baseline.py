@@ -23,7 +23,10 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
+import time
 from collections import Counter
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from fnmatch import fnmatchcase
@@ -682,17 +685,52 @@ def _all_names(baseline_root: Path) -> list[str]:
     return sorted(names)
 
 
-_LABELS = {"PASS": "PASS", "FAIL": "FAIL", "SKIPPED": "SKIP", "ERROR": "ERROR"}
+_LABELS = {"PASS": "PASS", "FAIL": "FAIL", "SKIPPED": "FAIL", "ERROR": "FAIL"}
 
 
-def format_outcome(outcome: Outcome, width: int) -> str:
-    """One report row (status, name padded to *width*, reason) followed by its indented detail lines."""
+@contextmanager
+def _running_indicator(name: str, enabled: bool):
+    if not enabled:
+        yield
+        return
+
+    stream = sys.stdout
+    frames = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+    try:
+        frames.encode(stream.encoding or "utf-8")
+    except (UnicodeEncodeError, LookupError):
+        frames = ".oOo"
+    stopped = threading.Event()
+    prefix = f"RUN    {name} "
+
+    def animate():
+        index = 1
+        while not stopped.wait(0.1):
+            print(f"\r{prefix}{frames[index % len(frames)]}", end="", file=stream, flush=True)
+            index += 1
+
+    print(f"{prefix}{frames[0]}", end="", file=stream, flush=True)
+    worker = threading.Thread(target=animate, daemon=True)
+    worker.start()
+    try:
+        yield
+    finally:
+        stopped.set()
+        worker.join()
+        print("\r" + " " * (len(prefix) + 1) + "\r", end="", file=stream, flush=True)
+
+
+def format_outcome(outcome: Outcome, width: int, elapsed: float | None = None) -> str:
+    """Format the status, name, duration, reason and details on one line."""
     word, _, reason = outcome.verdict.partition(" ")
     label = _LABELS.get(word, word)
-    row = f"{label:<5}  {outcome.name:<{width}}  {reason.strip('()')}".rstrip()
-    if not outcome.lines:
-        return row
-    return "\n".join([row, *(f"    {line}" for line in outcome.lines), ""])
+    if word == "ERROR":
+        reason = "error"
+    duration = f"  {elapsed:.2f}s" if elapsed is not None else ""
+    row = f"{label:<5}  {outcome.name:<{width}}{duration}  {reason.strip('()')}".rstrip()
+    if outcome.lines:
+        row += "  | " + " | ".join(" ".join(line.splitlines()) for line in outcome.lines)
+    return row
 
 
 def format_totals(outcomes: Sequence[Outcome]) -> str:
@@ -747,11 +785,16 @@ def main(argv: Sequence[str] | None = None, root: Path = REPO_ROOT, baseline_roo
             print(f"Validating {len(names)} baseline{'' if len(names) == 1 else 's'}\n")
             width = max(len(name) for name in names)
             outcomes = []
+            total_start = time.perf_counter()
             for name in names:
-                outcome = validate(name, args.strict, args.max_diff, root, baseline_root)
-                print(format_outcome(outcome, width))
+                started = time.perf_counter()
+                with _running_indicator(name, args.all and sys.stdout.isatty()):
+                    outcome = validate(name, args.strict, args.max_diff, root, baseline_root)
+                elapsed = time.perf_counter() - started
+                print(format_outcome(outcome, width, elapsed), flush=True)
                 outcomes.append(outcome)
-            print(f"\n{format_totals(outcomes)}")
+            total_elapsed = time.perf_counter() - total_start
+            print(f"\n{format_totals(outcomes)}, total time {total_elapsed:.2f}s")
             statuses = {o.status for o in outcomes}
             return 1 if 1 in statuses else (2 if 2 in statuses else 0)
 
