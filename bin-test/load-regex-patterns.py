@@ -5,7 +5,7 @@ import os
 import re
 
 # Function to generate a dictionary of regexes from a JSON file
-def generate_regex_dict(json_data):
+def generate_regex_dict(data):
     try:
         # Initialize an empty dictionary to store regexes for this pattern
         pattern_dict: dict = {}

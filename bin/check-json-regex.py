@@ -136,7 +136,7 @@ def calculate_pattern1_size(pattern, pattern_name):
 # ===========================================================================
 # Calculate pattern_2 size
 # ===========================================================================
-def calculate_pattern2_size(pattern):
+def calculate_pattern2_size(_pattern):
     # For digit ranges like [0-9], it always represents a single
     # digit (1 character)
     return 1

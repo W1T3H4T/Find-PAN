@@ -4,9 +4,8 @@
 ##  Who     :   David Means <w1t3h4t@gmail.com>
 ##  What    :   Record what find-pan finds in a set of files as a baseline
 ##              (--create), and later re-run find-pan the same way to verify
-##              that nothing changed (--validate).  A baseline is the directory
-##              RegressionTests/baseline/<name>/ holding baseline.csv and
-##              baseline.yaml.
+##              that nothing changed (--validate). Configurations are saved in
+##              RegressionTests/baseline/<name>.yaml and expected CSVs in its output/ directory.
 ##  ===========================================================================
 ##  Copyright (c) 2023 David Means  <w1t3h4t@gmail.com>
 ##  ===========================================================================
@@ -35,13 +34,14 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
-from find_pan import config  # noqa: E402
 from find_pan.archives import select_candidate  # noqa: E402
 from find_pan.config import extractor_candidates, find_extractor_config_path, load_extractor_config  # noqa: E402
 from find_pan.filetypes import FileKind, classify_head  # noqa: E402
 from find_pan.version import __version__ as find_pan_version  # noqa: E402
 
-BASELINE_ROOT = REPO_ROOT / "RegressionTests" / "baseline"
+BASELINE_RELATIVE_ROOT = Path("RegressionTests") / "baseline"
+BASELINE_ROOT = REPO_ROOT / BASELINE_RELATIVE_ROOT
+OUTPUT_DIRECTORY_NAME = "output"
 
 CSV_FIELDS = ["filename", "line_number", "offset", "pattern_name", "data_type", "matched_data"]
 
@@ -52,10 +52,8 @@ _PATH_SWITCHES = ("--path", "--file", "--rgx-patterns")
 #   find-pan accepts unambiguous abbreviations of its switches; those two groups must be spelled out.
 _KNOWN_SWITCHES = OWNED_SWITCHES + _PATH_SWITCHES
 
-#   Skip reasons that mean requested content was not scanned; a baseline of such a run is useless.
-_INCOMPLETE_REASONS = ("NOT-FOUND", "NOT-A-FILE", "ARCHIVE-FAILED", "ARCHIVE-NO-TOOL", "UNREADABLE")
-
 _NAME_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+_CONFIG_SUFFIXES = {".yaml", ".yml"}
 #   A file is text when its first bytes contain no NUL.
 _TEXT_SAMPLE = 8192
 _SUMMARY_FIELDS = ("pans", "tracks", "bad_luhn", "anti_pans", "files_scanned",
@@ -71,12 +69,103 @@ class BaselineError(Exception):
 # ===========================================================================
 def validate_name(name: str) -> str:
     """Return *name* if it is a safe baseline name, else raise ``BaselineError``."""
-    if not _NAME_PATTERN.match(name) or ".." in name:
+    if (not _NAME_PATTERN.fullmatch(name) or ".." in name
+            or re.fullmatch(r"(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])", name.split(".")[0], re.IGNORECASE)):
         raise BaselineError(
             f"invalid baseline name {name!r}: use letters, digits, '.', '_' and '-' "
             "(starting with a letter or digit, no '..' and no path separators)"
         )
     return name
+
+
+def _baseline_config_path(identifier: str, root: Path, baseline_root: Path) -> tuple[str, Path]:
+    """Resolve a baseline name or YAML path to its config path."""
+    if baseline_root.is_symlink():
+        raise BaselineError("baseline directory must not be a symbolic link")
+    supplied = Path(identifier)
+    if supplied.suffix.lower() == ".json":
+        raise BaselineError("baseline configuration must use YAML (.yaml); JSON is not supported")
+    if supplied.suffix.lower() not in _CONFIG_SUFFIXES:
+        validate_name(identifier)
+        matches = [path for path in baseline_root.glob(f"{identifier}.*")
+                   if path.suffix.lower() in _CONFIG_SUFFIXES and path.stem == identifier]
+        if len(matches) > 1:
+            raise BaselineError(f"configuration filename collision for baseline {identifier!r}")
+        supplied = Path(matches[0].name if matches else f"{identifier}.yaml")
+
+    for existing in baseline_root.glob("*"):
+        if (existing.suffix.lower() in _CONFIG_SUFFIXES
+                and existing.stem.casefold() == supplied.stem.casefold()
+                and existing.name != supplied.name):
+            raise BaselineError(f"configuration filename collision: {existing.name} and {supplied.name}")
+
+    if supplied.is_absolute():
+        config_path = supplied.resolve()
+    elif supplied.parent == Path("."):
+        config_path = (baseline_root / supplied).resolve()
+    else:
+        repository_candidate = (root / supplied).resolve()
+        try:
+            repository_candidate.relative_to(baseline_root.resolve())
+            config_path = repository_candidate
+        except ValueError:
+            config_path = (baseline_root / supplied).resolve()
+
+    if config_path.parent != baseline_root.resolve():
+        raise BaselineError(f"baseline config must be directly inside {baseline_root}: {identifier}")
+    if (baseline_root / supplied.name).is_symlink():
+        raise BaselineError("baseline configuration files must not be symbolic links")
+
+    validate_name(config_path.stem)
+    return config_path.stem, config_path
+
+
+def _load_baseline_document(config_path: Path) -> dict:
+    """Read a YAML baseline configuration."""
+    document = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    if not isinstance(document, dict):
+        raise BaselineError(f"{config_path.name} must contain a mapping")
+    return document
+
+
+def _csv_path(config_path: Path, document: dict) -> Path:
+    """Resolve the uniquely named CSV beneath baseline/output."""
+    default_name = f"{config_path.stem}.csv"
+    csv_name = document.get("csv_file", default_name)
+    if csv_name != default_name:
+        raise BaselineError(f"{config_path.name}: csv_file must be {default_name!r} in baseline/output")
+    output_directory = config_path.parent / OUTPUT_DIRECTORY_NAME
+    if output_directory.is_symlink():
+        raise BaselineError("baseline/output must not be a symbolic link")
+    return output_directory / csv_name
+
+
+def _check_collisions(config_path: Path, csv_path: Path, force: bool) -> None:
+    """Reject filename aliases and outputs owned by another baseline, even with --force."""
+    for path in config_path.parent.glob("*"):
+        if path.suffix.lower() not in _CONFIG_SUFFIXES:
+            continue
+        if path.name == config_path.name:
+            continue
+        if path.stem.casefold() == config_path.stem.casefold():
+            raise BaselineError(f"configuration/output filename collision: {path.name} and {config_path.name}")
+        try:
+            document = _load_baseline_document(path)
+        except (BaselineError, OSError, UnicodeError, yaml.YAMLError):
+            continue
+        stored_csv = document.get("csv_file", f"{path.stem}.csv")
+        if isinstance(stored_csv, str) and stored_csv.casefold() == csv_path.name.casefold():
+            raise BaselineError(f"output filename collision: {csv_path.name} is referenced by {path.name}")
+    for path in csv_path.parent.glob("*"):
+        if path.name.casefold() == csv_path.name.casefold() and path.name != csv_path.name:
+            raise BaselineError(f"output filename collision: {path.name} and {csv_path.name}")
+    for path in (config_path, csv_path):
+        if path.is_symlink() or (path.exists() and not path.is_file()):
+            raise BaselineError(f"baseline artifact must be a regular file: {path}")
+    if csv_path.exists() and not config_path.exists():
+        raise BaselineError(f"output filename collision: {csv_path} has no matching configuration")
+    if config_path.exists() and not force:
+        raise BaselineError(f"baseline configuration already exists ({config_path}); use --force to regenerate it")
 
 
 def to_repo_relative(path: str, root: Path = REPO_ROOT, base: Path | None = None) -> str:
@@ -167,7 +256,7 @@ def _path_values(args: Sequence[str]) -> tuple[list[str], list[str]]:
     return directories, files
 
 
-def enumerate_inputs(args: Sequence[str], root: Path = REPO_ROOT) -> list[str]:
+def enumerate_inputs(args: Sequence[str], root: Path = REPO_ROOT, baseline_root: Path | None = None) -> list[str]:
     """List the input files named by ``--path`` / ``--file``, in a platform-independent order.
 
     Paths are repository-relative with ``/`` separators, sorted by their UTF-8 bytes (not by
@@ -178,7 +267,7 @@ def enumerate_inputs(args: Sequence[str], root: Path = REPO_ROOT) -> list[str]:
     if len(directories) > 1:
         raise BaselineError("only one --path is allowed (find-pan scans only the last one)")
     found: set[str] = set()
-    baseline_dir = (root / "RegressionTests" / "baseline").resolve()
+    baseline_dir = (baseline_root if baseline_root is not None else root / BASELINE_RELATIVE_ROOT).resolve()
 
     for directory in directories:
         relative = to_repo_relative(directory, root, base=root)
@@ -219,9 +308,9 @@ def hash_input(rel_path: str, root: Path = REPO_ROOT) -> dict:
     return {"path": rel_path, "size": len(data), "sha256": digest, "eol_normalized": is_text}
 
 
-def inputs_manifest(args: Sequence[str], root: Path = REPO_ROOT) -> list[dict]:
+def inputs_manifest(args: Sequence[str], root: Path = REPO_ROOT, baseline_root: Path | None = None) -> list[dict]:
     """Return ``hash_input`` for every input file, in enumeration order."""
-    return [hash_input(path, root) for path in enumerate_inputs(args, root)]
+    return [hash_input(path, root) for path in enumerate_inputs(args, root, baseline_root)]
 
 
 # ===========================================================================
@@ -384,69 +473,101 @@ def _has_input(args: Sequence[str]) -> bool:
     return bool(directories or files)
 
 
+def _write_file_baseline(config_path: Path, document: dict, rows: Iterable[Sequence[str]], force: bool) -> None:
+    """Serialize publication so concurrent creators cannot overwrite each other's artifacts."""
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    lock_path = config_path.parent / ".publish.lock"
+    try:
+        lock = lock_path.open("x", encoding="utf-8")
+    except FileExistsError:
+        raise BaselineError("another baseline publication is in progress (.publish.lock exists)") from None
+    try:
+        with lock:
+            _publish_file_baseline(config_path, document, rows, force)
+    finally:
+        lock_path.unlink()
+
+
+def _publish_file_baseline(config_path: Path, document: dict, rows: Iterable[Sequence[str]], force: bool) -> None:
+    """Write a flat YAML baseline and its CSV, restoring prior files on failure."""
+    csv_path = _csv_path(config_path, document)
+    _check_collisions(config_path, csv_path, force)
+    targets = (config_path, csv_path)
+    existing = [path for path in targets if path.exists()]
+
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    csv_path.parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(prefix=f".{config_path.stem}.", dir=config_path.parent))
+    backup = staging / "backup"
+    backup.mkdir()
+    try:
+        staged_csv = staging / csv_path.name
+        write_canonical_csv(rows, staged_csv)
+        staged_config = staging / config_path.name
+        staged_config.write_text(yaml.safe_dump(document, sort_keys=False, allow_unicode=True), encoding="utf-8")
+
+        backed_up = []
+        installed = []
+        try:
+            for path in existing:
+                os.replace(path, backup / path.name)
+                backed_up.append(path)
+            os.replace(staged_csv, csv_path)
+            installed.append(csv_path)
+            os.replace(staged_config, config_path)
+            installed.append(config_path)
+        except BaseException:
+            for path in installed:
+                if path.exists():
+                    path.unlink()
+            for path in backed_up:
+                saved = backup / path.name
+                if saved.exists():
+                    os.replace(saved, path)
+            raise
+    finally:
+        shutil.rmtree(staging, ignore_errors=True)
+
+
 def create(name: str, description: str, find_pan_args: Sequence[str], force: bool = False,
            root: Path = REPO_ROOT, baseline_root: Path = BASELINE_ROOT) -> Path:
-    """Run find-pan with *find_pan_args* and archive the result as baseline *name*.
-
-    The baseline is built in a hidden staging directory and moved into place only when everything
-    succeeded, so a failure never leaves a partial baseline (and, with *force*, never damages the
-    existing one).
-    """
-    validate_name(name)
-    target = baseline_root / name
-    if target.exists() and not force:
-        raise BaselineError(f"baseline {name!r} already exists ({target}); use --force to replace it")
+    """Create a configuration and its CSV after a complete scan."""
+    baseline_name, config_path = _baseline_config_path(name, root, baseline_root)
+    _check_collisions(config_path, _csv_path(config_path, {}), force)
     if not _has_input(find_pan_args):
         raise BaselineError("give the files to scan with --path or --file")
 
     args = rewrite_find_pan_args(find_pan_args, root)
-    manifest = inputs_manifest(args, root)
+    manifest = inputs_manifest(args, root, baseline_root)
+    if not manifest:
+        raise BaselineError("no files were found in the requested inputs")
     tools = required_tools([entry["path"] for entry in manifest], root)
     absent = [tool for tool in tools if shutil.which(tool) is None]
     if absent:
         raise BaselineError(f"install {', '.join(absent)} first: expanding these inputs needs it")
     result = run_find_pan(args, root)
     skipped = [f"[{reason}] {path}" for reason, path in result.summary.get("skipped", [])
-               if reason in _INCOMPLETE_REASONS]
+               ]
     if result.status != 0 or skipped or result.summary.get("archives_skipped"):
         raise BaselineError("find-pan did not scan everything, so nothing was recorded: "
-                            + ("; ".join(skipped) or f"exit status {result.status}"))
+                            + ("; ".join(skipped) or result.stderr.strip()[-1500:]
+                               or f"exit status {result.status}"))
 
-    baseline_root.mkdir(parents=True, exist_ok=True)
-    staging = Path(tempfile.mkdtemp(prefix=f".{name}.", dir=baseline_root))
-    retired = None
-    committed = False
-    try:
-        write_canonical_csv(result.rows, staging / "baseline.csv")
-        document = {
-            "name": name,
-            "description": description,
-            "created": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-            "find_pan": {"version": find_pan_version, "command": list(args)},
-            "python": platform.python_version(),
-            "platform": sys.platform,
-            "requires_tools": tools,
-            "inputs": manifest,
-            "summary": {key: value for key, value in result.summary.items()
-                        if key in (*_SUMMARY_FIELDS, "skipped", "exit_status")},
-        }
-        with open(staging / "baseline.yaml", "w", encoding="utf-8", newline="\n") as handle:
-            yaml.safe_dump(document, handle, sort_keys=False, allow_unicode=True)
-        if target.exists():
-            retired = Path(tempfile.mkdtemp(prefix=f".{name}.old.", dir=baseline_root))
-            os.replace(target, retired / "old")
-        os.replace(staging, target)
-        committed = True
-    except BaseException:
-        #   Whatever went wrong (including Ctrl-C), put the previous baseline back.
-        if retired is not None and (retired / "old").exists() and not target.exists():
-            os.replace(retired / "old", target)
-        raise
-    finally:
-        shutil.rmtree(staging, ignore_errors=True)
-        if retired is not None and (committed or not (retired / "old").exists()):
-            shutil.rmtree(retired, ignore_errors=True)
-    return target
+    document = {
+        "name": baseline_name,
+        "description": description,
+        "created": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "csv_file": f"{baseline_name}.csv",
+        "find_pan": {"version": find_pan_version, "command": list(args)},
+        "python": platform.python_version(),
+        "platform": sys.platform,
+        "requires_tools": tools,
+        "inputs": manifest,
+        "summary": {key: value for key, value in result.summary.items()
+                    if key in (*_SUMMARY_FIELDS, "skipped", "exit_status")},
+    }
+    _write_file_baseline(config_path, document, result.rows, force)
+    return config_path
 
 
 # ===========================================================================
@@ -476,18 +597,20 @@ def validate(name: str, strict: bool = False, max_diff: int = 50,
              root: Path = REPO_ROOT, baseline_root: Path = BASELINE_ROOT) -> Outcome:
     """Re-run find-pan exactly as recorded for baseline *name* and compare with the stored results."""
     try:
-        validate_name(name)
-        directory = baseline_root / name
-        yaml_path, csv_path = directory / "baseline.yaml", directory / "baseline.csv"
-        if not yaml_path.is_file() or not csv_path.is_file():
-            return _error(name, f"no baseline named {name!r} (expected {yaml_path} and {csv_path.name})")
+        baseline_name, config_path = _baseline_config_path(name, root, baseline_root)
+        if not config_path.is_file():
+            return _error(name, f"no baseline named {name!r} (expected {config_path})")
         try:
-            document = yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
+            document = _load_baseline_document(config_path)
         except yaml.YAMLError as error:
-            return _error(name, f"{yaml_path.name} is not valid YAML: {error}")
-        if not isinstance(document, dict) or document.get("name") != name:
-            return _error(name, f"{yaml_path.name} says name {document.get('name') if isinstance(document, dict) else None!r}, "
-                                f"but the directory is {name!r}")
+            return _error(name, f"{config_path.name} is not valid YAML: {error}")
+        if document.get("name") != baseline_name:
+            return _error(name, f"{config_path.name} says name {document.get('name')!r}, "
+                                f"but the baseline is {baseline_name!r}")
+        csv_path = _csv_path(config_path, document)
+        _check_collisions(config_path, csv_path, True)
+        if not csv_path.is_file():
+            return _error(name, f"baseline output CSV is missing: {csv_path}")
 
         required = document.get("requires_tools", [])
         extractors = load_extractor_config(find_extractor_config_path()) if required else {}
@@ -497,7 +620,7 @@ def validate(name: str, strict: bool = False, max_diff: int = 50,
                            [f"required extractor not installed: {', '.join(missing_tools)}"], 1 if strict else 0)
 
         command = list(document["find_pan"]["command"])
-        current_inputs = inputs_manifest(command, root)
+        current_inputs = inputs_manifest(command, root, baseline_root)
         result = run_find_pan(command, root)
 
         input_messages = diff_inputs(document.get("inputs", []), current_inputs)
@@ -547,24 +670,26 @@ def build_parser() -> argparse.ArgumentParser:
         epilog="With --create, every other argument is passed to find-pan "
                "(for example --path or --file); use -- to separate them if needed.",
     )
-    parser.add_argument("--create", metavar="NAME", help="Run find-pan and archive the result as baseline NAME.")
-    parser.add_argument("--validate", metavar="NAME", nargs="?", const="",
-                        help="Re-run find-pan and compare with baseline NAME (or every baseline with --all).")
+    parser.add_argument("--create", metavar="CONFIG", help=f"Create a YAML configuration in {BASELINE_RELATIVE_ROOT.as_posix()}/ (or supply a NAME).")
+    parser.add_argument("--validate", metavar="CONFIG", nargs="?", const="",
+                        help="Re-run find-pan and compare with a YAML config or NAME (or every baseline with --all).")
     parser.add_argument("--all", action="store_true", help="With --validate: check every baseline.")
     parser.add_argument("--description", default="", help="With --create: what the baseline covers.")
-    parser.add_argument("--force", action="store_true", help="With --create: replace an existing baseline.")
+    parser.add_argument("--force", action="store_true", help="With --create: regenerate an existing configuration and its output.")
     parser.add_argument("--strict", action="store_true",
                         help="With --validate: treat baselines skipped for a missing extractor as failures.")
     parser.add_argument("--max-diff", type=_positive_int, default=50, metavar="N",
-                        help="With --validate: most differing rows to print per baseline.")
+                        help="With --validate: maximum differing rows to print per baseline.")
     return parser
 
 
 def _all_names(baseline_root: Path) -> list[str]:
     if not baseline_root.is_dir():
         return []
-    return sorted(entry.name for entry in baseline_root.iterdir()
-                  if entry.is_dir() and not entry.name.startswith(".") and (entry / "baseline.yaml").is_file())
+    names = [entry.stem for entry in baseline_root.iterdir()
+             if entry.is_file() and entry.suffix.lower() in _CONFIG_SUFFIXES
+             and not entry.name.startswith(".")]
+    return sorted(names)
 
 
 _LABELS = {"PASS": "PASS", "FAIL": "FAIL", "SKIPPED": "SKIP", "ERROR": "ERROR"}
@@ -604,6 +729,8 @@ def main(argv: Sequence[str] | None = None, root: Path = REPO_ROOT, baseline_roo
             if args.all:
                 raise BaselineError("--all only applies to --validate")
             target = create(args.create, args.description, rest, args.force, root, baseline_root)
+            document = _load_baseline_document(target)
+            print(f"Confirmed all {len(document.get('inputs', []))} requested input file(s) were scanned successfully.")
             print(f"created baseline {args.create}: {target}")
             return 0
 

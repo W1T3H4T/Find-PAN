@@ -20,16 +20,16 @@ import time
 _RegexPatternPrefix = r"[ '\"{]"
 
 
-def load_json(json_file):
+def load_json(path):
     """Load the JSON file and return its contents."""
-    with open(json_file, "r") as f:
+    with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
 
 
-def get_files_in_directory(directory):
+def get_files_in_directory(path):
     """Get all files from the given directory."""
     file_list = []
-    for root, dirs, files in os.walk(directory):
+    for root, _dirs, files in os.walk(path):
         for file in files:
             file_list.append(os.path.join(root, file))
     return file_list
@@ -68,8 +68,8 @@ def compile_regex_patterns(json_data:dict) -> []:
 def test_precompiled_patterns(file_path, compiled_patterns):
     """Test each line of the file against pre-compiled regex patterns."""
     with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
-        for line_num, line in enumerate(f, 1):
-            for category, pattern_name, compiled_pattern in compiled_patterns:
+        for line in f:
+            for _category, _pattern_name, compiled_pattern in compiled_patterns:
                 if compiled_pattern.search(line):
                     # For benchmarking purposes, we avoid printing the matches.
                     break
@@ -78,10 +78,10 @@ def test_precompiled_patterns(file_path, compiled_patterns):
 def test_noncompiled_patterns(file_path, json_data):
     """Test each line of the file against non-compiled regex patterns."""
     with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
-        for line_num, line in enumerate(f, 1):
-            for category, patterns in json_data.items():
+        for line in f:
+            for patterns in json_data.values():
                 if isinstance(patterns, dict):
-                    for pattern_name, details in patterns.items():
+                    for details in patterns.values():
                         if "regex" in details:
                             for pattern in details["regex"]:
                                 if re.search(pattern, line):
@@ -132,17 +132,17 @@ def delta_percent(first, second):
     else:
         raise ValueError("Both pre and post-observation times must be positive.")
 
-def main(json_file, directory):
+def main(json_path, input_directory):
     """Main function to load JSON, compile regex, and benchmark performance."""
     # Load JSON data
-    json_data = load_json(json_file)
+    json_data = load_json(json_path)
 
     # Compile regex patterns
     compiled_patterns = compile_regex_patterns(json_data)
-    compiled_prefix_patterns = compile_regex_patterns_with_prefix(json_data)
+    compile_regex_patterns_with_prefix(json_data)
 
     # Get all files in the directory
-    files = get_files_in_directory(directory)
+    files = get_files_in_directory(input_directory)
 
     #print("=" * 50)
     #print_patterns(compiled_patterns)

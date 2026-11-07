@@ -24,6 +24,14 @@ The illustration is a conceptual overview; the detection order and supported tex
 
 After [installation](#installation), run these commands from the repository root:
 
+The project uses only `.venv`. Before running `uv` directly, clear any inherited
+`UV_PROJECT_ENVIRONMENT` override from your current shell. For PowerShell, run
+`Remove-Item Env:UV_PROJECT_ENVIRONMENT -ErrorAction SilentlyContinue`; for POSIX
+shells, run `unset UV_PROJECT_ENVIRONMENT`. A stale override from an older setup
+may also be stored in Windows user environment variables or a shell profile;
+remove it there and restart the shell. These settings affect `uv` even when
+`.venv` is activated.
+
 ```console
 uv run python bin/find-pan.py --version
 uv run python bin/find-pan.py --file RegressionTests/VISA.txt --mask
@@ -39,7 +47,7 @@ The wrapper scripts `bin/find-pan.sh` (Linux, macOS, WSL, Git Bash) and `bin/fin
 .\bin\find-pan.ps1 --path D:\data --mask --summary-json summary.json
 ```
 
-They use `uv` when it is installed and otherwise the project environment's own Python. Set `UV_PROJECT_ENVIRONMENT` to use a different environment.
+They use `uv` when it is installed and otherwise the project `.venv` Python. Both wrappers select `.venv` even if `UV_PROJECT_ENVIRONMENT` has another value.
 
 Masking is opt-in. Without `--mask`, findings and source lines can contain full PANs and track data.
 
@@ -81,7 +89,9 @@ sudo apt install -y libmagic1 python3-full
 
 On macOS with Homebrew, install libmagic with `brew install libmagic` before running the script.
 
-Both setup scripts persist `UV_PROJECT_ENVIRONMENT` for future shells: `.venv-windows` on Windows and `.venv-linux` on POSIX systems, including macOS. This setting affects other uv projects for that user too. The scripts synchronize dependencies, verify pytest, and remove a legacy `.venv` directory if present. Open a new shell afterward. Non-interactive POSIX shells must export the variable themselves.
+Both setup scripts synchronize the project-root `.venv` and verify pytest without changing user-wide environment settings or removing `.venv`. For direct `uv` commands, ensure an existing `UV_PROJECT_ENVIRONMENT` setting does not select another directory: set `$env:UV_PROJECT_ENVIRONMENT = '.venv'` in PowerShell or `export UV_PROJECT_ENVIRONMENT=.venv` in POSIX shells. In particular, update any settings left by older versions of the setup scripts. Virtual environments are platform-specific; recreate `.venv` when switching between Windows and WSL/Linux or macOS in a shared checkout.
+
+Setup installs the development group, synchronizes with `uv sync --locked --inexact`, and runs pip against `requirements.txt` using constraints exported from `uv.lock`. Incompatible requirements fail rather than changing locked versions. To recreate `.venv`, run `./bin/setup-env.ps1 -Recreate` in PowerShell or `bash ./bin/setup-env.sh --recreate` on POSIX. If removal fails, remove the directory manually and run the script again. Without the recreation option, setup preserves the existing environment.
 
 To install runtime dependencies without the development group:
 
@@ -91,7 +101,7 @@ uv sync --no-dev
 
 ### pip alternative
 
-Create and activate a virtual environment using [Python's venv instructions](https://docs.python.org/3/library/venv.html), then run:
+Create and activate the project-root `.venv` using [Python's venv instructions](https://docs.python.org/3/library/venv.html), then run:
 
 ```console
 python -m pip install -r requirements.txt
@@ -337,10 +347,15 @@ extractors:
 ```console
 uv run python bin/baseline.py --create plain-text --description "Plain fixtures" --file RegressionTests/*.txt
 uv run python bin/baseline.py --validate plain-text
+uv run python bin/baseline.py --create RegressionTests/baseline/visa-only.yaml --file RegressionTests/VISA.txt
+uv run python bin/baseline.py --validate RegressionTests/baseline/visa-only.yaml
+uv run python bin/baseline.py --create plain-text --force --file RegressionTests/*.txt
 uv run python bin/baseline.py --validate --all
 ```
 
-Creation stores canonical findings in `RegressionTests/baseline/NAME/baseline.csv` and scan arguments, input hashes, versions, extractor requirements, and summary information in `baseline.yaml`. Inputs must be inside the repository and outside the baseline directory. Existing baselines require `--force` to replace.
+Baseline configurations use YAML only (`.yaml` or `.yml`); JSON configuration files are rejected. Configurations live directly in `RegressionTests/baseline/`, and CSV outputs live in its `output/` subdirectory. A name creates `RegressionTests/baseline/NAME.yaml` and `RegressionTests/baseline/output/NAME.csv`; an explicit YAML path must be directly inside that baseline directory. Configurations record the output filename, find-pan arguments, input hashes, versions, extractor requirements, and summary information. `--validate --all` discovers configurations directly in the baseline directory. Inputs must be inside the repository and outside the baseline directory; a `--path` scan must not include the baseline directory or one of its parents, including `RegressionTests/` itself.
+
+Configuration stems and output filenames must be unique, including case-insensitive aliases and `.yaml`/`.yml` alternatives. Outputs must match their configuration stem. Creation refuses existing configurations unless `--force` explicitly regenerates that configuration and its CSV. `--force` never permits overwriting another configuration's output or an orphan CSV without a matching configuration. Publication is serialized, and failures restore the previous configuration and CSV. If an interrupted process leaves `RegressionTests/baseline/.publish.lock`, confirm no baseline creation is running before removing the stale lock.
 
 Validation compares rows independent of order, summary counts, skipped files, and input hashes. Text hashes normalize CRLF to LF. `--max-diff N` limits displayed differences. Missing extractor tools produce `SKIPPED (environment)` unless `--strict` is set.
 
@@ -360,7 +375,7 @@ SKIP   archive-7z_Test  environment
 3 baselines: 1 passed, 1 failed, 1 skipped, 0 errors
 ```
 
-Baseline exit statuses are `0` for matching results, `1` for differences, and `2` for usage/environment errors. Baselines can be added or removed freely: [tests/test_shipped_baselines.py](tests/test_shipped_baselines.py) validates every baseline it finds in `RegressionTests/baseline/` and fails if any of them does not pass.
+Baseline exit statuses are `0` for matching results, `1` for differences, and `2` for usage/environment errors. [tests/test_shipped_baselines.py](tests/test_shipped_baselines.py) validates every configuration it finds in `RegressionTests/baseline/` and fails if any of them does not pass. Remove both the configuration and its matching CSV when removing a baseline.
 
 ## Supporting tools
 
@@ -375,7 +390,7 @@ Baseline exit statuses are `0` for matching results, `1` for differences, and `2
 | `bin/check-json-regex.py` | Validate regex JSON patterns against project rules. |
 | `bin/obfuscate-pan.py` | Obfuscate PANs in text files. |
 | `bin/update_version.py` | Show, set, or bump versions in `pyproject.toml` and `src/find_pan/version.py`. |
-| `bin/run-pytest-regression.py` | Run pytest from the repository root. |
+| `bin/run-pytest-regression.py` | Run pytest from the repository root; `--workers N` enables concurrent execution. |
 | `bin/grep-find-pan.sh`, `bin/grep-find-track.sh` | Run simple grep-based screens for possible PAN or track data. |
 
 ### Generate synthetic test data
@@ -443,9 +458,18 @@ Run the tests from the repository root:
 
 ```console
 uv run pytest
+uv run python bin/run-pytest-regression.py --workers 4
 ```
 
-Tests live in `tests/`; fixtures and baselines live in `RegressionTests/`. Match records pass through the reporter's redactor before reaching output sinks.
+Pylint is included in the development dependencies and uses the repository's `.pylintrc`:
+
+```console
+uv run pylint src/find_pan
+```
+
+Visual Studio's folder workspace is configured to discover pytest tests with `.venv\Scripts\python.exe`. Run `bin/setup-env.ps1` to create and synchronize that environment. If Test Explorer uses another interpreter, select the project's `.venv` in Visual Studio's Python Environments window, then reopen the folder and refresh Test Explorer. Check the Tests output pane to confirm discovery uses `.venv\Scripts\python.exe`; the interpreter must have the development dependencies installed.
+
+Tests live in `tests/`; fixtures and baseline configurations live in `RegressionTests/`, with baseline CSV outputs in `RegressionTests/baseline/output/`. Match records pass through the reporter's redactor before reaching output sinks.
 
 ## Data handling
 

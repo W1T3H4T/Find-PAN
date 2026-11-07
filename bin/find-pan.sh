@@ -11,8 +11,7 @@
 #
 #      ./bin/find-pan.sh --path /data --mask --summary-json summary.json
 #
-#  The environment is the one bin/setup-env.sh configures (.venv-linux, or
-#  .venv-windows under Git Bash); an existing UV_PROJECT_ENVIRONMENT wins.
+#  The environment is the project-root .venv, including under Git Bash.
 #  uv is used when it is installed (it also brings the environment up to
 #  date); otherwise the environment's own Python is used if it exists.
 # =============================================================================
@@ -35,10 +34,10 @@ project_root="$(dirname -- "$bin_dir")"
 launcher="$bin_dir/find-pan.py"
 
 case "$(uname -s)" in
-    MINGW*|MSYS*|CYGWIN*) default_environment=".venv-windows"; python_relative="Scripts/python.exe" ;;
-    *)                    default_environment=".venv-linux";   python_relative="bin/python" ;;
+    MINGW*|MSYS*|CYGWIN*) python_relative="Scripts/python.exe" ;;
+    *)                    python_relative="bin/python" ;;
 esac
-environment="${UV_PROJECT_ENVIRONMENT:-$default_environment}"
+environment_dir="$project_root/.venv"
 
 #   uv: on PATH, or in the standard installer locations (non-interactive shells often lack them)
 uv_bin="$(command -v uv || true)"
@@ -52,15 +51,11 @@ if [ -z "$uv_bin" ]; then
 fi
 
 if [ -n "$uv_bin" ]; then
-    export UV_PROJECT_ENVIRONMENT="$environment"
+    export UV_PROJECT_ENVIRONMENT=.venv
     exec "$uv_bin" run --project "$project_root" python "$launcher" "$@"
 fi
 
 #   No uv: use the environment's Python if it has been created.
-case "$environment" in
-    /*) environment_dir="$environment" ;;
-    *)  environment_dir="$project_root/$environment" ;;
-esac
 if [ -x "$environment_dir/$python_relative" ]; then
     exec "$environment_dir/$python_relative" "$launcher" "$@"
 fi

@@ -4,35 +4,28 @@
 #  What    :   One-time setup for the Find-PAN project environment on
 #              WSL / Linux / macOS.
 #
-#  Configures uv so that plain `uv` commands (`uv sync`, `uv run`, `uv add`)
-#  automatically use a POSIX-specific project environment (`.venv-linux`).
+#  Synchronizes the project-root .venv without changing user shell settings.
 #
 #  python-magic requires the system libmagic library.  On Debian/Ubuntu this
 #  package is libmagic1; on macOS with Homebrew it is libmagic.  The script
 #  checks for the library and warns if it is missing, but it will not abort.
 #
-#  uv has no pyproject.toml setting for the environment path, but it honors
-#  the UV_PROJECT_ENVIRONMENT variable, and a *relative* value is resolved
-#  against each project's root.  This script exports the variable for the
-#  current session and persists it in the shell's rc file, so every uv
-#  project keeps its own platform-named environment directory.  Sharing a
-#  checkout between Windows and WSL/Linux then works without either side
-#  corrupting the other's environment.
-#
-#  Run once per platform, then open a NEW shell and use plain uv commands:
-#      uv run python bin/run-pytest-regression.py
+#  For direct uv commands, set UV_PROJECT_ENVIRONMENT=.venv.
 # =============================================================================
 
 set -euo pipefail
 
 project_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
-environment_name=".venv-linux"
-
-#   Which rc file persists the variable for interactive shells
-rc_file="$HOME/.bashrc"
-case "$(basename -- "${SHELL:-/bin/bash}")" in
-    zsh) rc_file="$HOME/.zshrc" ;;
-esac
+venv_path="$project_root/.venv"
+recreate=false
+if [ "${1:-}" = "--recreate" ]; then
+    recreate=true
+    shift
+fi
+if [ "$#" -ne 0 ]; then
+    echo "Usage: $0 [--recreate]" >&2
+    exit 2
+fi
 
 # -- 1. uv must be installed
 uv_bin="$(command -v uv || true)"
@@ -83,43 +76,34 @@ if [ "$magic_present" != true ]; then
     echo "         macOS/Homebrew: brew install libmagic" >&2
 fi
 
-# -- 2. Persist the per-platform environment name for this shell
-configure_line="export UV_PROJECT_ENVIRONMENT=\"${environment_name}\""
-if [ -f "$rc_file" ] && grep -Fq "UV_PROJECT_ENVIRONMENT" "$rc_file"; then
-    if grep -Fq "$configure_line" "$rc_file"; then
-        echo "$rc_file is already configured."
-    else
-        echo "WARNING: $rc_file sets UV_PROJECT_ENVIRONMENT to a different value." >&2
-        echo "         Review it so it matches: $configure_line" >&2
-    fi
-else
-    {
-        echo ""
-        echo "# Per-platform uv project environment (added by Find-PAN bin/setup-env.sh)"
-        echo "$configure_line"
-    } >>"$rc_file"
-    echo "Appended UV_PROJECT_ENVIRONMENT to $rc_file."
-fi
-
-export UV_PROJECT_ENVIRONMENT="$environment_name"
-echo "UV_PROJECT_ENVIRONMENT=$environment_name is active for this session."
-echo "Every uv project keeps its own $environment_name directory."
-echo "Note: non-interactive shells (scripts, CI) must export the variable themselves."
-
-# -- 3. Create and verify the project environment
+# -- 2. Create and verify the project environment
+export UV_PROJECT_ENVIRONMENT=.venv
 cd -- "$project_root"
-"$uv_bin" sync
-#   Verify pytest is available; also exercise python-magic if libmagic is installed.
+if [ "$recreate" = true ] && { [ -e "$venv_path" ] || [ -L "$venv_path" ]; }; then
+    if ! rm -rf -- "$venv_path" || [ -e "$venv_path" ] || [ -L "$venv_path" ]; then
+        echo "Error: could not remove '$venv_path'." >&2
+        echo 'Manually remove the .venv directory and run this script again.' >&2
+        exit 1
+    fi
+fi
+if [ ! -e "$venv_path" ] && [ ! -L "$venv_path" ]; then
+    "$uv_bin" venv --seed "$venv_path"
+fi
+"$uv_bin" sync --locked --inexact
+python="$venv_path/bin/python"
+if [ ! -f "$python" ]; then
+    python="$venv_path/Scripts/python.exe"
+fi
+if ! "$python" -m pip --version >/dev/null 2>&1; then
+    "$python" -m ensurepip --upgrade
+fi
+constraints="$(mktemp)"
+trap 'rm -f -- "$constraints"' EXIT
+"$uv_bin" export --locked --no-hashes --no-emit-project --output-file "$constraints"
+"$python" -m pip install --constraint "$constraints" --requirement "$project_root/requirements.txt"
 "$uv_bin" run python -c 'import pytest; print("pytest", pytest.__version__, "is available.")'
 
-# -- 4. Clean up a legacy shared .venv, if any (superseded by the
-#      per-platform environment; safe to remove with `uv sync` recreating it)
-legacy="$project_root/.venv"
-if [ -e "$legacy" ]; then
-    rm -rf -- "$legacy"
-    echo "Removed legacy .venv (replaced by $environment_name)."
-fi
-
 echo
-echo "Setup complete. Open a NEW shell, then:"
+echo "Setup complete. In this shell, run:"
+echo "  export UV_PROJECT_ENVIRONMENT=.venv"
 echo "  uv run python bin/run-pytest-regression.py"

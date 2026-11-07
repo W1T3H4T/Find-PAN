@@ -157,5 +157,5 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    secure_del_app = find_secure_delete_program()
-    process_log_dir(args.path, args.age, args.prefix, secure_del_app)
+    secure_delete_command = find_secure_delete_program()
+    process_log_dir(args.path, args.age, args.prefix, secure_delete_command)

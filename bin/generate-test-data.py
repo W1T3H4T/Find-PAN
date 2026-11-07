@@ -247,22 +247,22 @@ class Maker:
 
 def _zip(members: list[tuple[str, bytes]]) -> bytes:
     buffer = io.BytesIO()
-    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
         for name, data in members:
             #   A fixed timestamp keeps the bytes (and so the tree) dependent on the seed alone.
             info = zipfile.ZipInfo(name, date_time=(2000, 1, 1, 0, 0, 0))
             info.compress_type = zipfile.ZIP_DEFLATED
-            archive.writestr(info, data)
+            zip_file.writestr(info, data)
     return buffer.getvalue()
 
 
 def _tar(members: list[tuple[str, bytes]]) -> bytes:
     buffer = io.BytesIO()
-    with tarfile.open(fileobj=buffer, mode="w") as archive:
+    with tarfile.open(fileobj=buffer, mode="w") as tar_file:
         for name, data in members:
             info = tarfile.TarInfo(name)
             info.size = len(data)
-            archive.addfile(info, io.BytesIO(data))
+            tar_file.addfile(info, io.BytesIO(data))
     return buffer.getvalue()
 
 

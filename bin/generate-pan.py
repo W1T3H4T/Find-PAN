@@ -15,7 +15,7 @@ from lorem_text import lorem
 try:
     from re import _parser as regex_parser
 except ImportError:  # pragma: no cover
-    import sre_parse as regex_parser
+    import sre_parse as regex_parser  # pylint: disable=deprecated-module  # Python 3.10 fallback
 
 
 DEFAULT_PATTERNS_PATH = Path(__file__).resolve().parents[1] / "config" / "find-pan-regex.json"

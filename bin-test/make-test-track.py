@@ -67,8 +67,7 @@ def generate_random_address():
         # {data['postalCode']}"
         return f"{data['postalCode']}"
 
-    # pylint: disable=W0718
-    except Exception:
+    except Exception:  # pylint: disable=broad-exception-caught
         pass
     return "30308"
 

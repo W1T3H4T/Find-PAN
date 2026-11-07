@@ -334,8 +334,7 @@ def generate_pan_for_card_type(JsonData=None, card_type=None) -> list:
                         return log_error(
                             f"Valid PAN failed REGREX test: {local_pan} !~ {pan_regex} for {card_type}")
 
-    # pylint: disable=W0718
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-exception-caught
         print_exception_info(e)
 
     return pan_array
@@ -463,6 +462,5 @@ try:
                 print(format_pan(gen_pan))
             count += 1
 
-# pylint: disable=W0718
-except Exception as e:
+except Exception as e:  # pylint: disable=broad-exception-caught
     print_exception_info(e)

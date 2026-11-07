@@ -1,16 +1,9 @@
+<#
 .SYNOPSIS
     One-time setup for the Find-PAN project environment on Windows (PowerShell).
 
 .DESCRIPTION
-    Configures uv so that plain `uv` commands (`uv sync`, `uv run`, `uv add`)
-    automatically use a Windows-specific project environment (`.venv-windows`).
-
-    uv has no pyproject.toml setting for the environment path, but it honors
-    the UV_PROJECT_ENVIRONMENT variable, and a *relative* value is resolved
-    against each project's root. This script persists the variable for your
-    Windows user, so every uv project keeps its own platform-named environment
-    directory. Sharing a checkout between Windows and WSL/Linux then works
-    without either side corrupting the other's environment.
+    Synchronizes the project-root .venv without changing user-wide settings.
 
     python-magic needs the libmagic-1.dll native library on Windows.  If the
     -FileWindows switch is used, the file-windows package is installed before
@@ -18,14 +11,16 @@
     manage the DLL yourself, place libmagic-1.dll (and its magic1.mgc database)
     on PATH or in the bin directory.
 
-    Run once, then open a NEW shell (so the variable is picked up) and use
-    plain uv commands:
+    Set UV_PROJECT_ENVIRONMENT=.venv when running uv commands directly:
 
         uv run python bin/run-pytest-regression.py
 
 .PARAMETER FileWindows
     Install the file-windows package into the project environment to provide the
     libmagic-1.dll dependency on Windows.
+
+.PARAMETER Recreate
+    Remove the existing .venv before creating a fresh environment.
 
 .EXAMPLE
     PS> .\bin\setup-env.ps1
@@ -36,13 +31,14 @@
 
 [CmdletBinding()]
 param(
-    [switch]$FileWindows
+    [switch]$FileWindows,
+    [switch]$Recreate
 )
 
 $ErrorActionPreference = 'Stop'
 
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
-$EnvironmentName = '.venv-windows'
+$VenvPath = Join-Path $ProjectRoot '.venv'
 
 # -- 1. uv must be installed
 if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
@@ -54,44 +50,66 @@ Then re-run this script.
     exit 1
 }
 
-# -- 2. Persist the per-platform environment name for this user
-$previous = [Environment]::GetEnvironmentVariable('UV_PROJECT_ENVIRONMENT', 'User')
-[Environment]::SetEnvironmentVariable('UV_PROJECT_ENVIRONMENT', $EnvironmentName, 'User')
-$env:UV_PROJECT_ENVIRONMENT = $EnvironmentName
-
-if ($previous -and $previous -ne $EnvironmentName) {
-    Write-Host "Replaced previous UV_PROJECT_ENVIRONMENT='$previous'."
+if ($Recreate) {
+    try {
+        try { $existing = Get-Item -LiteralPath $VenvPath -Force -ErrorAction Stop }
+        catch [System.Management.Automation.ItemNotFoundException] { $existing = $null }
+        if ($null -ne $existing) {
+            Remove-Item -LiteralPath $VenvPath -Recurse -Force -ErrorAction Stop
+            try {
+                Get-Item -LiteralPath $VenvPath -Force -ErrorAction Stop | Out-Null
+                throw 'The directory still exists after removal.'
+            }
+            catch [System.Management.Automation.ItemNotFoundException] { }
+        }
+    }
+    catch {
+        [Console]::Error.WriteLine("Error: could not remove '$VenvPath': $($_.Exception.Message)")
+        [Console]::Error.WriteLine('Manually remove the .venv directory and run this script again.')
+        exit 1
+    }
 }
-Write-Host "UV_PROJECT_ENVIRONMENT=$EnvironmentName persisted for your Windows user."
-Write-Host "Every uv project keeps its own $EnvironmentName directory."
 
-# -- 3. Create and verify the project environment
+# -- 2. Create and verify the project environment
+$previous = $env:UV_PROJECT_ENVIRONMENT
+$env:UV_PROJECT_ENVIRONMENT = '.venv'
 Push-Location $ProjectRoot
 try {
+    if (-not (Test-Path -LiteralPath $VenvPath)) {
+        uv venv --seed $VenvPath
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    }
     if ($FileWindows) {
         Write-Host 'Adding file-windows to provide libmagic-1.dll on Windows.'
         uv add file-windows
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     }
-    uv sync
+    uv sync --locked --inexact
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    $Python = Join-Path $VenvPath 'Scripts/python.exe'
+    if (-not (Test-Path -LiteralPath $Python)) { $Python = Join-Path $VenvPath 'bin/python' }
+    & $Python -m pip --version *> $null
+    if ($LASTEXITCODE -ne 0) {
+        & $Python -m ensurepip --upgrade
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    }
+    $constraints = [System.IO.Path]::GetTempFileName()
+    try {
+        uv export --locked --no-hashes --no-emit-project --output-file $constraints
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        & $Python -m pip install --constraint $constraints --requirement (Join-Path $ProjectRoot 'requirements.txt')
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    }
+    finally { Remove-Item -LiteralPath $constraints -Force -ErrorAction SilentlyContinue }
     uv run python -c 'import pytest; print("pytest", pytest.__version__, "is available.")'
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
 finally {
     Pop-Location
-}
-
-# -- 4. Clean up a legacy shared .venv, if any (superseded by the per-platform
-#       environment; safe to remove since `uv sync` recreates environments)
-$legacy = Join-Path $ProjectRoot '.venv'
-if (Test-Path $legacy) {
-    try {
-        Remove-Item -Recurse -Force $legacy
-        Write-Host "Removed legacy .venv (replaced by $EnvironmentName)."
-    }
-    catch {
-        Write-Warning "Could not remove legacy .venv ($($_.Exception.Message)). Remove it manually."
-    }
+    $env:UV_PROJECT_ENVIRONMENT = $previous
 }
 
 Write-Host ''
-Write-Host 'Setup complete. Open a NEW shell, then:'
+Write-Host 'Setup complete. In this shell, run:'
+Write-Host "  `$env:UV_PROJECT_ENVIRONMENT = '.venv'"
 Write-Host '  uv run python bin/run-pytest-regression.py'
