@@ -29,3 +29,4 @@ class Settings:
     raw_encodings: tuple[str, ...] = ("ascii", "utf-16")
     pan_list: str | None = None
     track_list: str | None = None
+    exclude_dirs: tuple[str, ...] = ()

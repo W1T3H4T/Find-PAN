@@ -114,6 +114,7 @@ The native libmagic dependency and archive extractors still need to be supplied 
 
 ```text
 uv run python bin/find-pan.py [--path PATH] [--file FILE [FILE ...]]
+    [--exclude-dir PATTERN]...
     [--log-dir LOG_DIR] [--rgx-patterns RGX_PATTERNS] [--rgx-prefix]
     [--skip-binary] [--line-limit LINE_LIMIT] [--report-delta REPORT_DELTA]
     [--csv CSV] [--summary-json PATH] [--raw] [--raw-encodings LIST]
@@ -125,6 +126,7 @@ uv run python bin/find-pan.py [--path PATH] [--file FILE [FILE ...]]
 | --- | --- |
 | `-h`, `--help`            | Show command help and defaults. |
 | `--path PATH`             | Recursively scan a directory tree, including recognized archives. |
+| `--exclude-dir PATTERN`   | Exclude child directories whose names match a case-sensitive shell-style glob (for example `baseline*`). Repeat for multiple patterns; applies inside expanded archives. The scan root and explicit `--file` entries are not excluded. Quote patterns to prevent shell expansion. |
 | `--file FILE [FILE ...]`  | Scan explicit files or archives. Repeat the flag to add more files. Missing files and directories are reported and skipped; use `--path` for directories. |
 | `--log-dir DIR`           | Log directory; defaults to `Find-PAN-Logs` in the user's home directory. Created if necessary. |
 | `--rgx-patterns FILE`     | Use this regex JSON file instead of searching the standard locations. |
@@ -354,6 +356,8 @@ uv run python bin/baseline.py --validate --all
 ```
 
 Baseline configurations use YAML only (`.yaml` or `.yml`); JSON configuration files are rejected. Configurations live directly in `RegressionTests/baseline/`, and CSV outputs live in its `output/` subdirectory. A name creates `RegressionTests/baseline/NAME.yaml` and `RegressionTests/baseline/output/NAME.csv`; an explicit YAML path must be directly inside that baseline directory. Configurations record the output filename, find-pan arguments, input hashes, versions, extractor requirements, and summary information. `--validate --all` discovers configurations directly in the baseline directory. Inputs must be inside the repository and outside the baseline directory; a `--path` scan must not include the baseline directory or one of its parents, including `RegressionTests/` itself.
+
+`--exclude-dir` is passed to find-pan but does not change baseline input tracking or relax the baseline-directory restriction.
 
 Configuration stems and output filenames must be unique, including case-insensitive aliases and `.yaml`/`.yml` alternatives. Outputs must match their configuration stem. Creation refuses existing configurations unless `--force` explicitly regenerates that configuration and its CSV. `--force` never permits overwriting another configuration's output or an orphan CSV without a matching configuration. Publication is serialized, and failures restore the previous configuration and CSV. If an interrupted process leaves `RegressionTests/baseline/.publish.lock`, confirm no baseline creation is running before removing the stale lock.
 

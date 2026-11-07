@@ -191,4 +191,3 @@ missing
 # Other
 logs/
 pylinter-logs/
-**/RegressionTests/

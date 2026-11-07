@@ -77,14 +77,6 @@ class LedgerEntry:
 
 
 class TargetLedger:
-    """Tallies, per listed value, how often it was found and where first."""
-
-    def __init__(self, targets: Targets) -> None:
-        self._entries = {(MatchKind.PAN, value): LedgerEntry(MatchKind.PAN, value) for value in targets.pans}
-        self._entries.update({(MatchKind.TRACK, value): LedgerEntry(MatchKind.TRACK, value)
-                              for value in targets.tracks})
-
-class TargetLedger:
     """Filters matches by the lists and tallies, per listed value, how often it was found and where first."""
 
     def __init__(self, targets: Targets) -> None:

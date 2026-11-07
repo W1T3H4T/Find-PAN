@@ -89,7 +89,7 @@ class RawScanner:
             for run in _PRINTABLE_RUN.finditer(text):
                 segment = run.group(0)
 
-                def place(index, run_start=run.start(), first=first, step=step):
+                def place(index, run_start=run.start(), first=first, step=step, encoding=encoding):
                     offset = base + first + step * (run_start + index)
                     return (offset, f"{file_path}@0x{offset:X} ({encoding})") if low <= offset < (
                         float("inf") if high is None else high) else None

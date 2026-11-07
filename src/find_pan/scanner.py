@@ -10,6 +10,7 @@ import hashlib
 import io
 import os
 from dataclasses import dataclass
+from fnmatch import fnmatchcase
 from typing import Callable, Iterable
 
 from find_pan.archives import extract_archive
@@ -126,7 +127,9 @@ class Scanner:
         archive could point one at a file outside the extraction directory.
         """
         self.loggers.trace.info("Scanning directory '%s' ...", directory)
-        for root, _, files in os.walk(directory):
+        for root, directories, files in os.walk(directory):
+            directories[:] = [name for name in directories
+                              if not any(fnmatchcase(name, pattern) for pattern in self.settings.exclude_dirs)]
             self.loggers.pan.info("Scanning directory '%s' ...", root)
             for name in files:
                 path = os.path.join(root, name)

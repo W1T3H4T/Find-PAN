@@ -9,7 +9,6 @@ import json
 import logging
 import os
 import re
-import shutil
 import sys
 from dataclasses import asdict, fields
 from pathlib import Path

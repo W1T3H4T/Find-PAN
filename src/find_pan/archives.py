@@ -99,7 +99,7 @@ def _remove_tree(directory: str) -> None:
     if sys.version_info >= (3, 12):
         shutil.rmtree(directory, onexc=handler)
     else:
-        shutil.rmtree(directory, onerror=handler)
+        shutil.rmtree(directory, onerror=handler)  # pylint: disable=deprecated-argument  # Python 3.10-3.11
 
 
 def _kill_tree(process: subprocess.Popen) -> None:
@@ -109,7 +109,7 @@ def _kill_tree(process: subprocess.Popen) -> None:
             subprocess.run(["taskkill", "/F", "/T", "/PID", str(process.pid)],
                            capture_output=True, check=False)
         else:
-            os.killpg(process.pid, signal.SIGKILL)
+            os.killpg(process.pid, signal.SIGKILL)  # pylint: disable=no-member  # POSIX-only APIs
     except OSError:
         pass
     process.kill()
@@ -259,7 +259,6 @@ def extract_archive(
         )
 
     extractor, command_path = select_candidate(candidates)
-    command = extractor["command"]
     tried = ", ".join(candidate["command"] for candidate in candidates)
     args_template = extractor["args"]
 
