@@ -1,0 +1,15 @@
+name: RegressionTest-Data
+description: ''
+created: '2026-11-07T22:18:23Z'
+csv_file: RegressionTest-Data.csv
+find_pan:
+  version: 3.5.3
+  command:
+  - --path
+  - .\RegressionTests\
+  - --exclude-dir
+  - baseline
+  working_directory:
+    relative_to_repo: .
+python: 3.14.5
+platform: win32

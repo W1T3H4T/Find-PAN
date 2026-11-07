@@ -1,5 +1,7 @@
 # Find-PAN
 
+Current version: **3.6.1**. See the [changelog](CHANGELOG.md) for release history.
+
 Find Primary Account Numbers (PANs) and Track 1 / Track 2 data in files, directory trees, and nested archives. Find-PAN uses configurable regular expressions, anti-PAN filters, and Luhn validation, then writes findings to logs and optional CSV output.
 
 ![Find-PAN inputs, scanner, and log, CSV, and JSON outputs](docs/images/find-pan.svg)
@@ -382,6 +384,8 @@ FAIL   archive-7z_Test   0.12s  error  | find-pan did not complete the requested
 Baseline exit statuses are `0` for matching results, `1` for differences, and `2` for usage/environment errors. [tests/test_shipped_baselines.py](tests/test_shipped_baselines.py) validates every configuration it finds in `RegressionTests/baseline/` and fails if any of them does not pass. Remove both the configuration and its matching CSV when removing a baseline.
 
 ## Supporting tools
+
+See the [supporting scripts README](bin/README.md) for usage, examples, and file-modification warnings.
 
 | Tool | Purpose |
 | --- | --- |
