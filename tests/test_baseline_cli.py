@@ -93,7 +93,19 @@ def test_exclude_dir_is_passed_through_to_find_pan(repo, bl_root):
     document = yaml.safe_load(target.read_text(encoding="utf-8"))
     assert document["find_pan"]["command"] == ["--path", "RegressionTests/nested", "--exclude-dir", "cache-*"]
     assert document["summary"]["files_scanned"] == 1
+    assert [entry["path"] for entry in document["inputs"]] == ["RegressionTests/nested/included.txt"]
+    (directory / "cache-data" / "ignored.txt").write_text("changed\n", encoding="utf-8")
     assert validate(repo, bl_root, "excluded").verdict == "PASS"
+
+
+def test_scan_regression_root_excludes_baseline_artifacts(repo, bl_root):
+    assert run_main(repo, bl_root, "--create", "regression", "--path", str(repo / "RegressionTests"),
+                    "--exclude-dir", "baseline") == 0
+    document = yaml.safe_load((bl_root / "regression.yaml").read_text(encoding="utf-8"))
+    assert document["find_pan"]["command"] == ["--path", "RegressionTests", "--exclude-dir", "baseline"]
+    assert len(document["inputs"]) == len(FIXTURES)
+    assert document["summary"]["files_scanned"] == len(FIXTURES)
+    assert validate(repo, bl_root, "regression").verdict == "PASS"
 
 
 def test_main_consumes_baseline_options_and_forwards_scanner_options(repo, bl_root):

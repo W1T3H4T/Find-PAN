@@ -29,14 +29,13 @@ _Parser = None
 #   Load the JSON file and return its contents.
 #   =================================================================
 def load_json(json_file):
-    # pylint: disable=broad-exception-caught
     try:
         with open(json_file, "r", encoding="utf-8", errors="replace") as f:
             return json.load(f)
 
     except (FileNotFoundError, json.JSONDecodeError, PermissionError) as e:
         print(f"Error loading JSON file: {e}")
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-exception-caught
         print(
             f"An unexpected error occurred while loading the JSON file {json_file}: {e}"
         )
@@ -63,23 +62,23 @@ def extract_pan_from_match(match_data) -> str:
 #   Compile the regex patterns found in the JSON data.
 #   =================================================================
 def compile_regex_patterns(json_data: dict) -> []:
-    # pylint: disable=broad-exception-caught,too-many-nested-blocks
     try:
         compiled_patterns = []
         for category, patterns in json_data.items():
             print(f"{os.path.basename(_Args.json)} category: {category}")
-            if isinstance(patterns, dict):
-                for pattern_name, details in patterns.items():
-                    if "regex" in details:
-                        for pattern in details["regex"]:
-                            compiled_patterns.append(
-                                (category, pattern_name, re.compile(pattern))
-                            )
+            if not isinstance(patterns, dict):
+                continue
+            for pattern_name, details in patterns.items():
+                if "regex" in details:
+                    for pattern in details["regex"]:
+                        compiled_patterns.append(
+                            (category, pattern_name, re.compile(pattern))
+                        )
         return compiled_patterns
 
     except (re.error, TypeError, KeyError) as e:
         print(f"Error compiling regex patterns: {e}")
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-exception-caught
         print(f"An unexpected error occurred: {e}")
     return []
 
@@ -88,7 +87,6 @@ def compile_regex_patterns(json_data: dict) -> []:
 #   Recursively find all files in a directory.
 #   =================================================================
 def get_files_in_directory(directory: str) -> []:
-    # pylint: disable=broad-exception-caught
     try:
         files = []
         for root, _, filenames in os.walk(directory):
@@ -98,7 +96,7 @@ def get_files_in_directory(directory: str) -> []:
 
     except (FileNotFoundError, PermissionError) as e:
         print(f"Error: {e}")
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-exception-caught
         print(
             f"An unexpected error occurred while accessing the directory {directory}: {e}"
         )
@@ -109,14 +107,13 @@ def get_files_in_directory(directory: str) -> []:
 #   Process all files in a directory.
 #   =================================================================
 def process_files_in_directory(directory: str, compiled_patterns: list):
-    # pylint: disable=broad-exception-caught
     try:
         files = get_files_in_directory(directory)
         for file in files:
             process_file(file, compiled_patterns)
     except (FileNotFoundError, PermissionError) as e:
         print(f"Error: {e}")
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-exception-caught
         print(
             f"An unexpected error occurred while processing the directory {directory}: {e}"
         )
@@ -126,7 +123,6 @@ def process_files_in_directory(directory: str, compiled_patterns: list):
 #   Search for PAN and TRACK data in the file.
 #   =================================================================
 def process_file(file_path, compiled_patterns):
-    # pylint: disable=broad-exception-caught,too-many-nested-blocks
     try:
         with open(file_path, "r", encoding="utf-8", errors="replace") as f:
             for line_num, line in enumerate(f, 1):
@@ -142,7 +138,7 @@ def process_file(file_path, compiled_patterns):
 
     except (FileNotFoundError, PermissionError) as e:
         print(f"Error: {e}")
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-exception-caught
         print(
             f"An unexpected error occurred while processing the file {file_path}: {e}"
         )

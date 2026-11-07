@@ -15,7 +15,6 @@ import re
 import sys
 import traceback
 ProgramName = None
-# pylint: disable=broad-exception-caught
 
 # ===========================================================================
 # Print consolidated exception info
@@ -76,7 +75,7 @@ def find_json_regex_config() -> str:
 
         # Raise error if none of the paths exist
         raise FileNotFoundError("Find-PAN JSON configuration file not found")
-    except (FileNotFoundError, IOError, Exception) as e:
+    except Exception as e:  # pylint: disable=broad-exception-caught
         print_exception_info(e)
 
     return None
@@ -91,7 +90,7 @@ def load_json_data(filename: str) -> dict | None:
             data = json.load(file)
             return data
 
-    except (FileNotFoundError, IOError, Exception) as e:
+    except Exception as e:  # pylint: disable=broad-exception-caught
         print_exception_info(e)
     return None
 
@@ -127,7 +126,7 @@ def calculate_pattern1_size(pattern, pattern_name):
                     raise ValueError(
                         f"Pattern length mismatch in {pattern_name}: {pattern}")
             return base_length
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-exception-caught
         print_exception_info(e)
 
     return 0

@@ -245,6 +245,39 @@ def test_input_exclusion_uses_the_supplied_baseline_root(repo):
     assert baseline.enumerate_inputs(["--path", str(repo / "RegressionTests")], repo, custom) == ["RegressionTests/a.txt"]
 
 
+@pytest.mark.parametrize("option", [["--exclude-dir", "base*"], ["--exclude-dir=base*"], ["--exclude", "base*"]])
+def test_parent_scan_prunes_excluded_baseline_even_before_creation(repo, option):
+    write(repo / "RegressionTests" / "a.txt")
+    args = ["--path", str(repo / "RegressionTests"), *option]
+    assert baseline.enumerate_inputs(args, repo) == ["RegressionTests/a.txt"]
+    write(repo / baseline.BASELINE_RELATIVE_ROOT / "output" / "a.csv")
+    assert baseline.enumerate_inputs(args, repo) == ["RegressionTests/a.txt"]
+
+
+def test_exclusion_prunes_nested_directories_but_not_explicit_files(repo):
+    write(repo / "data" / "keep.txt")
+    write(repo / "data" / "nested" / "cache-1" / "ignore.txt")
+    write(repo / "data" / "nested" / "Cache-2" / "keep.txt")
+    write(repo / "data" / "nested" / "other" / "ignore.txt")
+    args = ["--path", "data", "--exclude-dir", "cache-*", "--exclude-dir=other",
+            "--file", "data/nested/cache-1/ignore.txt"]
+    assert baseline.enumerate_inputs(args, repo) == ["data/keep.txt", "data/nested/Cache-2/keep.txt",
+                                                    "data/nested/cache-1/ignore.txt"]
+
+
+def test_baseline_exclusion_requires_a_matching_child_name(repo):
+    baseline_dir = repo / baseline.BASELINE_RELATIVE_ROOT
+    write(baseline_dir / "output" / "a.csv")
+    for pattern in ("Baseline", str(baseline_dir)):
+        with pytest.raises(BaselineError, match="directory-name pattern"):
+            baseline.enumerate_inputs(["--path", "RegressionTests", "--exclude-dir", pattern], repo)
+    with pytest.raises(BaselineError, match="baseline directory"):
+        baseline.enumerate_inputs(["--path", str(baseline_dir), "--exclude-dir", "baseline"], repo)
+    with pytest.raises(BaselineError, match="baseline directory"):
+        baseline.enumerate_inputs(["--file", str(baseline_dir / "output" / "a.csv"),
+                                   "--exclude-dir", "baseline"], repo)
+
+
 def test_file_equals_form_is_rewritten_and_enumerated(repo):
     write(repo / "a.txt")
     argument = "--file=" + str(repo / "a.txt")

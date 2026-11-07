@@ -352,12 +352,13 @@ uv run python bin/baseline.py --validate plain-text
 uv run python bin/baseline.py --create RegressionTests/baseline/visa-only.yaml --file RegressionTests/VISA.txt
 uv run python bin/baseline.py --validate RegressionTests/baseline/visa-only.yaml
 uv run python bin/baseline.py --create plain-text --force --file RegressionTests/*.txt
+uv run python bin/baseline.py --create RegressionTest-Data --path RegressionTests --exclude-dir baseline
 uv run python bin/baseline.py --validate --all
 ```
 
-Baseline configurations use YAML only (`.yaml` or `.yml`); JSON configuration files are rejected. Configurations live directly in `RegressionTests/baseline/`, and CSV outputs live in its `output/` subdirectory. A name creates `RegressionTests/baseline/NAME.yaml` and `RegressionTests/baseline/output/NAME.csv`; an explicit YAML path must be directly inside that baseline directory. Configurations record the output filename, find-pan arguments, input hashes, versions, extractor requirements, and summary information. `--validate --all` discovers configurations directly in the baseline directory. Inputs must be inside the repository and outside the baseline directory; a `--path` scan must not include the baseline directory or one of its parents, including `RegressionTests/` itself.
+Baseline configurations use YAML only (`.yaml` or `.yml`); JSON configuration files are rejected. Configurations live directly in `RegressionTests/baseline/`, and CSV outputs live in its `output/` subdirectory. A name creates `RegressionTests/baseline/NAME.yaml` and `RegressionTests/baseline/output/NAME.csv`; an explicit YAML path must be directly inside that baseline directory. Configurations record the output filename, find-pan arguments, input hashes, versions, extractor requirements, and summary information. `--validate --all` discovers configurations directly in the baseline directory. Inputs must be inside the repository and outside the baseline directory. When `--path` contains the baseline directory, exclude it with a directory-name pattern such as `--exclude-dir baseline`.
 
-`--exclude-dir` is passed to find-pan but does not change baseline input tracking or relax the baseline-directory restriction.
+`--exclude-dir` is passed to find-pan and applied to baseline input tracking using the same case-sensitive directory-name glob rules. Explicit `--file` inputs and the `--path` root itself are not excluded.
 
 For `--create`, baseline options are consumed and other options are forwarded to find-pan. Put `--` before find-pan arguments to prevent baseline from interpreting any later options. Baseline normalizes input paths and supplies its own temporary `--csv`, `--summary-json`, and `--log-dir` values, which take precedence over forwarded values.
 

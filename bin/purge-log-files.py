@@ -30,8 +30,7 @@ def init_logger():
     logging.basicConfig(level=logging.INFO, format=log_format)
     log_instance = logging.getLogger(__name__)
 
-    # pylint: disable=consider-using-f-string
-    log_file = "%s_%s.log" % (os.path.basename(__file__).split(".")[0], datetime.now().strftime("%Y%m%d"))
+    log_file = f"{os.path.basename(__file__).split('.')[0]}_{datetime.now().strftime('%Y%m%d')}.log"
     file_handler = logging.FileHandler(log_file)
     file_handler.setFormatter(logging.Formatter(log_format))
     log_instance.addHandler(file_handler)

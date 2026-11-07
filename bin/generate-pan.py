@@ -55,35 +55,34 @@ def luhn_check_digit(prefix: str) -> str:
 
 def generate_from_tokens(tokens: Iterable, rng: random.Random) -> str:
     """Generate a numeric candidate from a parsed Python regular expression."""
-    # pylint: disable=no-member  # opcode constants are not visible to static analysis
     value = []
 
     for token, data in tokens:
-        if token == regex_parser.LITERAL:
+        if token == regex_parser.LITERAL:  # pylint: disable=no-member
             value.append(chr(data))
-        elif token == regex_parser.IN:
+        elif token == regex_parser.IN:  # pylint: disable=no-member
             choices = []
             for item_token, item_data in data:
-                if item_token == regex_parser.LITERAL:
+                if item_token == regex_parser.LITERAL:  # pylint: disable=no-member
                     choices.append(chr(item_data))
-                elif item_token == regex_parser.RANGE:
+                elif item_token == regex_parser.RANGE:  # pylint: disable=no-member
                     choices.extend(chr(code) for code in range(item_data[0], item_data[1] + 1))
-                elif item_token == regex_parser.CATEGORY:
+                elif item_token == regex_parser.CATEGORY:  # pylint: disable=no-member
                     choices.extend("0123456789")
             if not choices:
                 raise ValueError(f"Unsupported character class: {data}")
             value.append(rng.choice(choices))
-        elif token == regex_parser.BRANCH:
+        elif token == regex_parser.BRANCH:  # pylint: disable=no-member
             _, branches = data
             value.append(generate_from_tokens(rng.choice(branches), rng))
-        elif token == regex_parser.SUBPATTERN:
+        elif token == regex_parser.SUBPATTERN:  # pylint: disable=no-member
             value.append(generate_from_tokens(data[-1], rng))
-        elif token in (regex_parser.MAX_REPEAT, regex_parser.MIN_REPEAT):
+        elif token in (regex_parser.MAX_REPEAT, regex_parser.MIN_REPEAT):  # pylint: disable=no-member
             minimum, maximum, repeated_tokens = data
             maximum = min(maximum, minimum + 8)
             for _ in range(rng.randint(minimum, maximum)):
                 value.append(generate_from_tokens(repeated_tokens, rng))
-        elif token in (regex_parser.ASSERT, regex_parser.ASSERT_NOT, regex_parser.AT):
+        elif token in (regex_parser.ASSERT, regex_parser.ASSERT_NOT, regex_parser.AT):  # pylint: disable=no-member
             continue
         else:
             raise ValueError(f"Unsupported regex token: {token}")
