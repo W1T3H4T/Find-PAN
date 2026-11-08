@@ -1,0 +1,17 @@
+name: RegressionTest-Data-Multi
+description: ''
+created: '2026-11-08T03:02:41Z'
+csv_file: RegressionTest-Data-Multi.csv
+find_pan:
+  version: 3.7.0
+  command:
+  - --path
+  - .\RegressionTests
+  - --exclude-dir
+  - baseline
+  - --workers
+  - '8'
+  working_directory:
+    relative_to_repo: .
+python: 3.14.5
+platform: win32

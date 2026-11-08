@@ -254,6 +254,32 @@ def test_named_baseline_resolves_existing_yml_file(repo, bl_root):
     assert create(repo, bl_root, "short", force=True) == bl_root / "short.yml"
 
 
+def test_validate_accepts_case_differences_in_name_and_csv(repo, bl_root):
+    config_path = create(repo, bl_root, "example-multi")
+    document = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    document["name"] = "Example-Multi"
+    document["csv_file"] = "Example-Multi.csv"
+    config_path.write_text(yaml.safe_dump(document), encoding="utf-8")
+    original = bl_root / "output" / "example-multi.csv"
+    temporary = original.with_name("temporary.csv")
+    original.rename(temporary)
+    temporary.rename(original.with_name(document["csv_file"]))
+    before = tree_state(bl_root)
+    for identifier in ("Example-Multi", "example-multi", "EXAMPLE-MULTI.yaml"):
+        outcome = validate(repo, bl_root, identifier)
+        assert outcome.verdict == "PASS", outcome.lines
+    assert tree_state(bl_root) == before
+
+
+def test_validate_rejects_multiple_case_insensitive_configurations(repo, bl_root):
+    config_path = create(repo, bl_root, "example")
+    (bl_root / "EXAMPLE.yml").write_bytes(config_path.read_bytes())
+    before = tree_state(bl_root)
+    outcome = validate(repo, bl_root, "example")
+    assert outcome.status == 2 and "collision" in outcome.lines[0]
+    assert tree_state(bl_root) == before
+
+
 def test_publication_lock_prevents_overwrite(repo, bl_root):
     create(repo, bl_root)
     lock = bl_root / ".publish.lock"

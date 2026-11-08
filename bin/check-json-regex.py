@@ -14,6 +14,12 @@ import os
 import re
 import sys
 import traceback
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+
+from find_pan.config import find_json_regex_config  # pylint: disable=wrong-import-position
+
 ProgramName = None
 
 # ===========================================================================
@@ -49,36 +55,6 @@ def print_exception_info(e: Exception) -> None:
         print(f"Info    : {e}")
     print("-----------------------------------------------------------------")
     sys.exit(1)
-
-
-# ===========================================================================
-# Find the JSON pattern file
-# ===========================================================================
-def find_json_regex_config() -> str:
-    try:
-        config_paths = [
-            os.environ.get("XDG_CONFIG_HOME"),
-            os.path.join(os.path.expanduser("~"), ".config"),
-            os.path.join(os.path.expanduser("~"), ".local"),
-            os.path.join(os.path.expanduser("~"), ".local/share"),
-            "/usr/local"
-        ]
-
-        # Find the first valid config path
-        for config_path in config_paths:
-            find_pan_dir = os.path.join(config_path, "find-pan")
-            json_file_path = os.path.join(find_pan_dir, "find-pan-regex.json")
-
-            if os.path.exists(json_file_path):
-                print(f"Using configuration file: {json_file_path}\n")
-                return json_file_path
-
-        # Raise error if none of the paths exist
-        raise FileNotFoundError("Find-PAN JSON configuration file not found")
-    except Exception as e:  # pylint: disable=broad-exception-caught
-        print_exception_info(e)
-
-    return None
 
 
 # ===========================================================================
@@ -193,5 +169,10 @@ def validate_pan_patterns(json_data):
 if __name__ == "__main__":
     # Validate the patterns
     ProgramName = os.path.basename(sys.argv[0])
-    validate_pan_patterns(load_json_data(find_json_regex_config()))
+    try:
+        config_path = find_json_regex_config()
+    except FileNotFoundError as e:
+        print_exception_info(e)
+    print(f"Using configuration file: {config_path}\n")
+    validate_pan_patterns(load_json_data(config_path))
     print("Success")

@@ -79,13 +79,23 @@ def validate_name(name: str) -> str:
     return name
 
 
-def _baseline_config_path(identifier: str, root: Path, baseline_root: Path) -> tuple[str, Path]:
+def _baseline_config_path(identifier: str, root: Path, baseline_root: Path,
+                          allow_case_alias: bool = False) -> tuple[str, Path]:
     """Resolve a baseline name or YAML path to its config path."""
     if baseline_root.is_symlink():
         raise BaselineError("baseline directory must not be a symbolic link")
     supplied = Path(identifier)
     if supplied.suffix.lower() == ".json":
         raise BaselineError("baseline configuration must use YAML (.yaml); JSON is not supported")
+    if allow_case_alias and supplied.parent == Path("."):
+        stem = supplied.stem if supplied.suffix.lower() in _CONFIG_SUFFIXES else identifier
+        validate_name(stem)
+        matches = [path for path in baseline_root.glob("*") if path.suffix.lower() in _CONFIG_SUFFIXES
+                   and path.stem.casefold() == stem.casefold()]
+        if len(matches) > 1:
+            raise BaselineError(f"configuration filename collision for baseline {identifier!r}")
+        if matches:
+            supplied = Path(matches[0].name)
     if supplied.suffix.lower() not in _CONFIG_SUFFIXES:
         validate_name(identifier)
         matches = [path for path in baseline_root.glob(f"{identifier}.*")
@@ -129,11 +139,12 @@ def _load_baseline_document(config_path: Path) -> dict:
     return document
 
 
-def _csv_path(config_path: Path, document: dict) -> Path:
+def _csv_path(config_path: Path, document: dict, allow_case_alias: bool = False) -> Path:
     """Resolve the uniquely named CSV beneath baseline/output."""
     default_name = f"{config_path.stem}.csv"
     csv_name = document.get("csv_file", default_name)
-    if csv_name != default_name:
+    if csv_name != default_name and not (allow_case_alias and isinstance(csv_name, str)
+                                         and csv_name.casefold() == default_name.casefold()):
         raise BaselineError(f"{config_path.name}: csv_file must be {default_name!r} in baseline/output")
     output_directory = config_path.parent / OUTPUT_DIRECTORY_NAME
     if output_directory.is_symlink():
@@ -599,17 +610,18 @@ def validate(name: str, strict: bool = False, max_diff: int = 50,  # pylint: dis
     """Re-run find-pan exactly as recorded for baseline *name* and compare with the stored results."""
     _ = strict  # Retained for compatibility; incomplete scans are always errors.
     try:
-        baseline_name, config_path = _baseline_config_path(name, root, baseline_root)
+        baseline_name, config_path = _baseline_config_path(name, root, baseline_root, allow_case_alias=True)
         if not config_path.is_file():
             return _error(name, f"no baseline named {name!r} (expected {config_path})")
         try:
             document = _load_baseline_document(config_path)
         except yaml.YAMLError as error:
             return _error(name, f"{config_path.name} is not valid YAML: {error}")
-        if document.get("name") != baseline_name:
+        stored_name = document.get("name")
+        if not isinstance(stored_name, str) or stored_name.casefold() != baseline_name.casefold():
             return _error(name, f"{config_path.name} says name {document.get('name')!r}, "
                                 f"but the baseline is {baseline_name!r}")
-        csv_path = _csv_path(config_path, document)
+        csv_path = _csv_path(config_path, document, allow_case_alias=True)
         _check_collisions(config_path, csv_path, True)
         if not csv_path.is_file():
             return _error(name, f"baseline output CSV is missing: {csv_path}")

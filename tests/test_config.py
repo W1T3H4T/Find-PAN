@@ -5,6 +5,8 @@ import os
 import shutil
 import random
 import re
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -115,31 +117,134 @@ def test_extractor_configuration_builds_when_file_missing(config_module, tmp_pat
 
 def test_json_regex_config_prefers_xdg_when_set(config_module, tmp_path, monkeypatch):
     """find_json_regex_config() returns the user XDG file when it exists."""
-    config_dir = tmp_path / "find-pan"
-    config_dir.mkdir()
+    config_dir = tmp_path / "find-pan" / "config"
+    config_dir.mkdir(parents=True)
     config_file = config_dir / "find-pan-regex.json"
     config_file.write_text('{"PAN Pattern": {}}', encoding="utf-8")
 
+    monkeypatch.delenv("FIND_PAN_HOME", raising=False)
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
 
     path = config_module.find_json_regex_config()
     assert path == str(config_file)
 
 
+def test_json_regex_config_prefers_find_pan_home(config_module, tmp_path, monkeypatch):
+    home_config = tmp_path / "project with spaces" / "config"
+    home_config.mkdir(parents=True)
+    home_file = home_config / "find-pan-regex.json"
+    home_file.write_text("{}", encoding="utf-8")
+    xdg_root = tmp_path / "xdg"
+    xdg_dir = xdg_root / "find-pan" / "config"
+    xdg_dir.mkdir(parents=True)
+    (xdg_dir / "find-pan-regex.json").write_text("{}", encoding="utf-8")
+    monkeypatch.setenv("FIND_PAN_HOME", str(home_config.parent))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(xdg_root))
+    assert config_module.find_json_regex_config() == str(home_file)
+
+
+def test_json_regex_config_falls_back_when_find_pan_home_has_no_file(config_module, tmp_path, monkeypatch):
+    xdg_root = tmp_path / "xdg"
+    xdg_dir = xdg_root / "find-pan" / "config"
+    xdg_dir.mkdir(parents=True)
+    xdg_file = xdg_dir / "find-pan-regex.json"
+    xdg_file.write_text("{}", encoding="utf-8")
+    monkeypatch.setenv("FIND_PAN_HOME", str(tmp_path / "missing"))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(xdg_root))
+    assert config_module.find_json_regex_config() == str(xdg_file)
+
+
 def test_json_regex_config_falls_back_to_app_root(config_module, tmp_path, monkeypatch):
-    """appRoot config is used when no user-level config exists."""
+    checkout = tmp_path / "checkout"
+    (checkout / "config").mkdir(parents=True)
+    expected = checkout / "config" / "find-pan-regex.json"
+    expected.write_text("{}", encoding="utf-8")
+    monkeypatch.setenv("FIND_PAN_HOME", str(tmp_path / "missing-home"))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "missing-xdg"))
+    monkeypatch.setattr(config_module, "_application_root", lambda: str(checkout))
+    assert config_module.find_json_regex_config() == str(expected)
+
+
+def test_json_regex_config_ignores_legacy_home_locations(config_module, tmp_path, monkeypatch):
+    for location in (".config", ".local", ".local/share"):
+        legacy = tmp_path / location / "find-pan"
+        legacy.mkdir(parents=True)
+        (legacy / "find-pan-regex.json").write_text("{}", encoding="utf-8")
+    checkout = tmp_path / "checkout"
+    (checkout / "config").mkdir(parents=True)
+    (checkout / "config" / "find-pan-regex.json").write_text("{}", encoding="utf-8")
+    monkeypatch.delenv("FIND_PAN_HOME", raising=False)
     monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
     monkeypatch.setattr(config_module.os.path, "expanduser", lambda _p: str(tmp_path))
+    monkeypatch.setattr(config_module, "_application_root", lambda: str(checkout))
+    assert config_module.find_json_regex_config() == str(checkout / "config" / "find-pan-regex.json")
 
-    path = config_module.find_json_regex_config()
-    assert path.endswith(str(Path("config") / "find-pan-regex.json"))
-    assert Path(path).exists()
+
+def test_json_regex_config_ignores_old_xdg_location(config_module, tmp_path, monkeypatch):
+    old_dir = tmp_path / "find-pan"
+    old_dir.mkdir()
+    (old_dir / "find-pan-regex.json").write_text("{}", encoding="utf-8")
+    monkeypatch.delenv("FIND_PAN_HOME", raising=False)
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    monkeypatch.setattr(config_module, "_application_root", lambda: str(tmp_path / "missing"))
+    with pytest.raises(FileNotFoundError):
+        config_module.find_json_regex_config()
+
+
+def test_launcher_uses_config_beside_its_bin_directory(tmp_path):
+    installation = tmp_path / "installation with spaces"
+    (installation / "bin").mkdir(parents=True)
+    (installation / "config").mkdir()
+    shutil.copy(ROOT / "bin" / "find-pan.py", installation / "bin")
+    shutil.copytree(ROOT / "src" / "find_pan", installation / "src" / "find_pan")
+    config_file = installation / "config" / "find-pan-regex.json"
+    config_file.write_text('{"PAN Pattern": {}}', encoding="utf-8")
+    scan_dir = tmp_path / "scan"
+    scan_dir.mkdir()
+    env = os.environ.copy()
+    env.pop("FIND_PAN_HOME", None)
+    env.pop("XDG_CONFIG_HOME", None)
+    result = subprocess.run([sys.executable, str(installation / "bin" / "find-pan.py"),
+                             "--path", str(scan_dir), "--log-dir", str(tmp_path / "logs")],
+                            env=env, cwd=tmp_path, capture_output=True, text=True, timeout=30, check=False)
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_both_configurations_use_running_launcher_root(config_module, tmp_path, monkeypatch):
+    installation = tmp_path / "installation"
+    (installation / "bin").mkdir(parents=True)
+    (installation / "config").mkdir()
+    launcher = installation / "bin" / "find-pan.py"
+    launcher.touch()
+    regex = installation / "config" / "find-pan-regex.json"
+    extractor = installation / "config" / "find-pan-conf.yaml"
+    regex.write_text("{}", encoding="utf-8")
+    extractor.write_text("schema: 2\nextractors: {}\n", encoding="utf-8")
+    monkeypatch.setattr(sys, "argv", [str(launcher)])
+    monkeypatch.delenv("FIND_PAN_HOME", raising=False)
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+    monkeypatch.setattr(config_module.os.path, "expanduser", lambda _p: str(tmp_path / "no-user-config"))
+    assert config_module.find_json_regex_config() == str(regex)
+    assert config_module.find_extractor_config_path() == str(extractor)
+
+
+def test_regex_check_helper_uses_find_pan_home(tmp_path):
+    home = tmp_path / "project"
+    (home / "config").mkdir(parents=True)
+    config_file = home / "config" / "find-pan-regex.json"
+    config_file.write_text('{"PAN Pattern": {}}', encoding="utf-8")
+    result = subprocess.run([sys.executable, str(ROOT / "bin" / "check-json-regex.py")],
+                            env={**os.environ, "FIND_PAN_HOME": str(home)}, cwd=tmp_path,
+                            capture_output=True, text=True, timeout=30, check=False)
+    assert result.returncode == 0
+    assert str(config_file) in result.stdout and "Success" in result.stdout
 
 
 def test_json_regex_config_raises_when_no_config_exists(
     config_module, tmp_path, monkeypatch
 ):
     """A missing configuration in every location raises FileNotFoundError."""
+    monkeypatch.delenv("FIND_PAN_HOME", raising=False)
     monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
     monkeypatch.setattr(config_module.os.path, "expanduser", lambda _p: str(tmp_path))
     monkeypatch.setattr(

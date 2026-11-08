@@ -1,5 +1,6 @@
 """bin/find-pan.sh and bin/find-pan.ps1: run find-pan from any directory with the arguments passed through."""
 
+import json
 import os
 import shutil
 import subprocess
@@ -34,8 +35,8 @@ LAUNCHERS = {
 }
 
 
-@pytest.fixture(params=sorted(LAUNCHERS))
-def launcher(request):
+@pytest.fixture(name="launcher", params=sorted(LAUNCHERS))
+def launcher_fixture(request):
     command = LAUNCHERS[request.param]
     if command is None:
         pytest.skip(f"no shell available for find-pan.{request.param}")
@@ -43,7 +44,10 @@ def launcher(request):
 
 
 def run(command, cwd, *arguments):
-    return subprocess.run([*command, *arguments], cwd=cwd, capture_output=True, text=True, timeout=120, check=False)
+    env = os.environ.copy()
+    env["FIND_PAN_HOME"] = str(BIN.parent)
+    return subprocess.run([*command, *arguments], cwd=cwd, env=env,
+                          capture_output=True, text=True, timeout=120, check=False)
 
 
 def test_the_launchers_exist_and_the_shell_one_is_executable():
@@ -69,6 +73,7 @@ def test_relative_paths_are_relative_to_where_the_launcher_is_run(launcher, tmp_
 def test_launcher_ignores_inherited_uv_environment(launcher, tmp_path):
     alternate = tmp_path / "unexpected-environment"
     env = os.environ.copy()
+    env.pop("FIND_PAN_HOME", None)
     env["UV_PROJECT_ENVIRONMENT"] = str(alternate)
     result = subprocess.run([*launcher, "--version"], cwd=tmp_path, env=env,
                             capture_output=True, text=True, timeout=120, check=False)
@@ -88,3 +93,38 @@ def test_arguments_with_spaces_arrive_intact(launcher, tmp_path):
     (folder / "card.txt").write_text(f"card {PAN} here\n", encoding="utf-8")
     result = run(launcher, tmp_path, "--path", str(folder), "--log-dir", str(tmp_path / "log dir"))
     assert result.returncode == 0 and "PANs Matched  :        1" in result.stdout
+
+
+def test_find_pan_home_selects_launcher_and_environment(launcher, tmp_path):
+    home = tmp_path / "project with spaces"
+    (home / "bin").mkdir(parents=True)
+    (home / "bin" / "find-pan.py").write_text(
+        "import json, os, sys\nprint(json.dumps([sys.prefix, os.getcwd(), sys.argv[1:]]))\nsys.exit(7)\n",
+        encoding="utf-8",
+    )
+    subprocess.run([sys.executable, "-m", "venv", "--without-pip", str(home / ".venv")],
+                   check=True, timeout=120, capture_output=True)
+    env = os.environ.copy()
+    env["FIND_PAN_HOME"] = str(home)
+    env["UV_PROJECT_ENVIRONMENT"] = str(tmp_path / "wrong-environment")
+    result = subprocess.run([*launcher, "argument with spaces"], cwd=tmp_path, env=env,
+                            capture_output=True, text=True, timeout=120, check=False)
+    prefix, cwd, arguments = json.loads(result.stdout)
+    assert Path(prefix).resolve() == (home / ".venv").resolve()
+    assert Path(cwd).resolve() == tmp_path.resolve()
+    assert arguments == ["argument with spaces"] and result.returncode == 7
+    assert not (tmp_path / "wrong-environment").exists()
+
+
+@pytest.mark.parametrize("launcher_exists", [False, True])
+def test_invalid_find_pan_home_fails_clearly(launcher, tmp_path, launcher_exists):
+    home = tmp_path / "missing project"
+    if launcher_exists:
+        (home / "bin").mkdir(parents=True)
+        (home / "bin" / "find-pan.py").touch()
+    env = os.environ.copy()
+    env["FIND_PAN_HOME"] = str(home)
+    result = subprocess.run([*launcher, "--version"], cwd=tmp_path, env=env,
+                            capture_output=True, text=True, timeout=120, check=False)
+    assert result.returncode == 1
+    assert ("Python was not found" if launcher_exists else "launcher not found") in result.stderr

@@ -1,13 +1,26 @@
 # Changelog
 
-Release history is reconstructed from the [GitHub release for v3.5.3](https://github.com/W1T3H4T/Find-PAN/releases/tag/v3.5.3), the repository's published tags, and version-related commits. Versions without published tags are historical version milestones, not necessarily GitHub releases. Dates reflect the relevant commit or published release date; this is a concise reconstruction rather than an exhaustive history.
 
-## 3.6.2
+## 3.7.0 - 2026-11-07 -- Concurrency Scanning and Supporting Scripts
+
+- Add `--workers N` to distribute whole files by size across independent scanner processes and merge their outputs.
+- Format the combined worker summary like the single-process summary and omit worker file lists from parameter output.
+- Resolve unique baseline names case-insensitively during validation while retaining collision checks for creation.
+- Add supporting scripts, `find-pan.sh` and `find-pan.ps1`, to launch the scanner using the project-root `.venv` and 
+  forward arguments and exit status.
+- Added `FIND_PAN_HOME` environment variable to specify the project root for supporting scripts and configuration discovery.
+- Restricted the folders to search for configuration files to the `config` directory beside the running Find-PAN 
+  installation's `bin` directory, after environment-variable locations.
+- Added documentation for supporting scripts, regression baselines, synthetic data generators, and configuration and maintenance scripts.
+  
+---
+
+## 3.6.2 - 2026-11-07 -- Raw Scanning and Regression Tests
 
 - Add repeatable `--raw-file` filename patterns to raw-scan selected files, including extracted archive members, while expanding other archives normally.
 - Document raw-file matching, encoding selection and archive behavior; add regression tests.
 
-## 3.6.1 — documentation update
+## 3.6.1 — 2026-11-07 -- Documentation Update
 
 - Add a supporting-scripts guide and a reconstructed changelog.
 - Show the current version and documentation links in the main README.

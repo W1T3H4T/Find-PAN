@@ -11,9 +11,8 @@
 #
 #      ./bin/find-pan.sh --path /data --mask --summary-json summary.json
 #
-#  The environment is the project-root .venv, including under Git Bash.
-#  uv is used when it is installed (it also brings the environment up to
-#  date); otherwise the environment's own Python is used if it exists.
+#  FIND_PAN_HOME selects the project root and its .venv. If unset, the
+#  parent of this script's bin directory is used.
 # =============================================================================
 
 set -euo pipefail
@@ -30,8 +29,8 @@ while [ -L "$source_path" ]; do
     esac
 done
 bin_dir="$(cd -P -- "$(dirname -- "$source_path")" && pwd)"
-project_root="$(dirname -- "$bin_dir")"
-launcher="$bin_dir/find-pan.py"
+project_root="${FIND_PAN_HOME:-$(dirname -- "$bin_dir")}"
+launcher="$project_root/bin/find-pan.py"
 
 case "$(uname -s)" in
     MINGW*|MSYS*|CYGWIN*) python_relative="Scripts/python.exe" ;;
@@ -39,27 +38,15 @@ case "$(uname -s)" in
 esac
 environment_dir="$project_root/.venv"
 
-#   uv: on PATH, or in the standard installer locations (non-interactive shells often lack them)
-uv_bin="$(command -v uv || true)"
-if [ -z "$uv_bin" ]; then
-    for candidate in "$HOME/.local/bin/uv" "$HOME/.cargo/bin/uv" /usr/local/bin/uv /opt/homebrew/bin/uv; do
-        if [ -x "$candidate" ]; then
-            uv_bin="$candidate"
-            break
-        fi
-    done
+if [ ! -f "$launcher" ]; then
+    echo "find-pan.sh: launcher not found at $launcher. Check FIND_PAN_HOME." >&2
+    exit 1
 fi
 
-if [ -n "$uv_bin" ]; then
-    export UV_PROJECT_ENVIRONMENT=.venv
-    exec "$uv_bin" run --project "$project_root" python "$launcher" "$@"
-fi
-
-#   No uv: use the environment's Python if it has been created.
 if [ -x "$environment_dir/$python_relative" ]; then
     exec "$environment_dir/$python_relative" "$launcher" "$@"
 fi
 
-echo "find-pan.sh: uv was not found and there is no environment at $environment_dir." >&2
-echo "Install uv (curl -LsSf https://astral.sh/uv/install.sh | sh) and run bin/setup-env.sh." >&2
+echo "find-pan.sh: Python was not found in $environment_dir." >&2
+echo "Run the setup script in $project_root/bin/setup-env.sh." >&2
 exit 1

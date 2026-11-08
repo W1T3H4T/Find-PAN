@@ -71,6 +71,16 @@ def test_parser_does_not_look_up_config():
     assert cli.parse_args([]).rgx_patterns is None
 
 
+def test_explicit_regex_file_overrides_find_pan_home(tmp_path, monkeypatch):
+    home_config = tmp_path / "home" / "config"
+    home_config.mkdir(parents=True)
+    (home_config / "find-pan-regex.json").write_text("invalid json", encoding="utf-8")
+    explicit = tmp_path / "patterns.json"
+    explicit.write_text('{"PAN Pattern": {}}', encoding="utf-8")
+    monkeypatch.setenv("FIND_PAN_HOME", str(home_config.parent))
+    assert cli.main(scan_args(tmp_path, "--rgx-patterns", str(explicit))) == 0
+
+
 def test_missing_arguments_prints_help_returns_1(tmp_path, capsys):
     status = cli.main(["--log-dir", str(tmp_path / "logs")])
     assert status == 1

@@ -26,10 +26,11 @@ _EXTRACTOR_CONFIG_FILENAME = "find-pan-conf.yaml"
 EXTRACTOR_CONFIG_FILENAME = _EXTRACTOR_CONFIG_FILENAME
 
 
-# - Application root directory, used to locate bundled configuration files.
-#   This file lives in ``<appRoot>/src/find_pan``, so its great-grandparent is the root.
 def _application_root() -> str:
-    """Return the application root directory containing ``config/``."""
+    """Return the installation root for a launcher, or the package root for library callers."""
+    script = Path(sys.argv[0]).resolve()
+    if script.name in ("find-pan.py", "check-json-regex.py"):
+        return str(script.parent.parent)
     return str(Path(__file__).resolve().parents[2])
 
 # - Regex Pattern Prefix
@@ -389,23 +390,16 @@ def find_json_regex_config() -> str:
 
     Searches, in order:
 
-    1. ``$XDG_CONFIG_HOME/find-pan`` if ``$XDG_CONFIG_HOME`` is set.
-    2. ``$HOME/.config/find-pan``.
-    3. ``$HOME/.local/find-pan``.
-    4. ``$HOME/.local/share/find-pan``.
-    5. ``/usr/local/find-pan``.
-    6. ``<appRoot>/config`` where ``<appRoot>`` is the directory containing
-       the ``bin`` folder that holds ``find-pan.py``.
+    1. ``$FIND_PAN_HOME/config`` if ``$FIND_PAN_HOME`` is set.
+    2. ``$XDG_CONFIG_HOME/find-pan/config`` if ``$XDG_CONFIG_HOME`` is set.
+    3. ``<script parent>/config`` beside the launcher's ``bin`` directory.
     """
-    home = os.path.expanduser("~")
     xdg_config_home = os.environ.get("XDG_CONFIG_HOME")
+    find_pan_home = os.environ.get("FIND_PAN_HOME")
 
     config_paths = [
-        os.path.join(xdg_config_home, "find-pan") if xdg_config_home else None,
-        os.path.join(home, ".config", "find-pan"),
-        os.path.join(home, ".local", "find-pan"),
-        os.path.join(home, ".local", "share", "find-pan"),
-        "/usr/local/find-pan",
+        os.path.join(find_pan_home, "config") if find_pan_home else None,
+        os.path.join(xdg_config_home, "find-pan", "config") if xdg_config_home else None,
         os.path.join(_application_root(), "config"),
     ]
 
@@ -418,7 +412,8 @@ def find_json_regex_config() -> str:
         if os.path.exists(json_file_path):
             return json_file_path
 
-    raise FileNotFoundError("JSON configuration file not found")
+    raise FileNotFoundError("JSON configuration file not found; set FIND_PAN_HOME or XDG_CONFIG_HOME, "
+                            "or specify --rgx-patterns")
 
 
 # ===========================================================================

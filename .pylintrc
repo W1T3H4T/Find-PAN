@@ -437,7 +437,8 @@ disable=raw-checker-failed,
         line-too-long,
         too-many-locals,
         too-many-positional-arguments,
-        too-few-public-methods
+        too-few-public-methods,
+        too-many-return-statements
 
 
 # Enable the message, report, category or checker with the given id(s). You can

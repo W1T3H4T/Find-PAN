@@ -1,13 +1,13 @@
-# Find-PAN supporting scripts
+# Find-PAN Supporting Scripts
 
-These scripts support Find-PAN 3.6.2. Run the examples from the repository root after following the [installation instructions](../README.md#installation). Python scripts use the project-root `.venv`; `uv run python` is shown below. See each script's `--help` for its complete options. Generated fixtures may contain synthetic PANs and track data; scanner logs and CSVs may contain sensitive data unless masking is enabled.
+These scripts support Find-PAN 3.7.0. Run the examples from the repository root after following the [installation instructions](../README.md#installation). Python scripts use the project-root `.venv`; `uv run python` is shown below. See each script's `--help` for its complete options. Generated fixtures may contain synthetic PANs and track data; scanner logs and CSVs may contain sensitive data unless masking is enabled.
 
 ## Launch and setup
 
 | Script | Purpose |
 | --- | --- |
 | `find-pan.py` | Launch the scanner; see the [main usage guide](../README.md#usage). |
-| `find-pan.sh`, `find-pan.ps1` | Run the scanner using the project environment and forward all arguments and its exit status. Relative paths remain relative to the caller's working directory. |
+| `find-pan.sh`, `find-pan.ps1` | Run the scanner using `FIND_PAN_HOME`'s `.venv` and launcher (or this checkout if unset), forwarding arguments and exit status. Relative paths remain relative to the caller's working directory. See [quick start](../README.md#quick-start). |
 | `setup-env.sh`, `setup-env.ps1` | Set up the project-root `.venv` and development dependencies. The `--recreate` / `-Recreate` option removes and recreates `.venv`. See [installation](../README.md#installation). |
 
 ```console

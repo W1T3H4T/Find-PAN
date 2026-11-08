@@ -1,8 +1,10 @@
 # Find-PAN
 
-Current version: **3.6.2**. See the [changelog](CHANGELOG.md) for release history.
+Current version: **3.7.0**. See the [changelog](docs/CHANGELOG.md) for release history.
 
 Find Primary Account Numbers (PANs) and Track 1 / Track 2 data in files, directory trees, and nested archives. Find-PAN uses configurable regular expressions, anti-PAN filters, and Luhn validation, then writes findings to logs and optional CSV output.
+
+Use `--workers N` to scan with N independent Find-PAN processes, for example `uv run bin/find-pan.py --path data --workers 4 --csv results.csv`. The dispatcher enumerates files, assigns whole files approximately evenly by on-disk size, streams worker output, and combines their logs, CSV and JSON summaries. Archives remain intact in one worker; compressed size does not predict extraction or processing time, and a single large file cannot be split. CSV rows, logs and expected-value locations may appear in a different order than in a serial scan. Without `--workers`, scanning remains single-process. Worker outputs are held in a temporary directory until merged; protect the system temporary directory as you would other scan output.
 
 ![Find-PAN inputs, scanner, and log, CSV, and JSON outputs](docs/images/find-pan.svg)
 
@@ -26,30 +28,46 @@ The illustration is a conceptual overview; the detection order and supported tex
 
 After [installation](#installation), run these commands from the repository root:
 
+The scanner falls back to the installation's `config` directory. To select a different installation's configuration, set `FIND_PAN_HOME` to its root; alternatively, use `--rgx-patterns` or the XDG location described below.
+
 The project uses only `.venv`. Before running `uv` directly, clear any inherited
 `UV_PROJECT_ENVIRONMENT` override from your current shell. For PowerShell, run
-`Remove-Item Env:UV_PROJECT_ENVIRONMENT -ErrorAction SilentlyContinue`; for POSIX
-shells, run `unset UV_PROJECT_ENVIRONMENT`. A stale override from an older setup
-may also be stored in Windows user environment variables or a shell profile;
-remove it there and restart the shell. These settings affect `uv` even when
+
+```console
+Remove-Item Env:UV_PROJECT_ENVIRONMENT -ErrorAction SilentlyContinue
+```
+
+For POSIX shells, run 
+
+```console
+unset UV_PROJECT_ENVIRONMENT
+``` 
+
+A stale override from an older setup may also be stored in Windows user environment variables 
+or a shell profile; remove it there and restart the shell. These settings affect `uv` even when
 `.venv` is activated.
 
 ```console
-uv run python bin/find-pan.py --version
-uv run python bin/find-pan.py --file RegressionTests/VISA.txt --mask
-uv run python bin/find-pan.py --path /path/to/data --mask --csv matches.csv --summary-json summary.json
+uv run bin/find-pan.py --version
+uv run bin/find-pan.py --file RegressionTests/VISA.txt --mask
+uv run bin/find-pan.py --path /path/to/data --mask --csv matches.csv --summary-json summary.json
 ```
 
 At least one of `--path` or `--file` is required. You can combine them; explicit files are processed first, followed by the directory tree. Overlapping inputs can be scanned more than once.
 
-The wrapper scripts `bin/find-pan.sh` (Linux, macOS, WSL, Git Bash) and `bin/find-pan.ps1` (PowerShell) run the same program from any directory, in the project environment that `setup-env` created, and pass every argument and the exit status through. They do not change the working directory, so relative paths mean what they say in your shell:
+The wrapper scripts `bin/find-pan.sh` (Linux, macOS, WSL, Git Bash) and `bin/find-pan.ps1` (PowerShell) run the same program from any directory, in the project environment that `setup-env` created, and pass every argument and the exit status through. Set `FIND_PAN_HOME` to the absolute path of the Find-PAN checkout to select its `bin/find-pan.py` and `.venv`:
 
-```console
-./bin/find-pan.sh --path /path/to/data --mask --summary-json summary.json
-.\bin\find-pan.ps1 --path D:\data --mask --summary-json summary.json
+```sh
+export FIND_PAN_HOME=/path/to/Find-PAN
+"$FIND_PAN_HOME/bin/find-pan.sh" --path /path/to/data --mask --summary-json summary.json
 ```
 
-They use `uv` when it is installed and otherwise the project `.venv` Python. Both wrappers select `.venv` even if `UV_PROJECT_ENVIRONMENT` has another value.
+```powershell
+$env:FIND_PAN_HOME = 'C:\path\to\Find-PAN'
+& "$env:FIND_PAN_HOME\bin\find-pan.ps1" --path D:\data --mask --summary-json summary.json
+```
+
+If `FIND_PAN_HOME` is unset or empty, the wrappers use the checkout containing the script to locate the launcher and Python, and regex discovery can fall back to that installation's `config` directory. They invoke `.venv` Python directly, regardless of an activated environment or `UV_PROJECT_ENVIRONMENT`; run the appropriate setup script first and rerun it when dependencies change. They do not change the working directory, so relative input and output paths remain relative to the caller. A set but invalid `FIND_PAN_HOME` is reported as an error rather than silently selecting another checkout.
 
 Masking is opt-in. Without `--mask`, findings and source lines can contain full PANs and track data.
 
@@ -77,7 +95,7 @@ With uv installed, run:
 .\bin\setup-env.ps1 -FileWindows
 ```
 
-`-FileWindows` adds the `file-windows` dependency to supply `libmagic-1.dll`. If you manage that library yourself, omit the switch and provide the DLL and its `magic1.mgc` database on `PATH` or in `bin/`.
+`-FileWindows` adds the `file-windows` dependency to supply `libmagic-1.dll`. Alternatively, a compatible native libmagic DLL and its `magic1.mgc` database can be installed separately, provided they are discoverable by `python-magic`. Package availability varies by `winget` source; check `winget search libmagic` rather than assuming a particular package is available. `pip` and `uv sync` install declared Python packages, but do not install or verify an independently installed system DLL. The Python binding discovers the native library at runtime. Find-PAN probes it in a child process because an incompatible DLL, including Git's MSYS DLL, can crash native Windows Python; if the probe fails, detection falls back to the content heuristic.
 
 ### Linux, WSL, and macOS
 
@@ -116,7 +134,7 @@ The native libmagic dependency and archive extractors still need to be supplied 
 
 ```text
 uv run python bin/find-pan.py [--path PATH] [--file FILE [FILE ...]]
-    [--exclude-dir PATTERN]...
+    [--exclude-dir PATTERN]... [--workers N]
     [--log-dir LOG_DIR] [--rgx-patterns RGX_PATTERNS] [--rgx-prefix]
     [--skip-binary] [--line-limit LINE_LIMIT] [--report-delta REPORT_DELTA]
     [--csv CSV] [--summary-json PATH] [--raw] [--raw-file PATTERN]... [--raw-encodings LIST]
@@ -130,6 +148,7 @@ uv run python bin/find-pan.py [--path PATH] [--file FILE [FILE ...]]
 | `--path PATH`             | Recursively scan a directory tree, including recognized archives. |
 | `--exclude-dir PATTERN`   | In every directory scanned, exclude child directories whose names match a case-sensitive shell-style glob (for example `baseline*`). Repeat for multiple patterns; applies at every depth inside expanded archives too. The scan root and explicit `--file` entries are not excluded. Quote patterns to prevent shell expansion. |
 | `--file FILE [FILE ...]`  | Scan explicit files or archives. Repeat the flag to add more files. Missing files and directories are reported and skipped; use `--path` for directories. |
+| `--workers N`             | Launch N independent scanner processes, assigning whole files approximately evenly by on-disk size. N must be at least `1`. Worker stdout and stderr are streamed, and results are combined after the workers finish. Without this option, scanning is single-process. |
 | `--log-dir DIR`           | Log directory; defaults to `Find-PAN-Logs` in the user's home directory. Created if necessary. |
 | `--rgx-patterns FILE`     | Use this regex JSON file instead of searching the standard locations. |
 | `--rgx-prefix`            | Prepend the character class `[ '"{]` to every configured PAN expression (anti-PAN and track expressions are left as written). A match must have one of these preceding characters; the prefix becomes part of the match. Default off.<br>*DO NOT utilize* unless you specifically know that it is required for your dataset. |
@@ -176,6 +195,8 @@ Logs use the date format `DDMonYYYY` and append to existing files for that date:
 | `Find-PAN-anti-pan-<date>.log` | Anti-PAN findings and source lines; created only with `--log-anti-pan`. These events are excluded from the PAN log and CSV. |
 
 The PAN and trace logs include a run-start marker. The summary reports PANs, TRACKs, Luhn failures, anti-PANs, scanned files, timings, and applicable skip/archive counts. Its skipped-file list is limited to 200 entries; the trace log records every skip.
+
+With `--workers`, each worker streams its own output and the dispatcher prints a combined processing summary. Combined total time is wall-clock time through worker completion and summary collection, rather than the sum of worker times; average time is that total divided by the combined number of scanned files.
 
 ### CSV and JSON
 
@@ -308,15 +329,14 @@ With `--mask` the values in the summary and JSON are masked too. The tool report
 Use `--rgx-patterns FILE` to select a JSON file explicitly. Otherwise the first `find-pan-regex.json` found in this order is used:
 
 ```text
-$XDG_CONFIG_HOME/find-pan       (when set)
-$HOME/.config/find-pan
-$HOME/.local/find-pan
-$HOME/.local/share/find-pan
-/usr/local/find-pan
-<checkout>/config
+$FIND_PAN_HOME/config           (when set)
+$XDG_CONFIG_HOME/find-pan/config (when set)
+<installation>/config           (beside the launcher's bin directory)
 ```
 
-The recognized categories are `Anti-PAN Pattern`, `TRACK Pattern`, `PAN Pattern` and `Delimited PAN Pattern`. Named entries contain a `regex` array; see the [shipped file](config/find-pan-regex.json). `Delimited PAN Pattern` entries only locate PANs written in groups (a capture group holding the separator, repeated by a back-reference); they are compacted before the anti-PAN and PAN expressions run. Add boundary and regression cases when changing patterns.
+If the file is absent under `FIND_PAN_HOME`, discovery continues to the XDG location and then the running installation. If none contains the file, the scan fails with a configuration error. An explicit `--rgx-patterns FILE` overrides this search.
+
+The recognized categories are `Anti-PAN Pattern`, `TRACK Pattern`, `PAN Pattern` and `Delimited PAN Pattern`. Named entries contain a `regex` array; see the [shipped file](config/find-pan-regex.json). `Delimited PAN Pattern` entries only locate PANs written in groups (a capture group holding the separator, repeated by a back-reference); they are compacted before the anti-PAN and PAN expressions run. See the [regular-expression guide](docs/REGEX-README.md) for matching behavior, construction guidance, and tests.
 
 ### Archive extractors
 
@@ -374,9 +394,9 @@ Baseline configurations use YAML only (`.yaml` or `.yml`); JSON configuration fi
 
 For `--create`, baseline options are consumed and other options are forwarded unchanged to find-pan. Put `--` before find-pan arguments to prevent baseline from interpreting any later options. Relative paths are resolved from the creation working directory, which is recorded and reused during validation; a directory within the repository is stored relative to the repository. Older configurations without a working directory run from the repository root. Baseline supplies its own temporary `--csv`, `--summary-json`, and `--log-dir` values, which take precedence over forwarded values.
 
-Configuration stems and output filenames must be unique, including case-insensitive aliases and `.yaml`/`.yml` alternatives. Outputs must match their configuration stem. Creation refuses existing configurations unless `--force` explicitly regenerates that configuration and its CSV. `--force` never permits overwriting another configuration's output or an orphan CSV without a matching configuration. Publication is serialized, and failures restore the previous configuration and CSV. If an interrupted process leaves `RegressionTests/baseline/.publish.lock`, confirm no baseline creation is running before removing the stale lock.
+Configuration stems and output filenames must be unique, including case-insensitive aliases and `.yaml`/`.yml` alternatives. Outputs must match their configuration stem. Creation rejects aliases and refuses existing configurations unless `--force` explicitly regenerates that configuration and its CSV. `--force` never permits overwriting another configuration's output or an orphan CSV without a matching configuration. Publication is serialized, and failures restore the previous configuration and CSV. If an interrupted process leaves `RegressionTests/baseline/.publish.lock`, confirm no baseline creation is running before removing the stale lock.
 
-Validation reruns find-pan into a separate temporary CSV and compares its rows with the saved CSV, including duplicate counts but independent of row order or line endings. Changes that do not affect CSV findings do not fail validation. A failed or incomplete scan is an error. `--max-diff N` limits displayed differences; `--strict` is retained for compatibility and does not change this behavior.
+Validation resolves a bare name or filename against a unique case-insensitive configuration match; configurations that differ only by case or YAML extension remain a collision. The recorded name and CSV filename may differ in case from the configuration stem, but the recorded CSV filename must identify the actual file on the filesystem. Validation reruns find-pan into a separate temporary CSV and compares its rows with the saved CSV, including duplicate counts but independent of row order or line endings. Changes that do not affect CSV findings do not fail validation. A failed or incomplete scan is an error. `--max-diff N` limits displayed differences; `--strict` is retained for compatibility and does not change this behavior.
 
 When validating all baselines in an interactive terminal, an animated dot spinner appears beside `RUN` and is replaced by `PASS` or `FAIL` for each scan. Redirected output contains the final results only. Errors also display as `FAIL`, with error details and a separate error count in the summary. Each baseline has one line with its status, elapsed time, and any differences; the summary gives counts and total elapsed time:
 

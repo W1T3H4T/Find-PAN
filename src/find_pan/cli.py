@@ -95,10 +95,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument( "--file", help="Files to scan; any number, e.g. --file a.txt b.zip c.tar.gz. "
                         "Archives are detected by content, expanded with the configured tools, and scanned.",
                         nargs="+", action="extend", metavar="FILE", default=[])
+    parser.add_argument( "--workers", type=_positive_int, metavar="N", default=None,
+                        help="Launch N independent scan processes, balancing files by size.")
+    parser.add_argument( "--worker-manifest", help=argparse.SUPPRESS, default=None)
     parser.add_argument( "--log-dir", help="Directory for log files.", default=log_dir)
     parser.add_argument( "--rgx-patterns", help="JSON file containing PAN and TRACK regular expressions "
-                        "(default: the first find-pan-regex.json found in the configuration directories, "
-                        "ending with <appRoot>/config).",
+                        "(default: the first find-pan-regex.json found, starting with FIND_PAN_HOME/config, "
+                        "then XDG_CONFIG_HOME/find-pan/config, then the installation config directory).",
                         type=str, default=None)
     parser.add_argument( "--rgx-prefix", help=f"Apply prefixes ({REGEX_PATTERN_PREFIX}) to regular expressions.",
                         default=False, action="store_true")
@@ -170,7 +173,8 @@ def parse_args(argv: Sequence[str] | None = None) -> Settings:
 
 def _describe(namespace: argparse.Namespace) -> str:
     lines = ["", "Parameters and Defaults"]
-    lines += [f" --{name.replace('_', '-')}={value}" for name, value in vars(namespace).items()]
+    lines += [f" --{name.replace('_', '-')}={value}" for name, value in vars(namespace).items()
+              if name != "file" or not namespace.worker_manifest]
     return "\n".join(lines) + "\n"
 
 
@@ -221,7 +225,17 @@ def main(argv: Sequence[str] | None = None) -> int:
     namespace = parser.parse_args(argv)
     argv = list(argv) if argv is not None else sys.argv[1:]
     _make_streams_tolerant()
-
+    if namespace.workers is not None and not namespace.version:
+        from find_pan.parallel import dispatch  # pylint: disable=import-outside-toplevel
+        return dispatch(namespace)
+    if namespace.worker_manifest:
+        try:
+            with open(namespace.worker_manifest, encoding="utf-8") as handle:
+                namespace.file = json.load(handle)
+            if not isinstance(namespace.file, list) or not all(isinstance(item, str) for item in namespace.file):
+                raise ValueError("invalid worker manifest")
+        except (OSError, ValueError) as error:
+            return _error(error)
     if os.environ.get("FIND_PAN_EXCEPTION_TEST"):    # developer hook, not a user option
         try:
             print(10 / 0)
@@ -234,7 +248,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
 
     settings = _settings_from(namespace)
-    if not (settings.path or settings.files):
+    if not (settings.path or settings.files or namespace.worker_manifest):
         parser.print_help()
         return 1
 
