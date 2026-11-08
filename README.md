@@ -8,7 +8,7 @@ Use `--workers N` to scan with N independent Find-PAN processes, for example `uv
 
 ![Find-PAN inputs, scanner, and log, CSV, and JSON outputs](docs/images/find-pan.svg)
 
-The illustration is a conceptual overview; the detection order and supported text formats are described under [Detection behavior](#detection-behavior).
+The illustration is a conceptual overview; the detection order and supported text formats are described in the section [Detection behavior](#detection-behavior).
 
 - [Quick start](#quick-start)
 - [Installation](#installation)
@@ -26,12 +26,19 @@ The illustration is a conceptual overview; the detection order and supported tex
 
 ## Quick start
 
-After [installation](#installation), run these commands from the repository root:
+After [installation](#installation), follow these general instructions.
 
-The scanner falls back to the installation's `config` directory. To select a different installation's configuration, set `FIND_PAN_HOME` to its root; alternatively, use `--rgx-patterns` or the XDG location described below.
+### Python Virtual Environment
 
-The project uses only `.venv`. Before running `uv` directly, clear any inherited
-`UV_PROJECT_ENVIRONMENT` override from your current shell. For PowerShell, run
+- This project is built around Astral's [uv]((https://docs.astral.sh/uv/).  
+- This project utilizes only one python virtual environment `$FIND_PAN_HOME/.venv`.
+- Dual OS environments are not supported through a single python virtual environment.
+- To support both Windows and WSL/Linux environments on one machine, utilize two distinct `FIND_PAN_HOME` locations:
+  - This means you must install the solution twice.  Once in a Windows location, once in a WSL location.
+
+- You may need to remove a system wide `UV_PROJECT_ENVIRONMENT` variable.  A an override from an older setup may also be
+  stored in Windows user environment variables or a shell profile; remove it there and restart the shell. These settings
+  affect `uv` even when `.venv` is activated.
 
 ```console
 Remove-Item Env:UV_PROJECT_ENVIRONMENT -ErrorAction SilentlyContinue
@@ -43,17 +50,25 @@ For POSIX shells, run
 unset UV_PROJECT_ENVIRONMENT
 ``` 
 
-A stale override from an older setup may also be stored in Windows user environment variables 
-or a shell profile; remove it there and restart the shell. These settings affect `uv` even when
-`.venv` is activated.
+**However**, utilizing the built in `find-pan.ps1` and `find-pan.sh` scripts should point the solution to 
+the correct virtual environment.
+
 
 ```console
+# from the project root
 uv run bin/find-pan.py --version
 uv run bin/find-pan.py --file RegressionTests/VISA.txt --mask
 uv run bin/find-pan.py --path /path/to/data --mask --csv matches.csv --summary-json summary.json
 ```
 
-At least one of `--path` or `--file` is required. You can combine them; explicit files are processed first, followed by the directory tree. Overlapping inputs can be scanned more than once.
+or
+
+```console
+# With ${FIND_PAN_HOME}/bin on the path
+find-pan.sh --version
+find-pan.sh --file RegressionTests/VISA.txt --mask
+find-pan.sh --path /path/to/data --mask --csv matches.csv --summary-json summary.json
+```
 
 The wrapper scripts `bin/find-pan.sh` (Linux, macOS, WSL, Git Bash) and `bin/find-pan.ps1` (PowerShell) run the same program from any directory, in the project environment that `setup-env` created, and pass every argument and the exit status through. Set `FIND_PAN_HOME` to the absolute path of the Find-PAN checkout to select its `bin/find-pan.py` and `.venv`:
 
@@ -131,6 +146,9 @@ python bin/find-pan.py --version
 The native libmagic dependency and archive extractors still need to be supplied separately.
 
 ## Usage
+
+At least one of `--path` or `--file` is required. You can combine them; explicit files are processed first, followed by the directory 
+tree. Overlapping inputs can be scanned more than once.
 
 ```text
 uv run python bin/find-pan.py [--path PATH] [--file FILE [FILE ...]]
