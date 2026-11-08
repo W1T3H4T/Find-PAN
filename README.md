@@ -31,13 +31,13 @@ After [installation](#installation), follow these general instructions.
 ### Python Virtual Environment
 
 - This project is built around Astral's [uv]((https://docs.astral.sh/uv/).  
-- This project utilizes only one python virtual environment `$FIND_PAN_HOME/.venv`.
-- Dual OS environments are not supported through a single python virtual environment.
-- To support both Windows and WSL/Linux environments on one machine, utilize two distinct `FIND_PAN_HOME` locations:
-  - This means you must install the solution twice.  Once in a Windows location, once in a WSL location.
+- This project utilizes only one Python virtual environment `$FIND_PAN_HOME/.venv`.
+- Dual OS environments are not supported through a single Python virtual environment.
+- To support both Windows and WSL/Linux environments on one machine, utilize two distinct `$FIND_PAN_HOME` locations:
+  - This means you must install the solution twice.  Once in a Windows folder, once in a distinct WSL folder.
 
-- You may need to remove a system wide `UV_PROJECT_ENVIRONMENT` variable.  A an override from an older setup may also be
-  stored in Windows user environment variables or a shell profile; remove it there and restart the shell. These settings
+- You may need to remove or reconfigure a system wide `UV_PROJECT_ENVIRONMENT` variable.  Remember that an override from an 
+  older setup may also be stored in Windows user environment variables or a shell profile; remove it there and restart the shell. These settings
   affect `uv` even when `.venv` is activated.
 
 ```console
@@ -50,8 +50,7 @@ For POSIX shells, run
 unset UV_PROJECT_ENVIRONMENT
 ``` 
 
-**However**, utilizing the built in `find-pan.ps1` and `find-pan.sh` scripts should point the solution to 
-the correct virtual environment.
+**However**, utilizing the built in `find-pan.ps1` and `find-pan.sh` scripts should point the solution to the correct virtual environment.
 
 
 ```console
@@ -61,7 +60,7 @@ uv run bin/find-pan.py --file RegressionTests/VISA.txt --mask
 uv run bin/find-pan.py --path /path/to/data --mask --csv matches.csv --summary-json summary.json
 ```
 
-or
+or better:
 
 ```console
 # With ${FIND_PAN_HOME}/bin on the path
@@ -70,11 +69,12 @@ find-pan.sh --file RegressionTests/VISA.txt --mask
 find-pan.sh --path /path/to/data --mask --csv matches.csv --summary-json summary.json
 ```
 
-The wrapper scripts `bin/find-pan.sh` (Linux, macOS, WSL, Git Bash) and `bin/find-pan.ps1` (PowerShell) run the same program from any directory, in the project environment that `setup-env` created, and pass every argument and the exit status through. Set `FIND_PAN_HOME` to the absolute path of the Find-PAN checkout to select its `bin/find-pan.py` and `.venv`:
+The wrapper scripts `bin/find-pan.sh` (Linux, macOS, WSL, Git Bash) and `bin\find-pan.ps1` (PowerShell) run the same program from any directory, in the project environment that `setup-env` created, and pass every argument and the exit status through. Set `FIND_PAN_HOME` to the absolute path of your Find-PAN installation folder to select its `bin/find-pan.py` and `.venv`:
 
 ```sh
 export FIND_PAN_HOME=/path/to/Find-PAN
-"$FIND_PAN_HOME/bin/find-pan.sh" --path /path/to/data --mask --summary-json summary.json
+export PATH=${FIND_PAN_HOME}:$PATH
+find-pan.sh --path /path/to/data --mask --summary-json summary.json
 ```
 
 ```powershell
@@ -82,9 +82,15 @@ $env:FIND_PAN_HOME = 'C:\path\to\Find-PAN'
 & "$env:FIND_PAN_HOME\bin\find-pan.ps1" --path D:\data --mask --summary-json summary.json
 ```
 
-If `FIND_PAN_HOME` is unset or empty, the wrappers use the checkout containing the script to locate the launcher and Python, and regex discovery can fall back to that installation's `config` directory. They invoke `.venv` Python directly, regardless of an activated environment or `UV_PROJECT_ENVIRONMENT`; run the appropriate setup script first and rerun it when dependencies change. They do not change the working directory, so relative input and output paths remain relative to the caller. A set but invalid `FIND_PAN_HOME` is reported as an error rather than silently selecting another checkout.
+If `FIND_PAN_HOME` is unset or empty, the wrappers use the checkout folder containing the script to locate the launcher and Python, 
+and regex discovery falls back to that installation's `config` directory.  The wrapper scripts are designed to 
 
-Masking is opt-in. Without `--mask`, findings and source lines can contain full PANs and track data.
+- invoke `.venv` Python directly, regardless of an activated environment or `UV_PROJECT_ENVIRONMENT`
+- run the appropriate setup script first and rerun it when dependencies change. 
+- not change the working directory, so relative input and output paths remain relative to the caller. 
+
+A set but invalid `FIND_PAN_HOME` is reported as an error rather than silently selecting another checkout.
+
 
 ## Installation
 
@@ -150,8 +156,11 @@ The native libmagic dependency and archive extractors still need to be supplied 
 At least one of `--path` or `--file` is required. You can combine them; explicit files are processed first, followed by the directory 
 tree. Overlapping inputs can be scanned more than once.
 
+Note: PAN masking is opt-in. Without `--mask`, findings and source lines can contain full PANs and track data.
+
+
 ```text
-uv run python bin/find-pan.py [--path PATH] [--file FILE [FILE ...]]
+uv run bin/find-pan.py [--path PATH] [--file FILE [FILE ...]]
     [--exclude-dir PATTERN]... [--workers N]
     [--log-dir LOG_DIR] [--rgx-patterns RGX_PATTERNS] [--rgx-prefix]
     [--skip-binary] [--line-limit LINE_LIMIT] [--report-delta REPORT_DELTA]
@@ -189,13 +198,13 @@ uv run python bin/find-pan.py [--path PATH] [--file FILE [FILE ...]]
 Scan several files, including archives:
 
 ```console
-uv run python bin/find-pan.py --file report.txt backup.tar.gz export.zip --mask
+uv run bin/find-pan.py --file report.txt backup.tar.gz export.zip --mask
 ```
 
 Choose the log directory and record anti-PAN hits separately:
 
 ```console
-uv run python bin/find-pan.py --path /path/to/data --log-dir /path/to/logs --mask --log-anti-pan
+uv run bin/find-pan.py --path /path/to/data --log-dir /path/to/logs --mask --log-anti-pan
 ```
 
 Create parent directories for CSV and JSON destinations before running; only the log directory is created automatically.
@@ -300,13 +309,13 @@ Skip codes are `NOT-FOUND`, `NOT-A-FILE`, `ARCHIVE-NO-TOOL`, `ARCHIVE-FAILED`, `
 Find-PAN scans files, not live memory. To inspect memory, dump it with a tool built for that (WinPmem, ProcDump, `gcore`, LiME) and scan the dump with `--raw`:
 
 ```console
-uv run python bin/find-pan.py --file memory.dmp --raw --csv hits.csv --mask
+uv run bin/find-pan.py --file memory.dmp --raw --csv hits.csv --mask
 ```
 
 To scan dumps inside archives, select their names instead of using `--raw`:
 
 ```console
-uv run python bin/find-pan.py --file evidence.zip --raw-file "*.dmp" --raw-file "*.mem" --csv hits.csv --mask
+uv run bin/find-pan.py --file evidence.zip --raw-file "*.dmp" --raw-file "*.mem" --csv hits.csv --mask
 ```
 
 `--raw-file` matches each file's basename, including members at any archive depth, not the full path. Matching is case-sensitive: add `--raw-file "*.DMP"` if needed. A matching file is always scanned as raw bytes even with `--skip-binary`; it will not be expanded if it is itself an archive. Nonmatching files are classified normally, so archives such as `evidence.zip` are expanded before their members are checked. Find-PAN does not automatically identify memory dumps by content.
@@ -324,7 +333,7 @@ Raw scanning treats selected files as opaque byte streams. It reads each file in
 When investigating payment software you often know which PANs or track records you expect to find, or expect *not* to find, after a transaction. List them, one per line, in plain text files (`#` starts a comment; blank lines are ignored; spaces and dashes in a PAN are removed; a PAN is 12 to 19 digits; track data is `%B...^...^...?` or `;...=...?`):
 
 ```console
-uv run python bin/find-pan.py --file memory.dmp --raw --pan-list test-pans.txt --track-list test-tracks.txt
+uv run bin/find-pan.py --file memory.dmp --raw --pan-list test-pans.txt --track-list test-tracks.txt
 ```
 
 `--pan-list` and `--track-list` are report filters, not sources of data. A PAN or track is found only by the configured expressions of `find-pan-regex.json` (and the Luhn check); a list then limits which of those findings are reported. With `--pan-list`, a PAN whose compact digits are not on the list is dropped, so is a delimited PAN not on it; with `--track-list`, a track that is not on the list is dropped. Each list filters its own kind only. Findings are reported once, counted once, and a listed value that no expression accepts (an unusual number, a failed Luhn check, a PAN inside track data) is simply `NOT FOUND`: the tool never reports a number just because it was listed. Track-list lines must be whole track data by a configured `TRACK Pattern`.
@@ -396,14 +405,14 @@ extractors:
 `bin/baseline.py` records scanner findings and later compares them against a new run:
 
 ```console
-uv run python bin/baseline.py --create plain-text --description "Plain fixtures" --file RegressionTests/*.txt
-uv run python bin/baseline.py --validate plain-text
-uv run python bin/baseline.py --create RegressionTests/baseline/visa-only.yaml --file RegressionTests/VISA.txt
-uv run python bin/baseline.py --validate RegressionTests/baseline/visa-only.yaml
-uv run python bin/baseline.py --create plain-text --force --file RegressionTests/*.txt
-uv run python bin/baseline.py --create RegressionTest-Data --path RegressionTests --exclude-dir baseline
-uv run python bin/baseline.py --list
-uv run python bin/baseline.py --validate --all
+uv run bin/baseline.py --create plain-text --description "Plain fixtures" --file RegressionTests/*.txt
+uv run bin/baseline.py --validate plain-text
+uv run bin/baseline.py --create RegressionTests/baseline/visa-only.yaml --file RegressionTests/VISA.txt
+uv run bin/baseline.py --validate RegressionTests/baseline/visa-only.yaml
+uv run bin/baseline.py --create plain-text --force --file RegressionTests/*.txt
+uv run bin/baseline.py --create RegressionTest-Data --path RegressionTests --exclude-dir baseline
+uv run bin/baseline.py --list
+uv run bin/baseline.py --validate --all
 ```
 
 Baseline configurations use YAML only (`.yaml` or `.yml`); JSON configuration files are rejected. Configurations live directly in `RegressionTests/baseline/`, and CSV outputs live in its `output/` subdirectory. A name creates `RegressionTests/baseline/NAME.yaml` and `RegressionTests/baseline/output/NAME.csv`; an explicit YAML path must be directly inside that baseline directory. Configurations record the output filename, find-pan arguments, working directory and versions. `--list` displays the baseline names discovered directly in that directory, without running scans; `--validate --all` validates the same configurations. When scanning a directory containing baseline artifacts, exclude them with a directory-name pattern such as `--exclude-dir baseline`.
@@ -451,9 +460,9 @@ See the [supporting scripts README](bin/README.md) for usage, examples, and file
 ### Generate synthetic test data
 
 ```console
-uv run python bin/generate-pan.py --list-pan-patterns
-uv run python bin/generate-pan.py --pan-pattern "VISA Electron" --seed 42
-uv run python bin/generate-pan.py --random-text 100 --max-hits 4 --seed 42 --output sample.txt
+uv run bin/generate-pan.py --list-pan-patterns
+uv run bin/generate-pan.py --pan-pattern "VISA Electron" --seed 42
+uv run bin/generate-pan.py --random-text 100 --max-hits 4 --seed 42 --output sample.txt
 ```
 
 The generator uses the configured PAN expressions and Luhn validation. Omit `--pan-pattern` in an interactive terminal to choose a pattern from a menu. Use `--patterns FILE` for alternate configuration.
@@ -465,8 +474,8 @@ In random-text mode, `--random-text LINES` requires at least one line, and `--ma
 `bin/generate-test-data.py` builds a directory tree of many small files whose content is known exactly:
 
 ```console
-uv run python bin/generate-test-data.py --out data --files 100000 --seed 1 --binary 3 --archives 5
-uv run python bin/find-pan.py --path data --summary-json summary.json
+uv run bin/generate-test-data.py --out data --files 100000 --seed 1 --binary 3 --archives 5
+uv run bin/find-pan.py --path data --summary-json summary.json
 ```
 
 Files are spread over nested directories (`--per-dir`, `--depth`), vary in extension (`.txt`, `.log`, `.csv`, `.json`, `.xml` or none), size (`--max-size`, and `--min-size` to pad every file up to at least that many bytes, e.g. `--files 900 --min-size 50000 --max-size 52000` for about 45 MB) and line ending (`--crlf`), and some are empty or clean. Each holds lorem-ipsum text with zero or more planted hits, chosen by `--mix` (relative weights, default `clean=40,pan=30,delimited=10,track=10,bad-luhn=5,anti-pan=5`):
@@ -513,7 +522,7 @@ Run the tests from the repository root:
 
 ```console
 uv run pytest
-uv run python bin/run-pytest-regression.py --workers 4
+uv run bin/run-pytest-regression.py --workers 4
 ```
 
 Pylint is included in the development dependencies and uses the repository's `.pylintrc`:
